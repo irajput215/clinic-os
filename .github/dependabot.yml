@@ -47,6 +47,14 @@ updates:
       npm-packages:
         patterns:
           - "*"
+        exclude-patterns:
+          # @tanstack/react-table 9 is a breaking major: v9 changed the
+          # cell and header render-prop types, so `cell: ({ row }) => ...`
+          # loses its contextual type and the build fails with TS7031.
+          # Keeping it out of the batch group means the major arrives as its
+          # own pull request, with the failing build pointing straight at it,
+          # instead of buried among two dozen safe bumps.
+          - "@tanstack/react-table"
   # Docker
   - package-ecosystem: docker
     directories:
