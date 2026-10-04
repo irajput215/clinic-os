@@ -88,15 +88,15 @@ cd backend && uv run pytest tests/tga tests/security/test_tga_append_only_grants
 def test_tga_append_only_and_immutability_grants(db_app_role, db_admin_role):
     # 1. Inspect information_schema.role_table_grants
     grants = db_admin_role.execute("""
-        SELECT table_name, privilege_type 
-        FROM information_schema.role_table_grants 
-        WHERE grantee = 'clinos_app' 
+        SELECT table_name, privilege_type
+        FROM information_schema.role_table_grants
+        WHERE grantee = 'clinos_app'
           AND table_name IN ('tga_approval', 'tga_approval_events')
     """).fetchall()
-    
+
     event_privileges = {g.privilege_type for g in grants if g.table_name == 'tga_approval_events'}
     approval_privileges = {g.privilege_type for g in grants if g.table_name == 'tga_approval'}
-    
+
     # Assert exact grants: audit events are append-only
     assert event_privileges == {"SELECT", "INSERT"}, f"Audit events grant leak: {event_privileges}"
     assert "DELETE" not in approval_privileges, "DELETE granted on tga_approval!"
@@ -120,8 +120,8 @@ def test_tga_append_only_and_immutability_grants(db_app_role, db_admin_role):
     active_approval = create_active_approval(db_app_role)
     with pytest.raises(DBAPIError) as exc_mutate:
         db_app_role.execute("""
-            UPDATE tga_approval 
-            SET valid_to = valid_to + interval '1 year' 
+            UPDATE tga_approval
+            SET valid_to = valid_to + interval '1 year'
             WHERE id = :id
         """, {"id": active_approval.id})
     assert "VERIFIED_APPROVAL_IMMUTABLE" in str(exc_mutate.value)
