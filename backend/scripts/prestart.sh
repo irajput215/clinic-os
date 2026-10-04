@@ -3,6 +3,8 @@
 set -e
 set -x
 
+export PYTHONPATH=.
+
 # Run migrations
 alembic upgrade head
 
