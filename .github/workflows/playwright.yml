@@ -14,6 +14,10 @@ on:
 
 permissions:
   contents: read
+  # dorny/paths-filter lists a PR's changed files through the REST API, which
+  # requires pull-requests: read. Without it the changes job fails immediately
+  # with "Resource not accessible by integration" and never evaluates the filter.
+  pull-requests: read
 
 jobs:
   changes:
