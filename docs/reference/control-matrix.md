@@ -381,4 +381,3 @@ Substantive change is a decision record or an update to this register, never an 
 - [`docs/reference/build-contract.md`](build-contract.md) — invariants, twelve controls, module map, phase map
 - [`docs/reference/gates.md`](gates.md) — gate evidence and approvers
 - [`docs/reference/definition-of-done.md`](definition-of-done.md) — the six-part test
-

@@ -170,4 +170,3 @@ cached or emailed.
 | `dsar:manage` and `retention:run` are not in the `06 §9` permission matrix (OPEN-5) | CTO | OPEN |
 | Watermark algorithm: visible overlay against per-record HMAC (OPEN-6) | Security Lead | OPEN |
 | The `clinos_retention` delete scope must match `04-database-erd.md` §6 exactly (OPEN-9) | Privacy Officer | OPEN |
-

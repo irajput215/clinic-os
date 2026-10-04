@@ -736,7 +736,7 @@ The 26 feature-spec items are captured in §3.5 at the verification timestamp na
 ### 3.5 Feature specifications under construction
 
 The feature specification layer at [`docs/features/`](../features/) is being written concurrently with
-this register. The items below were captured at **2026-10-04 21:14 IST**, which is the verification
+this register. The items below were captured at **2026-10-04**, which is the verification
 timestamp for this subsection. `03-clinical-records/spec.md` and `04-tga-approval-engine/spec.md` carry
 no open-items section at that timestamp; `05-prescription-safety-gate/spec.md` was still being added.
 Each feature spec owns its own open items — those tables are the system of record, and this subsection

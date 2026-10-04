@@ -218,7 +218,7 @@ Recorded at the same verification timestamp as [`open-questions.md`](open-questi
 | `05-prescription-safety-gate/` | Added during this review. It has no row anywhere in [`docs/tasks/README.md`](build-contract.md) §7's module map or phase chart, so its relationship to Phase 2 and Phase 3 is unstated. It is a feature spec for INV-2, which the spine assigns to Phase 3 |
 
 **The feature layer is being written concurrently with this map.** The `docs/features/` tree grew from
-16 files to 21 during this review. The reverse map in §2.3 is complete as at **2026-10-04 21:14 IST**;
+16 files to 21 during this review. The reverse map in §2.3 is complete as at **2026-10-04**;
 a later reader must re-run it.
 
 ---

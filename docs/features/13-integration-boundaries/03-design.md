@@ -76,7 +76,7 @@ Terms, residency position and sub-processor list are **REQUIRES LEGAL/REGULATORY
 | 4xx rejected | `FAILED`, not retried | `prescription.dispatch_failed`, `result = FAILED` |
 | 5xx after retries | `FAILED` | `prescription.dispatch_failed`, `result = FAILED` |
 | Timeout / no response | **`REQUIRES_RECONCILIATION`** | `prescription.dispatch_failed`, `result = UNKNOWN` |
-| Malformed or unparseable body | **`REQUIRES_RECONCILIATION`** — unknown, not failure | `prescription.dispatch_failed`, `result = UNKNOWN` |
+| Malformed or unparsable body | **`REQUIRES_RECONCILIATION`** — unknown, not failure | `prescription.dispatch_failed`, `result = UNKNOWN` |
 | Connection refused | `FAILED`; the breaker may open | `prescription.dispatch_failed`, `result = FAILED` |
 | `429` | Respect `Retry-After`; pause the tenant's queue | `integration.request`, `outcome = THROTTLED` |
 
