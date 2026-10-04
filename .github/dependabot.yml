@@ -1,4 +1,20 @@
 version: 2
+
+# Grouping policy: a group carries only minor and patch updates. A major bump
+# always arrives as its own pull request, where the failing build points at the
+# one package that caused it, instead of riding along with two dozen routine
+# updates in a batch that looks safe.
+#
+# This is not theoretical. Two majors buried in a batch have already broken this
+# repository:
+#   @tanstack/react-table 8 -> 9   v9 changed the cell and header render-prop
+#                                  types: `cell: ({ row }) => ...` loses its
+#                                  contextual type, TS7031, build fails.
+#   typescript            6 -> 7   the pinned @hey-api/openapi-ts@0.97.3 peer-
+#                                  depends on ">=5.5.3 || >=6.0.0" and crashes
+#                                  outside it: "Cannot read properties of
+#                                  undefined (reading 'LineFeed')", which breaks
+#                                  scripts/generate-client.sh before any test runs.
 updates:
   # GitHub Actions
   - package-ecosystem: github-actions
@@ -17,6 +33,7 @@ updates:
       github-actions:
         patterns:
           - "*"
+        update-types: ["minor", "patch"]
   # Python uv
   - package-ecosystem: uv
     directory: /
@@ -31,6 +48,7 @@ updates:
       python-packages:
         patterns:
           - "*"
+        update-types: ["minor", "patch"]
   # bun
   - package-ecosystem: bun
     directory: /
@@ -47,14 +65,7 @@ updates:
       npm-packages:
         patterns:
           - "*"
-        exclude-patterns:
-          # @tanstack/react-table 9 is a breaking major: v9 changed the
-          # cell and header render-prop types, so `cell: ({ row }) => ...`
-          # loses its contextual type and the build fails with TS7031.
-          # Keeping it out of the batch group means the major arrives as its
-          # own pull request, with the failing build pointing straight at it,
-          # instead of buried among two dozen safe bumps.
-          - "@tanstack/react-table"
+        update-types: ["minor", "patch"]
   # Docker
   - package-ecosystem: docker
     directories:
@@ -70,6 +81,7 @@ updates:
       docker:
         patterns:
           - "*"
+        update-types: ["minor", "patch"]
   # Docker Compose
   - package-ecosystem: docker-compose
     directory: /
@@ -83,3 +95,4 @@ updates:
       docker-compose:
         patterns:
           - "*"
+        update-types: ["minor", "patch"]
