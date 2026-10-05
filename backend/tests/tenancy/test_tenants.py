@@ -23,17 +23,31 @@ from app.modules.identity_tenancy.service import (
     seed_demo_tenant,
     slugify,
 )
+from app.modules.users_roles.models import Role, RolePermission, UserRole
+
+
+def _clear_tenants(session: Session) -> None:
+    """Remove tenants and the rows that reference them.
+
+    `roles` and the grant tables carry `ON DELETE RESTRICT` to `tenants` by design, so a tenant with
+    a seeded role bundle cannot be deleted until its RBAC rows are gone. That ordering is the test's
+    to get right — production never deletes a tenant.
+    """
+    session.exec(delete(UserRole))
+    session.exec(delete(RolePermission))
+    session.exec(delete(Role))
+    session.exec(delete(Tenant))
 
 
 @pytest.fixture(autouse=True)
 def clean_tenants() -> Iterator[None]:
     """Tenants are global, so a leaked row would affect every later test."""
     with Session(engine) as session:
-        session.exec(delete(Tenant))
+        _clear_tenants(session)
         session.commit()
     yield
     with Session(engine) as session:
-        session.exec(delete(Tenant))
+        _clear_tenants(session)
         session.commit()
 
 
