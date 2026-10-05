@@ -41,9 +41,8 @@ jobs:
       - name: Check the schema diagrams are up to date
         # The diagrams under docs/reference/schema are generated from this database and committed, so
         # a table or constraint change without regenerating them fails here instead of leaving the
-        # documentation quietly wrong.
-        env:
-          TBLS_DATABASE_URL: postgresql://postgres:changethis@localhost:5432/app?sslmode=disable
+        # documentation quietly wrong. No DSN is passed: the script reads POSTGRES_PASSWORD from the
+        # `.env` this job already created, which is what the database itself was configured with.
         run: ./scripts/schema-diagram.sh --check
       - name: Run tests
         run: uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"

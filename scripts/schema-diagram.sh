@@ -44,7 +44,24 @@ if [ "$(uname -s)" = "Linux" ]; then
   db_host="localhost"
   network_args=(--network host)
 fi
-dsn="${TBLS_DATABASE_URL:-postgresql://postgres:${POSTGRES_PASSWORD:-changethis}@${db_host}:5432/app?sslmode=disable}"
+
+# Read the password the same way compose does, from `.env`, rather than defaulting to a guess: CI copies
+# `.env.example` to `.env` and its password is `REPLACE_ME`, while a developer's is whatever they set.
+# A hardcoded default here worked locally and failed in CI with "password authentication failed".
+if [ -z "${TBLS_DATABASE_URL:-}" ]; then
+  password="${POSTGRES_PASSWORD:-}"
+  if [ -z "$password" ] && [ -f "$repo_root/.env" ]; then
+    password="$(sed -n 's/^POSTGRES_PASSWORD=//p' "$repo_root/.env" | tail -1)"
+  fi
+  if [ -z "$password" ]; then
+    echo "POSTGRES_PASSWORD is not set and not in .env." >&2
+    echo "Copy .env.example to .env, or set TBLS_DATABASE_URL explicitly." >&2
+    exit 1
+  fi
+  dsn="postgresql://postgres:${password}@${db_host}:5432/app?sslmode=disable"
+else
+  dsn="$TBLS_DATABASE_URL"
+fi
 
 check=false
 if [ "${1:-}" = "--check" ]; then
