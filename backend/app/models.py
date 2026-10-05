@@ -5,6 +5,10 @@ from pydantic import EmailStr
 from sqlalchemy import DateTime
 from sqlmodel import Field, Relationship, SQLModel
 
+# Domain modules register their tables by being imported; Alembic's env.py reads
+# SQLModel.metadata from this module, so every module model belongs on this path.
+from app.modules.identity_tenancy.models import Tenant  # noqa: F401
+
 
 def get_datetime_utc() -> datetime:
     return datetime.now(UTC)
@@ -54,7 +58,7 @@ class User(UserBase, table=True):
     hashed_password: str
     created_at: datetime | None = Field(
         default_factory=get_datetime_utc,
-        sa_type=DateTime(timezone=True),  # type: ignore
+        sa_type=DateTime(timezone=True),
     )
     items: list[Item] = Relationship(back_populates="owner", cascade_delete=True)
 
@@ -92,7 +96,7 @@ class Item(ItemBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     created_at: datetime | None = Field(
         default_factory=get_datetime_utc,
-        sa_type=DateTime(timezone=True),  # type: ignore
+        sa_type=DateTime(timezone=True),
     )
     owner_id: uuid.UUID = Field(
         foreign_key="user.id", nullable=False, ondelete="CASCADE"

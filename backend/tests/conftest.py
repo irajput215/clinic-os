@@ -11,6 +11,29 @@ from app.models import Item, User
 from tests.utils.user import authentication_token_from_email
 from tests.utils.utils import get_superuser_token_headers
 
+# The local compose database, reachable as `localhost` from the host (CI and local
+# runs) or as `db` from inside the compose network.
+_ALLOWED_TEST_DATABASE_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "db"})
+
+
+def _refuse_to_run_against_a_remote_database() -> None:
+    """Fail closed before a single test runs.
+
+    The suite deletes users and tenants on teardown. A `.env` pointing at a deployed
+    database has already emptied a live `user` table once; a remote host is a
+    configuration error, not a test environment.
+    """
+    host = settings.DATABASE_URL.hosts()[0]["host"]
+    if host not in _ALLOWED_TEST_DATABASE_HOSTS:
+        raise RuntimeError(
+            f"DATABASE_URL points at {host!r}, which is not the local database. "
+            "pytest deletes users and tenants on teardown, so this is refused. "
+            "Point DATABASE_URL at the local compose database in .env."
+        )
+
+
+_refuse_to_run_against_a_remote_database()
+
 
 @pytest.fixture(scope="session", autouse=True)
 def db() -> Generator[Session]:
