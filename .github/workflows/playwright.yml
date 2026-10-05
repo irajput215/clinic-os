@@ -78,7 +78,12 @@ jobs:
     - run: bun ci
       working-directory: frontend
     - name: Create .env from the committed template
-      run: cp .env.example .env
+      run: |
+        cp .env.example .env
+        # The suite creates its users through POST /api/v1/users/signup, which is
+        # closed in production (USERS_OPEN_REGISTRATION defaults to false). This is
+        # a test environment with an ephemeral database, so it opts in.
+        printf '\nUSERS_OPEN_REGISTRATION=true\n' >> .env
     - run: bash scripts/generate-client.sh
     - run: docker compose build
     - run: docker compose down -v --remove-orphans

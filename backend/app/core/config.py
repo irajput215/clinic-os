@@ -70,6 +70,12 @@ class Settings(BaseSettings):
     # real environment must opt in.
     SEED_DEMO_TENANT: bool = False
 
+    # Self-registration at POST /users/signup. Closed by default: staff are
+    # provisioned by an administrator, so a clinic platform must not let anyone on
+    # the internet create an account. The test environment opts in explicitly (see
+    # the CI workflows), and a deployment that wants open registration must say so.
+    USERS_OPEN_REGISTRATION: bool = False
+
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":
             message = (

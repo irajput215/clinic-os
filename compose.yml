@@ -63,6 +63,11 @@ services:
       EMAILS_FROM_EMAIL: ${EMAILS_FROM_EMAIL}
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?Variable not set}@db:5432/app
       SENTRY_DSN: ${SENTRY_DSN:-}
+      # Forwarded explicitly: this list is the container's whole environment, so a
+      # variable set only in .env would be interpolated for Compose and never reach
+      # the application. Both default to the safe value.
+      SEED_DEMO_TENANT: ${SEED_DEMO_TENANT:-false}
+      USERS_OPEN_REGISTRATION: ${USERS_OPEN_REGISTRATION:-false}
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/utils/health-check/"]

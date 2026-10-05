@@ -1,6 +1,7 @@
 import uuid
 from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
@@ -316,7 +317,28 @@ def test_update_password_me_same_password_error(
     )
 
 
-def test_register_user(client: TestClient, db: Session) -> None:
+def test_register_user_is_forbidden_when_registration_is_closed(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Default: closed. Staff are provisioned, not self-registered."""
+    monkeypatch.setattr(settings, "USERS_OPEN_REGISTRATION", False)
+
+    r = client.post(
+        f"{settings.API_V1_STR}/users/signup",
+        json={
+            "email": random_email(),
+            "password": random_lower_string(),
+            "full_name": random_lower_string(),
+        },
+    )
+
+    assert r.status_code == 403
+
+
+def test_register_user(
+    client: TestClient, db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "USERS_OPEN_REGISTRATION", True)
     username = random_email()
     password = random_lower_string()
     full_name = random_lower_string()
@@ -339,7 +361,10 @@ def test_register_user(client: TestClient, db: Session) -> None:
     assert verified
 
 
-def test_register_user_already_exists_error(client: TestClient) -> None:
+def test_register_user_already_exists_error(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "USERS_OPEN_REGISTRATION", True)
     password = random_lower_string()
     full_name = random_lower_string()
     data = {
