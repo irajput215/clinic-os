@@ -182,11 +182,14 @@ export class UsersService {
     /**
      * Register User
      *
-     * Create new user without the need to be logged in.
+     * Register an organisation, or a plain account.
      *
-     * Closed by default (`USERS_OPEN_REGISTRATION`): staff accounts are provisioned,
-     * not self-registered. An existing administrator creates them through
-     * `POST /users/`.
+     * This is step ① of `docs/reference/business-flow.md`. A `clinic_name` registers the
+     * organisation and makes the signer its administrator; without one the account is
+     * created unattached, which is what a platform administrator does.
+     *
+     * Gated by `USERS_OPEN_REGISTRATION`. That is what makes self-registration safe:
+     * a signup can only ever reach the tenant it just created.
      */
     public static registerUser<ThrowOnError extends boolean = true>(options: Options<usersRegisterUserData, ThrowOnError>) {
         return (options.client ?? client).post<usersRegisterUserResponses, usersRegisterUserErrors, ThrowOnError>({
