@@ -12,5 +12,9 @@
     "test:ui": "bun run --filter frontend test:ui",
     "email:dev": "bun run --filter emails dev",
     "email:export": "bun run --filter emails export"
+  },
+  "dependencies": {
+    "@neon/config": "^1.8.3",
+    "@neon/env": "^1.5.0"
   }
 }

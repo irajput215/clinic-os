@@ -20,6 +20,15 @@ dev = [
 github-actions = [{ name = "smokeshow", specifier = ">=0.5.0" }]
 
 [[package]]
+name = "agent-detector"
+version = "2.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b3/92/2c3e2ad5ce9683876729034082af19cfb3fbafd1c298b22a0b0c10ecfdc5/agent_detector-2.0.0.tar.gz", hash = "sha256:19c8ae185dbdca23c24abdcd8ac2cf58b8e84dc284c6f6db536656601f9ffc3f", size = 55094, upload-time = "2026-09-02T14:19:51.88Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/72/15/504337e302d070bd2ff2f39418bb17d2ad73c662c403a4f37cb4e5c5b237/agent_detector-2.0.0-py3-none-any.whl", hash = "sha256:22c6a1c9c23894a12f55aea625f060b8d3330fba774de72d02d5442bb580417f", size = 9352, upload-time = "2026-09-02T14:19:50.971Z" },
+]
+
+[[package]]
 name = "alembic"
 version = "1.20.0"
 source = { registry = "https://pypi.org/simple" }
@@ -72,6 +81,7 @@ dependencies = [
     { name = "email-validator" },
     { name = "emails" },
     { name = "fastapi", extra = ["standard"] },
+    { name = "fastapi-cloud-cli" },
     { name = "httpx" },
     { name = "jinja2" },
     { name = "psycopg", extra = ["binary"] },
@@ -99,6 +109,7 @@ requires-dist = [
     { name = "email-validator", specifier = ">=2.1.0.post1,<3.0.0.0" },
     { name = "emails", specifier = ">=1.1.2,<2.0" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.141.1,<1.0.0" },
+    { name = "fastapi-cloud-cli", specifier = ">=0.26.0" },
     { name = "httpx", specifier = ">=0.25.1,<1.0.0" },
     { name = "jinja2", specifier = ">=3.1.4,<4.0.0" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.6,<4.0.0" },
@@ -515,9 +526,10 @@ standard = [
 
 [[package]]
 name = "fastapi-cloud-cli"
-version = "0.21.0"
+version = "0.26.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "agent-detector" },
     { name = "detect-installer" },
     { name = "fastar" },
     { name = "httpx" },
@@ -528,9 +540,9 @@ dependencies = [
     { name = "typer" },
     { name = "uvicorn", extra = ["standard"] },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/60/c3/5cd0b824ca4b4fd073ce998321881ed68b8e0b85d441653eb1bd997c6fc0/fastapi_cloud_cli-0.21.0.tar.gz", hash = "sha256:463350dcbdcbb9b3baa32a99a3db0610f34a3ae143dd1d35a71173aec5dd245d", size = 93804, upload-time = "2026-06-24T15:23:07.554Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c0/8a/2857421c2218426e9f7635f9796e4e4bb41116b4b96d2fdf0cf8ed9ab5ae/fastapi_cloud_cli-0.26.0.tar.gz", hash = "sha256:5fd64c26228c8ead803461e8b58ae64ffd586e960d97ab1fc848efac2d9539be", size = 126180, upload-time = "2026-09-10T16:52:14.522Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/15/a0/2ec3fb041fd41281073cb11ed6c63a33bc1f7a315554e26256a9709dbe47/fastapi_cloud_cli-0.21.0-py3-none-any.whl", hash = "sha256:ea49208fb301b2298e6ddaf9225163cf6dbb255bc9126001242f3cd21486bbe6", size = 76195, upload-time = "2026-06-24T15:23:06.609Z" },
+    { url = "https://files.pythonhosted.org/packages/30/96/0e527b3aa93c0ade8b4edc959eb064df49f816469d4781312374b4ce1bab/fastapi_cloud_cli-0.26.0-py3-none-any.whl", hash = "sha256:94029f92f3dc4289b376e1213f0d6cc7c30d4f32de7e47b5effc6dc754ab9ce9", size = 108653, upload-time = "2026-09-10T16:52:13.493Z" },
 ]
 
 [[package]]
@@ -1202,16 +1214,16 @@ wheels = [
 
 [[package]]
 name = "rich-toolkit"
-version = "0.20.1"
+version = "0.20.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
     { name = "rich" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/29/63/3e427c62f1992945c997d4ec31e2fcb37d26aadbe5aa44ae5b29f7f64d26/rich_toolkit-0.20.1.tar.gz", hash = "sha256:c7336ae281f435c785acecaedc4b71d4b663dc73d9c8079fea96372527e822a4", size = 203473, upload-time = "2026-06-05T08:56:57.679Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/9f/1c/f134352beb393cc17e6241ecf0bf4dd41a6759e2e3971a69a6ad185b87a2/rich_toolkit-0.20.5.tar.gz", hash = "sha256:0c9e1c414ffb0720be26285d472e263d1e704b71d31a7e13274b9996db4969e1", size = 213207, upload-time = "2026-09-08T16:13:12.007Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/00/88/309f07d08155da2ba1d5ceb42d270fb42fbe34a807684543e3ffc10fe713/rich_toolkit-0.20.1-py3-none-any.whl", hash = "sha256:2a6d5f8e15759b9eba5a9ee63da10b275359ead20e5a0fc92bd5b4dbae8ce4bf", size = 35525, upload-time = "2026-06-05T08:56:58.586Z" },
+    { url = "https://files.pythonhosted.org/packages/6a/5f/ee8c39750ed9837f54021a8a0eb96f971cd788c1a7d40931867d6d0518bd/rich_toolkit-0.20.5-py3-none-any.whl", hash = "sha256:e21fd616db9c0539d3c50f3433fb1173db95c19d3cbf215615e224182fad6c18", size = 39370, upload-time = "2026-09-08T16:13:10.885Z" },
 ]
 
 [[package]]

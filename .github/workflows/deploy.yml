@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - main
     paths-ignore:
       - release-notes.md
   workflow_dispatch:

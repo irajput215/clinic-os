@@ -11,3 +11,8 @@ backend/app/frontend/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# Credentials and local context
+creds.txt
+.neon
+
