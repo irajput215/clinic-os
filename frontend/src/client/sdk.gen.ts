@@ -315,7 +315,7 @@ export class PatientsService {
     /**
      * Create Patient
      *
-     * Create a patient in the caller's tenant. `tenant_id` comes from the session.
+     * Create a patient in the caller's organisation. `tenant_id` comes from the session.
      */
     public static createPatient<ThrowOnError extends boolean = true>(options: Options<patientsCreatePatientData, ThrowOnError>) {
         return (options.client ?? client).post<patientsCreatePatientResponses, patientsCreatePatientErrors, ThrowOnError>({

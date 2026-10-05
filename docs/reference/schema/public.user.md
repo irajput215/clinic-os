@@ -8,7 +8,7 @@
 | email | varchar(255) |  | false |  |  |  |
 | full_name | varchar(255) |  | true |  |  |  |
 | hashed_password | varchar |  | false |  |  |  |
-| id | uuid |  | false |  |  |  |
+| id | uuid |  | false | [public.user_roles](public.user_roles.md) |  |  |
 | is_active | boolean |  | false |  |  |  |
 | is_superuser | boolean |  | false |  |  |  |
 | tenant_id | uuid |  | true |  | [public.tenants](public.tenants.md) |  |
@@ -38,6 +38,8 @@
 ```mermaid
 erDiagram
 
+"public.user_roles" }o--|| "public.user" : "FOREIGN KEY (granted_by) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
+"public.user_roles" }o--|| "public.user" : "FOREIGN KEY (user_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
 "public.user" }o--o| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL"
 
 "public.user" {
@@ -49,6 +51,14 @@ erDiagram
   boolean is_active
   boolean is_superuser
   uuid tenant_id FK
+}
+"public.user_roles" {
+  timestamp_with_time_zone granted_at
+  uuid granted_by FK
+  timestamp_with_time_zone last_reviewed_at
+  uuid role_id FK
+  uuid tenant_id FK
+  uuid user_id FK
 }
 "public.tenants" {
   timestamp_with_time_zone created_at

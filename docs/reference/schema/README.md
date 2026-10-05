@@ -5,8 +5,12 @@
 | Name | Columns | Comment | Type |
 | ---- | ------- | ------- | ---- |
 | [public.patients](public.patients.md) | 23 |  | BASE TABLE |
+| [public.permissions](public.permissions.md) | 3 |  | BASE TABLE |
+| [public.role_permissions](public.role_permissions.md) | 3 |  | BASE TABLE |
+| [public.roles](public.roles.md) | 7 |  | BASE TABLE |
 | [public.tenants](public.tenants.md) | 8 |  | BASE TABLE |
 | [public.user](public.user.md) | 8 |  | BASE TABLE |
+| [public.user_roles](public.user_roles.md) | 6 |  | BASE TABLE |
 
 ## Stored procedures and functions
 
@@ -30,7 +34,15 @@ erDiagram
 
 "public.patients" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.patients" }o--o| "public.patients" : "FOREIGN KEY (merged_into_patient_id) REFERENCES patients(id) ON DELETE RESTRICT"
+"public.role_permissions" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.role_permissions" }o--|| "public.permissions" : "FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE RESTRICT"
+"public.role_permissions" }o--|| "public.roles" : "FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE RESTRICT"
+"public.roles" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.user" }o--o| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL"
+"public.user_roles" }o--|| "public.user" : "FOREIGN KEY (granted_by) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
+"public.user_roles" }o--|| "public.user" : "FOREIGN KEY (user_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
+"public.user_roles" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.user_roles" }o--|| "public.roles" : "FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE RESTRICT"
 
 "public.patients" {
   varchar address_line
@@ -57,6 +69,25 @@ erDiagram
   uuid tenant_id FK
   timestamp_with_time_zone updated_at
 }
+"public.permissions" {
+  varchar code
+  varchar description
+  uuid id
+}
+"public.role_permissions" {
+  uuid permission_id FK
+  uuid role_id FK
+  uuid tenant_id FK
+}
+"public.roles" {
+  varchar code
+  timestamp_with_time_zone created_at
+  uuid id
+  boolean is_system
+  varchar name
+  uuid tenant_id FK
+  timestamp_with_time_zone updated_at
+}
 "public.tenants" {
   timestamp_with_time_zone created_at
   varchar_32_ data_region
@@ -76,6 +107,14 @@ erDiagram
   boolean is_active
   boolean is_superuser
   uuid tenant_id FK
+}
+"public.user_roles" {
+  timestamp_with_time_zone granted_at
+  uuid granted_by FK
+  timestamp_with_time_zone last_reviewed_at
+  uuid role_id FK
+  uuid tenant_id FK
+  uuid user_id FK
 }
 ```
 

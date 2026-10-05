@@ -24,6 +24,7 @@ from app.models import (
     UserUpdateMe,
 )
 from app.modules.identity_tenancy.service import create_tenant_for_signup
+from app.modules.users_roles import service as users_roles_service
 from app.utils import generate_new_account_email, send_email
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -181,6 +182,10 @@ def register_user(session: SessionDep, user_in: UserRegister) -> Any:
         session.add(user)
         session.commit()
         session.refresh(user)
+        # Feature 03: the seven system roles are tenant-scoped, so a new organisation needs its own
+        # copies, and the signer becomes its Practice Owner. Without this the account would be
+        # authenticated but hold no permission and every route would deny it (fail closed).
+        users_roles_service.provision_tenant(tenant_id=tenant.id, owner_user_id=user.id)
 
     return user
 

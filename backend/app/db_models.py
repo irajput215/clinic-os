@@ -14,5 +14,21 @@ from app.core.metadata import NAMING_CONVENTION
 from app.models import User
 from app.modules.identity_tenancy.models import Tenant
 from app.modules.patients.models import Patient
+from app.modules.users_roles.models import (
+    Permission,
+    Role,
+    RolePermission,
+    UserRole,
+)
 
-__all__ = ["NAMING_CONVENTION", "SQLModel", "Patient", "Tenant", "User"]
+__all__ = [
+    "NAMING_CONVENTION",
+    "SQLModel",
+    "Patient",
+    "Permission",
+    "Role",
+    "RolePermission",
+    "Tenant",
+    "User",
+    "UserRole",
+]

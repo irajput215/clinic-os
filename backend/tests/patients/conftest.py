@@ -143,6 +143,21 @@ class PatientsApi:
                     text("DELETE FROM patients WHERE tenant_id = :tenant_id"),
                     {"tenant_id": tenant_id},
                 )
+                # Signup provisions a tenant's role bundles and a `user_roles` grant, and those
+                # references are ON DELETE RESTRICT, so they are removed before the account and the
+                # tenant they belong to.
+                conn.execute(
+                    text("DELETE FROM user_roles WHERE tenant_id = :tenant_id"),
+                    {"tenant_id": tenant_id},
+                )
+                conn.execute(
+                    text("DELETE FROM role_permissions WHERE tenant_id = :tenant_id"),
+                    {"tenant_id": tenant_id},
+                )
+                conn.execute(
+                    text("DELETE FROM roles WHERE tenant_id = :tenant_id"),
+                    {"tenant_id": tenant_id},
+                )
                 conn.execute(
                     text('DELETE FROM "user" WHERE tenant_id = :tenant_id'),
                     {"tenant_id": tenant_id},

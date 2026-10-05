@@ -6,7 +6,7 @@
 | ---- | ---- | ------- | -------- | -------- | ------- | ------- |
 | created_at | timestamp with time zone |  | false |  |  |  |
 | data_region | varchar(32) |  | false |  |  |  |
-| id | uuid | gen_random_uuid() | false | [public.patients](public.patients.md) [public.user](public.user.md) |  |  |
+| id | uuid | gen_random_uuid() | false | [public.patients](public.patients.md) [public.role_permissions](public.role_permissions.md) [public.roles](public.roles.md) [public.user](public.user.md) [public.user_roles](public.user_roles.md) |  |  |
 | legal_name | varchar(255) |  | false |  |  |  |
 | retention_profile | varchar(64) |  | false |  |  |  |
 | slug | varchar(64) |  | false |  |  |  |
@@ -42,7 +42,10 @@
 erDiagram
 
 "public.patients" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.role_permissions" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.roles" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.user" }o--o| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL"
+"public.user_roles" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 
 "public.tenants" {
   timestamp_with_time_zone created_at
@@ -79,6 +82,20 @@ erDiagram
   uuid tenant_id FK
   timestamp_with_time_zone updated_at
 }
+"public.role_permissions" {
+  uuid permission_id FK
+  uuid role_id FK
+  uuid tenant_id FK
+}
+"public.roles" {
+  varchar code
+  timestamp_with_time_zone created_at
+  uuid id
+  boolean is_system
+  varchar name
+  uuid tenant_id FK
+  timestamp_with_time_zone updated_at
+}
 "public.user" {
   timestamp_with_time_zone created_at
   varchar_255_ email
@@ -88,6 +105,14 @@ erDiagram
   boolean is_active
   boolean is_superuser
   uuid tenant_id FK
+}
+"public.user_roles" {
+  timestamp_with_time_zone granted_at
+  uuid granted_by FK
+  timestamp_with_time_zone last_reviewed_at
+  uuid role_id FK
+  uuid tenant_id FK
+  uuid user_id FK
 }
 ```
 

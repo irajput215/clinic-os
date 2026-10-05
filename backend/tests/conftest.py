@@ -9,6 +9,7 @@ from app.core.db import engine, init_db
 from app.core.rate_limit import limiter
 from app.main import app
 from app.models import User
+from app.modules.users_roles.models import UserRole
 from tests.utils.user import authentication_token_from_email
 from tests.utils.utils import get_superuser_token_headers
 
@@ -47,8 +48,11 @@ def db() -> Generator[Session]:
     with Session(engine) as session:
         init_db(session)
         yield session
-        statement = delete(User)
-        session.execute(statement)
+        # `user_roles` references `user` with ON DELETE RESTRICT, so the grants go before the
+        # accounts they belong to. Nothing here deletes tenants; the module fixtures that own a
+        # tenant clean their RBAC rows up themselves.
+        session.execute(delete(UserRole))
+        session.execute(delete(User))
         session.commit()
 
 
