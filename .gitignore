@@ -1,6 +1,11 @@
 .vscode/*
 !.vscode/extensions.json
 node_modules/
+
+# Environment files — never commit real values. .env.example is the template.
+.env
+.env.*
+!.env.example
 backend/app/frontend/
 /test-results/
 /playwright-report/
