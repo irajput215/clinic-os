@@ -260,6 +260,31 @@ export type ValidationError = {
     };
 };
 
+export type healthReadinessData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/health/ready/';
+};
+
+export type healthReadinessErrors = {
+    /**
+     * The process cannot reach its database.
+     */
+    503: boolean;
+};
+
+export type healthReadinessError = healthReadinessErrors[keyof healthReadinessErrors];
+
+export type healthReadinessResponses = {
+    /**
+     * The process can serve requests.
+     */
+    200: boolean;
+};
+
+export type healthReadinessResponse = healthReadinessResponses[keyof healthReadinessResponses];
+
 export type loginLoginAccessTokenData = {
     body: Body_login_login_access_token;
     path?: never;

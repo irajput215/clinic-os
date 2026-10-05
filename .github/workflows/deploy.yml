@@ -48,8 +48,53 @@ jobs:
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
           FIRST_SUPERUSER: ${{ vars.FIRST_SUPERUSER }}
           FIRST_SUPERUSER_PASSWORD: ${{ secrets.FIRST_SUPERUSER_PASSWORD }}
+      - name: Sync runtime configuration to FastAPI Cloud
+        # The deployed app reads its own environment, never this workflow's, and `fastapi deploy`
+        # ships code only — it does not carry configuration with it. So the two drift silently:
+        # a release can migrate the database from here while the running app still holds a stale
+        # credential and returns 500 on every query that touches it.
+        #
+        # This is what makes GitHub the single source of truth: the credential that just ran the
+        # migrations above is the same one the running app is given. `--value-stdin` keeps the
+        # secret out of the process arguments.
+        #
+        # The hosts are compared first. Syncing a credential is the point of this step; moving
+        # production onto a *different* database is not, and must never happen as a side effect.
+        # The guard prints hostnames only, never the credential.
+        run: |
+          uv run fastapi cloud env get DATABASE_URL --json > "$RUNNER_TEMP/deployed_database.json"
+          uv run python scripts/check_database_target.py "$RUNNER_TEMP/deployed_database.json"
+          printf '%s' "$DATABASE_URL" | uv run fastapi cloud env set DATABASE_URL \
+            --value-stdin --secret --no-redeploy --app-id "$FASTAPI_CLOUD_APP_ID"
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          FASTAPI_CLOUD_TOKEN: ${{ secrets.FASTAPI_CLOUD_TOKEN }}
+          FASTAPI_CLOUD_APP_ID: ${{ secrets.FASTAPI_CLOUD_APP_ID }}
       - name: Deploy to FastAPI Cloud
         run: uv run fastapi deploy
         env:
           FASTAPI_CLOUD_TOKEN: ${{ secrets.FASTAPI_CLOUD_TOKEN }}
           FASTAPI_CLOUD_APP_ID: ${{ secrets.FASTAPI_CLOUD_APP_ID }}
+      - name: Verify the deployment can serve requests
+        # A deploy is not successful because it uploaded. During the incident this job was green
+        # while every database-backed route returned 500, because the app was up with an
+        # unreachable database and nothing asked it whether it could actually serve.
+        #
+        # This is a readiness question, not a liveness one: liveness would stay green through a
+        # total database outage. A red job here means production is already broken, which is
+        # earlier and louder than finding out from a demo.
+        run: |
+          for attempt in $(seq 1 24); do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$READINESS_URL" || true)
+            if [ "$code" = "200" ]; then
+              echo "Readiness OK after ${attempt} attempt(s): $READINESS_URL"
+              exit 0
+            fi
+            echo "attempt ${attempt}: HTTP ${code:-no response}"
+            sleep 5
+          done
+          echo "::error::Deployed but not ready ($READINESS_URL). Every database-backed route will fail. Check that DATABASE_URL in the FastAPI Cloud environment matches the Neon connection string."
+          exit 1
+        env:
+          READINESS_URL: ${{ vars.READINESS_URL || 'https://clinic-os.fastapicloud.dev/api/v1/health/ready/' }}

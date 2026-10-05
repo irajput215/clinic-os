@@ -49,7 +49,10 @@ Read this first. **Done** means merged to `main` and verified; **Next** is order
 | D13 | Recovery HTML enumeration oracle removed | PR #15 |
 | D14 | Six defects corrected in this document set | commit `57c5878` |
 | D15 | This board, and the index corrections beside it | PR #16 |
-| D16 | clinicOS branding replaces the template's | this change |
+| D16 | clinicOS branding replaces the template's | PR #18 |
+| D17 | Self-registration reopened as **organisation registration**: one signup creates one tenant and makes the signer its administrator — supersedes D10 | PR #19 |
+| D18 | Readiness probe `GET /api/v1/health/ready/` — boolean only, never tenant-routed; liveness deliberately left independent of the database | this change |
+| D19 | A deploy can no longer report success while the app is broken: the runtime `DATABASE_URL` is synced from the GitHub secret, and the workflow fails when the app does not report ready | this change |
 
 ### 🔄 In progress
 
@@ -63,7 +66,7 @@ Read this first. **Done** means merged to `main` and verified; **Next** is order
 | N2 | **TGA approvals** — manual entry with a validity window | The gate in N3 needs an `ACTIVE` approval to exist |
 | N3 | **The prescription safety gate** — dispatch refused without an approval at the grain | INV-2, and the screen that demonstrates the product's hard constraint |
 | N4 | **Isolation tests** — two tenants, absence assertions | Proves N1's RLS rather than asserting it |
-| N5 | **Redeploy and verify** | Deploys are manual; nothing ships by merging |
+| N5 | **Verify the live deployment** — signup, login and the readiness probe | Deploys are automatic on merge to `main` (D19); this step is the check that the deploy that just ran actually serves, not a manual publish |
 
 ### ⏸ Blocked — cannot start
 
@@ -91,27 +94,30 @@ bundle · password recovery that can actually send mail.
 | Row-level security | **Not implemented.** `tenants` is global by design; the first forced policy lands with the first tenant-scoped table | [`03-design.md`](features/01-tenancy-and-clinics/03-design.md) |
 | Audit log (feature 04) | **Not started** | — |
 | Authentication (feature 02) | **Template only**, and blocked by D-003 | [`D-003`](reference/decisions/D-003-identity-model.md) |
-| Self-registration | **Closed by default** | `USERS_OPEN_REGISTRATION` |
+| Self-registration | **Open** — one signup creates an organisation and its administrator (D17) | `USERS_OPEN_REGISTRATION` |
+| Liveness vs readiness | **Separated.** Liveness answers without touching the database; readiness returns `503` when it cannot reach one | [`core/health.py`](../backend/app/core/health.py) |
 | Rate limiting | **Built** for login (20/min) and password recovery (5/min) | [`backend/app/core/rate_limit.py`](../backend/app/core/rate_limit.py) |
-| Database migrations | 8, head `89d27ee38a6f`, `alembic check` clean | `uv run alembic check` |
-| Tests | **73 passing, 93% coverage** | `uv run pytest` |
+| Database migrations | 9, head `0bc1f345552b`, `alembic check` clean | `uv run alembic check` |
+| Tests | **83 passing, 94% coverage** | `uv run pytest` |
 | CI | 15 checks green: backend, compose, 4 Playwright shards, pre-commit, zizmor, coverage | PR #15 |
 | Gate 1–7 | **None passed, none signed.** No evidence bundle exists | [`gates.md`](reference/gates.md) |
-| Deployment | FastAPI Cloud + Neon (`ap-southeast-2`), **current with `main`** | [`§6`](#6-known-gaps-and-risks) |
+| Deployment | FastAPI Cloud + Neon (`ap-southeast-2`), **automatic on merge to `main`**, and now **gated on the readiness probe** | D19 · [`§6`](#6-known-gaps-and-risks) |
 
 ---
 
 ## 2. What the API serves today
 
-Eleven routes. Four are unauthenticated:
+Twelve routes. Six are unauthenticated — more than the endpoint declaration standard's two permitted
+*surfaces*, but they are exactly those two: public intake (login, recovery, signup) and the probes.
 
 | Method | Path | Auth |
 |---|---|---|
 | `POST` | `/api/v1/login/access-token` | open — rate limited |
 | `POST` | `/api/v1/password-recovery/{email}` | open — rate limited |
 | `POST` | `/api/v1/reset-password/` | open — **not rate limited** |
-| `POST` | `/api/v1/users/signup` | open — **refuses with 403 unless `USERS_OPEN_REGISTRATION`** |
-| `GET` | `/api/v1/utils/health-check/` | open |
+| `POST` | `/api/v1/users/signup` | open — **refuses with 403 unless `USERS_OPEN_REGISTRATION`** (on by default since D17); creates the tenant |
+| `GET` | `/api/v1/utils/health-check/` | open — liveness; does **not** touch the database |
+| `GET` | `/api/v1/health/ready/` | open — readiness; `503` with a boolean body when the database is unreachable |
 | `POST` | `/api/v1/login/test-token` | session |
 | `GET/POST` | `/api/v1/users/` | session |
 | `GET/PATCH/DELETE` | `/api/v1/users/me` | session |
@@ -127,17 +133,20 @@ oracle). `users` and `login` remain the template's, pending features 02 and 03.
 
 ## 3. What changed during 2026-10-04 → 05
 
-Seven changes, all merged. Each is a measured step, not a feature.
+Nine pull requests, all merged. Each is a measured step, not a feature.
 
 | PR | Change |
 |---|---|
 | #11 | `.env` untracked, `.gitignore`d, `.env.example` added; control 8's live violation closed |
 | #12 | `AGENTS.md`; the tenant transaction helper; `tenants` table, migration and seed; a pytest guard that refuses a non-local database |
 | #13 | One constraint naming convention and one model registry; `updated_at` actually maintained; the demo seed made opt-in; `private` route removed |
-| #14 | Self-registration closed by default; the signup page removed |
+| #14 | Self-registration closed by default; the signup page removed (reversed by #19) |
 | #15 | The `item` domain dropped; rate limiting on login and recovery; the recovery HTML oracle removed |
 | #16 | This board, and the index corrections it required |
-| this change | clinicOS branding replaces the template's — wordmark, page titles, footer, and the four FastAPI SVG assets |
+| #17 | Branding work merged into the wrong base branch — recovered, not lost, as #18 |
+| #18 | clinicOS branding ships for real; the auth forms validate on submit, not on blur |
+| #19 | Signup restored as organisation registration; one signup creates one tenant and its administrator |
+| this change | Readiness probe; the runtime `DATABASE_URL` synced from the GitHub secret; the deploy now fails when the app cannot serve |
 
 Also in this window: six defects corrected in the document set itself ([`traceability.md`](reference/traceability.md),
 [`control-matrix.md`](reference/control-matrix.md), [`definition-of-done.md`](reference/definition-of-done.md),
@@ -161,6 +170,21 @@ A defect to raise, not a judgement call to make silently.
    (T1-11). Feature 01's status is *not started*, not *in progress*.
 4. **[`open-questions.md`](reference/open-questions.md)** — the committed-`.env` finding is resolved by #11.
    D-003 and D-004 remain open.
+5. **A probe has no home in the module map.** [`build-contract.md` §7](reference/build-contract.md) and
+   [`control-matrix.md` §1.4](reference/control-matrix.md) name twelve target modules, none of which is an
+   operations or observability module — yet
+   [`16-operations-and-observability/03-design.md`](features/16-operations-and-observability/03-design.md)
+   requires liveness and readiness probes, and `AGENTS.md` says no route may be added outside
+   `app/modules/`. The probe was therefore placed in the thin HTTP layer (`app/api/routes/health.py`)
+   beside the existing `utils` probe, with the decision in `app/core/health.py`. **This is a raised
+   conflict, not a settled one**: either the module map gains an operations module, or the layout rule
+   gains a stated exception for platform probes. The path itself
+   (`/api/v1/health/ready/`) is OPEN in the design and is a repo choice.
+6. **No `spec.md` declares the probe under the endpoint declaration standard.** The standard requires every
+   endpoint to declare authentication, permission, tenant scope, ownership, input and output schema, audit,
+   rate limit and errors. The probe's declaration is recorded in its module docstrings
+   ([`health.py`](../backend/app/api/routes/health.py)) rather than in a phase spec, because no phase owns
+   it. It needs either a spec home or an explicit exemption.
 
 ---
 
@@ -178,11 +202,21 @@ A defect to raise, not a judgement call to make silently.
 
 ## 6. Known gaps and risks
 
-- **Deployment is manual.** Verified against the live OpenAPI document on 2026-10-05: 11 routes, with
-  `/api/v1/items/*` and the recovery HTML oracle gone, so the hardening through #15 **is** live and login
-  is rate limited. It was three pull requests behind until the deploy on the same day, which is the risk
-  worth naming: **merging does not deploy anything**, and a stale build served unlimited login attempts
-  for several hours.
+- **Deployment is automatic, and it was automatic and green throughout a total outage.** The Deploy
+  workflow runs on push to `main`; the runs for #12–#19 all succeeded. Earlier in this window this
+  document claimed the opposite ("merging does not deploy anything"), which was wrong — the workflow has
+  existed since `d338605`. The true risk is worse than the one written down: **a green deploy proved
+  nothing about whether the app worked.**
+- **The deployed database credential had drifted from the one CI migrates with.** On 2026-10-05 the live
+  app returned `500` for `POST /api/v1/users/signup` *and* `POST /api/v1/login/access-token` — every route
+  that touches the database — while `GET /api/v1/utils/health-check/` returned `200 true`, because
+  liveness never touched the database and nothing asked whether the app could serve. The cause was not
+  code: `fastapi deploy` ships code only and never carries configuration, so FastAPI Cloud's
+  `DATABASE_URL` held a credential Neon rejects (`password authentication failed for user 'neondb_owner'`)
+  while the GitHub secret's credential migrated that same database successfully in the same run. D18 and
+  D19 close both halves: the runtime value is now synced from the single GitHub secret, and the workflow
+  fails when the readiness probe does not answer `200`. Also noted: that variable is stored in FastAPI
+  Cloud as **non-secret**, so making it secret needs delete-and-recreate.
 - **`POST /api/v1/reset-password/`** is unauthenticated and, unlike its siblings, not rate limited.
 - **Password recovery cannot deliver mail** (`SMTP_HOST=localhost`), so it returns success and nothing
   arrives — a silent dead end.
