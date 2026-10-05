@@ -2,7 +2,9 @@
 
 Requirement R11 and scenarios S10/S11: a missing tenant setting returns zero rows (the `NULLIF`
 guard), a tenant sees only its own rows, a forged `tenant_id` write is refused by `WITH CHECK`, and
-the application role cannot write global reference data or hard-delete a grant.
+the application role cannot write global reference data. `clinos_app` **may** delete a grant on the
+two link tables — `03-users-and-roles/03-design.md` grants `SELECT, INSERT, DELETE` there, *"grant/
+revoke is real"* — but it may not `TRUNCATE` one, and the delete is still scoped by the RLS policy.
 
 These run as **`clinos_app`** via `SET LOCAL ROLE` for the same reason as the `patients` isolation
 suite: the deployment connection is the table owner with `BYPASSRLS`, and proving isolation on it
@@ -27,6 +29,31 @@ _TENANT = text(
     " created_at, updated_at) VALUES (:id, :slug, :slug, 'ACTIVE', 'ap-southeast-2', 'default',"
     " now(), now())"
 )
+
+# One NURSE bundle edge of tenant `a`: the row the revoke test removes. `NURSE` holds `patient:read`.
+_ONE_ROLE_PERMISSION_EDGE = text(
+    "DELETE FROM role_permissions "
+    "WHERE tenant_id = :tenant_id "
+    "  AND role_id = (SELECT id FROM roles WHERE tenant_id = :tenant_id AND code = 'NURSE') "
+    "  AND permission_id = (SELECT id FROM permissions WHERE code = 'patient:read')"
+)
+
+_GRANT_FOR_APP_ON = text(
+    "SELECT privilege_type FROM information_schema.role_table_grants "
+    "WHERE grantee = 'clinos_app' AND table_name = :table"
+)
+
+
+def _role_permission_count(tenant_id: uuid.UUID) -> int:
+    with engine.connect() as conn:
+        return int(
+            conn.execute(
+                text(
+                    "SELECT count(*) FROM role_permissions WHERE tenant_id = :tenant_id"
+                ),
+                {"tenant_id": tenant_id},
+            ).scalar_one()
+        )
 
 
 @pytest.fixture
@@ -115,14 +142,55 @@ def test_the_app_role_cannot_write_global_permission_reference_data() -> None:
             )
 
 
-def test_the_app_role_cannot_hard_delete_a_grant(
+def test_the_app_role_holds_the_design_delete_grant_on_the_link_tables() -> None:
+    """`03-design.md`: `GRANT SELECT, INSERT, DELETE ON role_permissions, user_roles` — revoke is real.
+
+    The grant listing is the evidence, not the migration source. `TRUNCATE` is the one privilege the
+    design revokes, because a revoke is a single-row delete and never a table wipe.
+    """
+    with engine.connect() as conn:
+        for table in ("role_permissions", "user_roles"):
+            granted = {
+                row[0] for row in conn.execute(_GRANT_FOR_APP_ON, {"table": table})
+            }
+            assert {"SELECT", "INSERT", "DELETE"} <= granted, (
+                f"clinos_app is missing a documented grant on {table}: has {sorted(granted)}"
+            )
+            assert "TRUNCATE" not in granted, (
+                f"clinos_app holds TRUNCATE on {table}; the design revokes it"
+            )
+
+
+def test_the_app_role_may_revoke_a_grant_in_its_own_tenant(
     two_tenants: tuple[uuid.UUID, uuid.UUID],
 ) -> None:
-    """Deviation 3 in the migration: `SELECT, INSERT` only on the grant tables, no hard delete.
+    """The delete the design grants works, and RLS still scopes it to the caller's tenant.
 
     One statement per transaction: a refused statement aborts the transaction, so a second statement
     in the same block would fail for the wrong reason.
     """
+    a, b = two_tenants
+    before_a = _role_permission_count(a)
+    before_b = _role_permission_count(b)
+
+    with engine.connect() as conn, conn.begin():
+        conn.execute(AS_APP_ROLE)
+        conn.execute(AS_TENANT, {"tenant_id": str(a)})
+        result = conn.execute(_ONE_ROLE_PERMISSION_EDGE, {"tenant_id": a})
+        assert result.rowcount == 1, "the revoke did not remove exactly one NURSE edge"
+
+    assert _role_permission_count(a) == before_a - 1, (
+        "the granted revoke removed nothing from the caller's tenant"
+    )
+    assert _role_permission_count(b) == before_b, (
+        "the revoke reached another tenant's bundle"
+    )
+
+
+def test_the_app_role_cannot_truncate_a_grant_table(
+    two_tenants: tuple[uuid.UUID, uuid.UUID],
+) -> None:
+    """The design revokes `TRUNCATE`: a revoke is a single-row delete, never a table wipe."""
     a, _ = two_tenants
     for table in ("role_permissions", "user_roles"):
         with (
@@ -132,7 +200,4 @@ def test_the_app_role_cannot_hard_delete_a_grant(
             with conn.begin():
                 conn.execute(AS_APP_ROLE)
                 conn.execute(AS_TENANT, {"tenant_id": str(a)})
-                conn.execute(
-                    text(f"DELETE FROM {table} WHERE tenant_id = :tenant_id"),
-                    {"tenant_id": a},
-                )
+                conn.execute(text(f"TRUNCATE {table}"))

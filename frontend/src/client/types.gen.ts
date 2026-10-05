@@ -289,6 +289,100 @@ export type PatientsPublic = {
 };
 
 /**
+ * PermissionRead
+ *
+ * One entry of the global permission catalogue.
+ *
+ * `permissions.id` is not exposed: `code` is the catalogue's stable identity and the join key is
+ * internal. `permissions` is global read-only reference data (R7).
+ */
+export type PermissionRead = {
+    /**
+     * Code
+     */
+    code: string;
+    /**
+     * Description
+     */
+    description: string;
+};
+
+/**
+ * PermissionsPublic
+ *
+ * The permission catalogue, or a computed subset of it, plus its size.
+ */
+export type PermissionsPublic = {
+    /**
+     * Data
+     */
+    data: Array<PermissionRead>;
+    /**
+     * Count
+     */
+    count: number;
+};
+
+/**
+ * RoleAssignmentCreate
+ *
+ * The body of `POST /api/v1/users/{user_id}/roles`.
+ *
+ * Only `role_id` is accepted. A `tenant_id` (INV-1), a `granted_by` or a `user_id` is an unknown
+ * field and is rejected `422` before any query runs — the design's step 5 names exactly those three.
+ */
+export type RoleAssignmentCreate = {
+    /**
+     * Role Id
+     */
+    role_id: string;
+};
+
+/**
+ * RoleRead
+ *
+ * A tenant-scoped role and the permission bundle it resolves to.
+ */
+export type RoleRead = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Code
+     */
+    code: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Is System
+     */
+    is_system: boolean;
+    /**
+     * Permissions
+     */
+    permissions: Array<PermissionRead>;
+};
+
+/**
+ * RolesPublic
+ *
+ * The caller's roles, ordered by code, plus their count.
+ */
+export type RolesPublic = {
+    /**
+     * Data
+     */
+    data: Array<RoleRead>;
+    /**
+     * Count
+     */
+    count: number;
+};
+
+/**
  * Token
  */
 export type Token = {
@@ -340,6 +434,29 @@ export type UserCreate = {
      * Password
      */
     password: string;
+};
+
+/**
+ * UserPermissionsRead
+ *
+ * The effective permission set of one account, computed server-side from its roles.
+ *
+ * The design names this "effective set, computed server-side": nothing here comes from the request,
+ * and the set is the union of the account's role bundles (R1).
+ */
+export type UserPermissionsRead = {
+    /**
+     * User Id
+     */
+    user_id: string;
+    /**
+     * Permissions
+     */
+    permissions: Array<PermissionRead>;
+    /**
+     * Count
+     */
+    count: number;
 };
 
 /**
@@ -396,6 +513,53 @@ export type UserRegister = {
      * Clinic Name
      */
     clinic_name?: string | null;
+};
+
+/**
+ * UserRoleRead
+ *
+ * One role an account holds inside the caller's tenant.
+ *
+ * `granted_at` is returned because an access review needs the age of the grant (US-2); the granter's
+ * identifier is not.
+ */
+export type UserRoleRead = {
+    /**
+     * Role Id
+     */
+    role_id: string;
+    /**
+     * Code
+     */
+    code: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Is System
+     */
+    is_system: boolean;
+    /**
+     * Granted At
+     */
+    granted_at: string;
+};
+
+/**
+ * UserRolesPublic
+ *
+ * The roles one account holds, plus their count.
+ */
+export type UserRolesPublic = {
+    /**
+     * Data
+     */
+    data: Array<UserRoleRead>;
+    /**
+     * Count
+     */
+    count: number;
 };
 
 /**
@@ -1019,3 +1183,159 @@ export type patientsUpdatePatientResponses = {
 };
 
 export type patientsUpdatePatientResponse = patientsUpdatePatientResponses[keyof patientsUpdatePatientResponses];
+
+export type rolesListRolesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/roles';
+};
+
+export type rolesListRolesResponses = {
+    /**
+     * Successful Response
+     */
+    200: RolesPublic;
+};
+
+export type rolesListRolesResponse = rolesListRolesResponses[keyof rolesListRolesResponses];
+
+export type permissionsListPermissionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/permissions';
+};
+
+export type permissionsListPermissionsResponses = {
+    /**
+     * Successful Response
+     */
+    200: PermissionsPublic;
+};
+
+export type permissionsListPermissionsResponse = permissionsListPermissionsResponses[keyof permissionsListPermissionsResponses];
+
+export type usersReadUserRolesData = {
+    body?: never;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/v1/users/{user_id}/roles';
+};
+
+export type usersReadUserRolesErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type usersReadUserRolesError = usersReadUserRolesErrors[keyof usersReadUserRolesErrors];
+
+export type usersReadUserRolesResponses = {
+    /**
+     * Successful Response
+     */
+    200: UserRolesPublic;
+};
+
+export type usersReadUserRolesResponse = usersReadUserRolesResponses[keyof usersReadUserRolesResponses];
+
+export type usersAssignRoleData = {
+    body: RoleAssignmentCreate;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/v1/users/{user_id}/roles';
+};
+
+export type usersAssignRoleErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type usersAssignRoleError = usersAssignRoleErrors[keyof usersAssignRoleErrors];
+
+export type usersAssignRoleResponses = {
+    /**
+     * Successful Response
+     */
+    201: RoleRead;
+};
+
+export type usersAssignRoleResponse = usersAssignRoleResponses[keyof usersAssignRoleResponses];
+
+export type usersReadUserPermissionsData = {
+    body?: never;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/v1/users/{user_id}/permissions';
+};
+
+export type usersReadUserPermissionsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type usersReadUserPermissionsError = usersReadUserPermissionsErrors[keyof usersReadUserPermissionsErrors];
+
+export type usersReadUserPermissionsResponses = {
+    /**
+     * Successful Response
+     */
+    200: UserPermissionsRead;
+};
+
+export type usersReadUserPermissionsResponse = usersReadUserPermissionsResponses[keyof usersReadUserPermissionsResponses];
+
+export type usersRevokeRoleData = {
+    body?: never;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+        /**
+         * Role Id
+         */
+        role_id: string;
+    };
+    query?: never;
+    url: '/api/v1/users/{user_id}/roles/{role_id}';
+};
+
+export type usersRevokeRoleErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type usersRevokeRoleError = usersRevokeRoleErrors[keyof usersRevokeRoleErrors];
+
+export type usersRevokeRoleResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type usersRevokeRoleResponse = usersRevokeRoleResponses[keyof usersRevokeRoleResponses];

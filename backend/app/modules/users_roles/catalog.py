@@ -185,3 +185,24 @@ PATIENT_PERMISSIONS: Final[dict[str, str]] = {
     "read": "patient:read",
     "update": "patient:update",
 }
+
+# The permission each administration route requires. `03-design.md` "Endpoints" gives `users:manage`
+# to every `/users/*` and `/roles/*` row. `role:read`/`role:manage` are **candidates only**
+# (`01-requirements.md`, "Candidate additions named elsewhere") and are not granted while OPEN-1 and
+# OPEN-6 are open, so no route uses them.
+USERS_ROLES_PERMISSIONS: Final[dict[str, str]] = {
+    "list_roles": "users:manage",
+    "list_permissions": "users:manage",
+    "read_user_roles": "users:manage",
+    "read_user_permissions": "users:manage",
+    "assign_role": "users:manage",
+    "revoke_role": "users:manage",
+}
+
+# The `Action` suffix the design gives each administration endpoint's audit event
+# (`05-data-and-audit.md`, "Audit events emitted"). Feature 04 is not built, so the routes declare
+# these names as deferred rather than writing them; naming them here keeps the declaration honest.
+USERS_ROLES_AUDIT_ACTIONS: Final[dict[str, str]] = {
+    "assign_role": "ROLE_ASSIGNED",
+    "revoke_role": "ROLE_REVOKED",
+}
