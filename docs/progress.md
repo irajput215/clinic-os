@@ -197,6 +197,16 @@ A defect to raise, not a judgement call to make silently.
    [`test_schema_conventions.py`](../backend/tests/core/test_schema_conventions.py) now compares every
    constraint and index name the models declare against the database, which is the check `alembic` does
    not perform. **Raised, not settled:** whether the standing order keeps naming `alembic check` alone.
+8. **Migrations here are not hermetic, and the first version of D21 assumed they were.** `706856e36a80`
+   produced *different* constraint names depending on the code around it: it reached the deployed
+   database from PR #12, before `app.core.metadata` existed, so Postgres took its declared name literally
+   (`ck_tenants_status`); every database rebuilt afterwards replays it with the convention active and gets
+   `ck_tenants_ck_tenants_status`. **Replaying migrations with newer code does not reproduce history.**
+   The first D21 migration asserted one state and failed on the deployed database
+   (`constraint "ck_tenants_ck_tenants_status" does not exist`, Deploy run `37308445828`), so it now
+   converges both states instead. A rebuilt database and the deployed one agree on constraint names but
+   were *built differently*, and nothing in the repo records that. Worth a decision: whether migrations
+   get pinned against the convention with `op.f()` as a rule, not only where someone remembered.
 
 ---
 
