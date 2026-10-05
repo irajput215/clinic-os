@@ -197,6 +197,10 @@ export class UsersService {
      * Register User
      *
      * Create new user without the need to be logged in.
+     *
+     * Closed by default (`USERS_OPEN_REGISTRATION`): staff accounts are provisioned,
+     * not self-registered. An existing administrator creates them through
+     * `POST /users/`.
      */
     public static registerUser<ThrowOnError extends boolean = true>(options: Options<usersRegisterUserData, ThrowOnError>) {
         return (options.client ?? client).post<usersRegisterUserResponses, usersRegisterUserErrors, ThrowOnError>({
