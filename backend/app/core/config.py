@@ -76,6 +76,10 @@ class Settings(BaseSettings):
     # the CI workflows), and a deployment that wants open registration must say so.
     USERS_OPEN_REGISTRATION: bool = False
 
+    # Sliding-window rate limiting on the abuse-prone unauthenticated endpoints
+    # (login, password recovery). Tests clear the window between cases.
+    RATE_LIMIT_ENABLED: bool = True
+
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":
             message = (
