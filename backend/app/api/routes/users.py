@@ -23,6 +23,7 @@ from app.models import (
     UserUpdate,
     UserUpdateMe,
 )
+from app.modules.identity_tenancy.service import create_tenant_for_signup
 from app.utils import generate_new_account_email, send_email
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -145,11 +146,14 @@ def delete_user_me(session: SessionDep, current_user: CurrentUser) -> Any:
 @router.post("/signup", response_model=UserPublic)
 def register_user(session: SessionDep, user_in: UserRegister) -> Any:
     """
-    Create new user without the need to be logged in.
+    Register an organisation, or a plain account.
 
-    Closed by default (`USERS_OPEN_REGISTRATION`): staff accounts are provisioned,
-    not self-registered. An existing administrator creates them through
-    `POST /users/`.
+    This is step ① of `docs/reference/business-flow.md`. A `clinic_name` registers the
+    organisation and makes the signer its administrator; without one the account is
+    created unattached, which is what a platform administrator does.
+
+    Gated by `USERS_OPEN_REGISTRATION`. That is what makes self-registration safe:
+    a signup can only ever reach the tenant it just created.
     """
     if not settings.USERS_OPEN_REGISTRATION:
         raise HTTPException(
@@ -162,8 +166,22 @@ def register_user(session: SessionDep, user_in: UserRegister) -> Any:
             status_code=400,
             detail="The user with this email already exists in the system",
         )
+
+    tenant = (
+        create_tenant_for_signup(session, user_in.clinic_name)
+        if user_in.clinic_name
+        else None
+    )
+
     user_create = UserCreate.model_validate(user_in)
     user = crud.create_user(session=session, user_create=user_create)
+
+    if tenant is not None:
+        user.tenant_id = tenant.id
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+
     return user
 
 

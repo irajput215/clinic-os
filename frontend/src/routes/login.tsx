@@ -132,6 +132,13 @@ function Login() {
               Log In
             </LoadingButton>
           </div>
+
+          <div className="text-center text-sm">
+            New clinic?{" "}
+            <RouterLink to="/signup" className="underline underline-offset-4">
+              Register your organisation
+            </RouterLink>
+          </div>
         </form>
       </Form>
     </AuthLayout>

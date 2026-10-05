@@ -70,11 +70,11 @@ class Settings(BaseSettings):
     # real environment must opt in.
     SEED_DEMO_TENANT: bool = False
 
-    # Self-registration at POST /users/signup. Closed by default: staff are
-    # provisioned by an administrator, so a clinic platform must not let anyone on
-    # the internet create an account. The test environment opts in explicitly (see
-    # the CI workflows), and a deployment that wants open registration must say so.
-    USERS_OPEN_REGISTRATION: bool = False
+    # Self-registration at POST /users/signup. Open by default because a signup now
+    # registers an organisation (`clinic_name`), so a new account can only ever reach
+    # the tenant it created — see docs/reference/business-flow.md step ①. A deployment
+    # that would rather provision every account by hand sets this false.
+    USERS_OPEN_REGISTRATION: bool = True
 
     # Sliding-window rate limiting on the abuse-prone unauthenticated endpoints
     # (login, password recovery). Tests clear the window between cases.

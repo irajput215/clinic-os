@@ -150,6 +150,10 @@ export type UserPublic = {
      * Created At
      */
     created_at?: string | null;
+    /**
+     * Tenant Id
+     */
+    tenant_id?: string | null;
 };
 
 /**
@@ -168,6 +172,10 @@ export type UserRegister = {
      * Full Name
      */
     full_name?: string | null;
+    /**
+     * Clinic Name
+     */
+    clinic_name?: string | null;
 };
 
 /**
