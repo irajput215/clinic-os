@@ -82,8 +82,16 @@ for requirements, the reference layer for gates and Definition of Done.
 
 - **Python 3.14.** `except A, B:` without parentheses is valid (PEP 758). It looks like a Python 2 syntax
   error to older tools and to Python 3.13 — it is correct here. Do not "fix" it.
-- **Module layout.** Target is `backend/app/modules/<module_id>/{models,schemas,service,router}.py`. A
-  module owns its tables and is reached only through its service facade.
+- **Layout — one convention, no exceptions.** All new domain code lives in
+  `backend/app/modules/<module_id>/{models,schemas,service,router}.py`. A module owns its tables and is
+  reached only through its service facade. The template layer (`app/models.py`, `app/crud.py`,
+  `app/api/routes/*.py`) is **legacy: frozen**. Do not add a model, service or route outside
+  `app/modules/`, and do not extend the legacy layer.
+- **Where models register.** Every table must be imported by `app/db_models.py` — the single place Alembic
+  reads. Never import a model into `app/models.py` just to register it.
+- **Constraint names.** `app.core.metadata` sets one naming convention. Declare check constraints with a
+  suffix (`name="status"` renders as `ck_tenants_status`). Run `uv run alembic check` before committing a
+  model change; it must report **no** operations.
 - **Tenant transactions.** Use `app.core.db.tenant_transaction(...)` for any query against tenant data.
   It sets `app.tenant_id` with `SET LOCAL` inside the transaction and refuses to open without a tenant.
   Never use a session-level `SET`.

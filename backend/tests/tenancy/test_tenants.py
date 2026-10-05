@@ -99,3 +99,26 @@ def test_seed_demo_tenant_is_idempotent() -> None:
         assert first.slug == DEMO_TENANT_SLUG
         assert first.status == "ACTIVE"
         assert session.exec(select(Tenant)).all() == [first]
+
+
+def test_tenant_updated_at_advances_on_change() -> None:
+    """A column called `updated_at` that never moves is worse than no column."""
+    with Session(engine) as session:
+        tenant = _tenant()
+        session.add(tenant)
+        session.commit()
+        session.refresh(tenant)
+        created_at = tenant.created_at
+        updated_at = tenant.updated_at
+        tenant_id = tenant.id
+
+    with Session(engine) as session:
+        stored = session.get(Tenant, tenant_id)
+        assert stored is not None
+        stored.legal_name = "Demo Clinic Pty Ltd (renamed)"
+        session.add(stored)
+        session.commit()
+        session.refresh(stored)
+
+        assert stored.updated_at > updated_at
+        assert stored.created_at == created_at

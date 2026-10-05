@@ -22,8 +22,13 @@ fileConfig(config.config_file_name)
 # target_metadata = mymodel.Base.metadata
 # target_metadata = None
 
-from app.models import SQLModel  # noqa
-from app.core.config import settings # noqa
+from sqlmodel import SQLModel  # noqa
+
+from app.core.config import settings  # noqa
+
+# Registers every table and applies the naming convention; import it before
+# reading the metadata.
+import app.db_models  # noqa: E402, F401
 
 target_metadata = SQLModel.metadata
 

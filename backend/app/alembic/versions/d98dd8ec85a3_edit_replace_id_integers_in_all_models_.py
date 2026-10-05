@@ -48,11 +48,12 @@ def upgrade():
     op.alter_column('item', 'new_id', new_column_name='id')
 
     # Create primary key constraint
-    op.create_primary_key('user_pkey', 'user', ['id'])
-    op.create_primary_key('item_pkey', 'item', ['id'])
+    op.create_primary_key(op.f('user_pkey'), 'user', ['id'])
+    op.create_primary_key(op.f('item_pkey'), 'item', ['id'])
 
     # Recreate foreign key constraint
-    op.create_foreign_key('item_owner_id_fkey', 'item', 'user', ['owner_id'], ['id'])
+    op.create_foreign_key(op.f('item_owner_id_fkey'), 'item', 'user', ['owner_id'], ['id'])
+
 
 def downgrade():
     # Reverse the upgrade process
@@ -83,8 +84,8 @@ def downgrade():
     op.alter_column('item', 'old_id', new_column_name='id')
 
     # Create primary key constraint
-    op.create_primary_key('user_pkey', 'user', ['id'])
-    op.create_primary_key('item_pkey', 'item', ['id'])
+    op.create_primary_key(op.f('user_pkey'), 'user', ['id'])
+    op.create_primary_key(op.f('item_pkey'), 'item', ['id'])
 
     # Recreate foreign key constraint
-    op.create_foreign_key('item_owner_id_fkey', 'item', 'user', ['owner_id'], ['id'])
+    op.create_foreign_key(op.f('item_owner_id_fkey'), 'item', 'user', ['owner_id'], ['id'])

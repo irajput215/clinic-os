@@ -35,13 +35,15 @@ def _utcnow() -> datetime:
 class Tenant(SQLModel, table=True):
     __tablename__ = "tenants"
     __table_args__ = (
+        # These names are suffixes: the shared naming convention renders them as
+        # ck_tenants_status and ck_tenants_slug_lowercase (app.core.metadata).
         sa.CheckConstraint(
             "status IN ('ACTIVE', 'SUSPENDED', 'CLOSING', 'CLOSED')",
-            name="ck_tenants_status",
+            name="status",
         ),
         # The slug is routing only, never an authorisation input; keeping it
         # lower-case makes the uniqueness guarantee predictable.
-        sa.CheckConstraint("slug = lower(slug)", name="ck_tenants_slug_lowercase"),
+        sa.CheckConstraint("slug = lower(slug)", name="slug_lowercase"),
     )
 
     id: uuid.UUID = Field(
@@ -55,4 +57,6 @@ class Tenant(SQLModel, table=True):
     data_region: str = Field(default="ap-southeast-2", max_length=32)
     retention_profile: str = Field(max_length=64)
     created_at: datetime = Field(default_factory=_utcnow)
-    updated_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(
+        default_factory=_utcnow, sa_column_kwargs={"onupdate": _utcnow}
+    )

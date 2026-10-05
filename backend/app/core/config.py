@@ -65,6 +65,11 @@ class Settings(BaseSettings):
     FIRST_SUPERUSER: EmailStr
     FIRST_SUPERUSER_PASSWORD: str
 
+    # The demo organisation is MVP seed data, not something a deployment should
+    # create implicitly. `initial_data.py` seeds it only when this is true, so a
+    # real environment must opt in.
+    SEED_DEMO_TENANT: bool = False
+
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":
             message = (
