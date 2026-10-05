@@ -62,7 +62,14 @@ jobs:
         # production onto a *different* database is not, and must never happen as a side effect.
         # The guard prints hostnames only, never the credential.
         run: |
-          uv run fastapi cloud env get DATABASE_URL --json > "$RUNNER_TEMP/deployed_database.json"
+          # `--app-id` is passed explicitly because `.fastapicloud/cloud.json` is not committed, so
+          # there is no local link for the CLI to resolve the app from in CI.
+          if ! uv run fastapi cloud env get DATABASE_URL --json \
+            --app-id "$FASTAPI_CLOUD_APP_ID" > "$RUNNER_TEMP/deployed_database.json"; then
+            echo "::error::Could not read DATABASE_URL from FastAPI Cloud."
+            cat "$RUNNER_TEMP/deployed_database.json"
+            exit 1
+          fi
           uv run python scripts/check_database_target.py "$RUNNER_TEMP/deployed_database.json"
           printf '%s' "$DATABASE_URL" | uv run fastapi cloud env set DATABASE_URL \
             --value-stdin --secret --no-redeploy --app-id "$FASTAPI_CLOUD_APP_ID"
