@@ -6,7 +6,7 @@
 | ---- | ---- | ------- | -------- | -------- | ------- | ------- |
 | created_at | timestamp with time zone |  | false |  |  |  |
 | data_region | varchar(32) |  | false |  |  |  |
-| id | uuid | gen_random_uuid() | false | [public.user](public.user.md) |  |  |
+| id | uuid | gen_random_uuid() | false | [public.patients](public.patients.md) [public.user](public.user.md) |  |  |
 | legal_name | varchar(255) |  | false |  |  |  |
 | retention_profile | varchar(64) |  | false |  |  |  |
 | slug | varchar(64) |  | false |  |  |  |
@@ -41,6 +41,7 @@
 ```mermaid
 erDiagram
 
+"public.patients" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.user" }o--o| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL"
 
 "public.tenants" {
@@ -51,6 +52,31 @@ erDiagram
   varchar_64_ retention_profile
   varchar_64_ slug
   varchar_16_ status
+  timestamp_with_time_zone updated_at
+}
+"public.patients" {
+  varchar address_line
+  timestamp_with_time_zone created_at
+  date date_of_birth
+  timestamp_with_time_zone deceased_at
+  timestamp_with_time_zone deleted_at
+  varchar email
+  varchar family_name
+  varchar gender_identity
+  varchar given_name
+  uuid id
+  bytea ihi
+  bytea ihi_blind_index
+  bytea medicare_blind_index
+  bytea medicare_number
+  uuid merged_into_patient_id FK
+  varchar phone
+  varchar postcode
+  varchar preferred_name
+  varchar sex_at_birth
+  varchar state
+  varchar suburb
+  uuid tenant_id FK
   timestamp_with_time_zone updated_at
 }
 "public.user" {

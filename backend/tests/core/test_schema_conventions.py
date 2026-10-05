@@ -47,7 +47,14 @@ def _database_names(inspector: Any, table: str) -> tuple[set[str], set[str]]:
         for foreign_key in inspector.get_foreign_keys(table)
         if foreign_key.get("name")
     }
+    # Postgres backs a UNIQUE constraint with an index and reports it in both lists, so an index
+    # check that did not subtract one from the other would count the constraint twice.
     indexes = {row["name"] for row in inspector.get_indexes(table) if row.get("name")}
+    indexes -= {
+        row["name"]
+        for row in inspector.get_unique_constraints(table)
+        if row.get("name")
+    }
     return constraints, indexes
 
 

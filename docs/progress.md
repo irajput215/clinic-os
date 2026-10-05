@@ -56,6 +56,7 @@ Read this first. **Done** means merged to `main` and verified; **Next** is order
 | D20 | The outage closed: the deployed credential corrected, then verified live — readiness `200`, login `200`, signup creates the organisation | Deploy run `37303519527`, green end to end |
 | D21 | The two `tenants` check constraints renamed to what the models declare, and a test asserting **every** constraint and index name against the metadata | migration `f993c55e6eaf` · [`test_schema_conventions.py`](../backend/tests/core/test_schema_conventions.py) |
 | D22 | Schema conventions written down ([`database-conventions.md`](reference/database-conventions.md)); `User` ↔ `Tenant` relationships declared on both sides with a test; `alembic check` and the generated ER diagrams now gated in CI | [`schema-diagram.sh`](../scripts/schema-diagram.sh) · [`schema/`](reference/schema/README.md) · `.github/workflows/test-backend.yml` |
+| D23 | `patients` created — the first tenant-scoped table — with forced RLS, a permissive policy that actually grants a caller its own rows, the design's restrictive floor, and `clinos_app` (no superuser, no `BYPASSRLS`, no `DELETE` grant) | migration `134a7201f6d2` · [`test_patients_isolation.py`](../backend/tests/isolation/test_patients_isolation.py) |
 
 ### 🔄 In progress
 
@@ -99,8 +100,8 @@ bundle · password recovery that can actually send mail.
 | Self-registration | **Open** — one signup creates an organisation and its administrator (D17) | `USERS_OPEN_REGISTRATION` |
 | Liveness vs readiness | **Separated.** Liveness answers without touching the database; readiness returns `503` when it cannot reach one | [`core/health.py`](../backend/app/core/health.py) |
 | Rate limiting | **Built** for login (20/min) and password recovery (5/min) | [`backend/app/core/rate_limit.py`](../backend/app/core/rate_limit.py) |
-| Database migrations | 10, head `f993c55e6eaf`, `alembic check` clean | `uv run alembic check` |
-| Tests | **93 passing, 94% coverage** | `uv run pytest` |
+| Database migrations | 11, head `134a7201f6d2`, `alembic check` clean | `uv run alembic check` |
+| Tests | **99 passing, 94% coverage** | `uv run pytest` |
 | Schema diagrams | **Generated and committed**; CI fails when they are stale | [`docs/reference/schema/`](reference/schema/README.md) |
 | CI | 15 checks green: backend, compose, 4 Playwright shards, pre-commit, zizmor, coverage | PR #15 |
 | Gate 1–7 | **None passed, none signed.** No evidence bundle exists | [`gates.md`](reference/gates.md) |
@@ -223,6 +224,30 @@ A defect to raise, not a judgement call to make silently.
    the `pr-push` step in `.github/workflows/pre-commit.yml` already fails with "did not issue an
    installation token", so that path is known-broken here. **Raised:** fix the push token and
    auto-commit, or keep the drift gate.
+
+11. **RLS was decorative in this deployment, and `FORCE` does not fix it.** `FORCE ROW LEVEL SECURITY`
+   defeats the *owner* exemption only. A role holding `BYPASSRLS` ignores every policy, and the
+   deployment connects as `neondb_owner`, which has `rolbypassrls = True` — as does local `postgres`
+   (a superuser). So a policy can be present, `alembic check` clean and the isolation tests green while
+   production reads every tenant's rows. D23 creates `clinos_app` (no superuser, no `BYPASSRLS`, owns
+   nothing) and proves isolation by `SET LOCAL ROLE`. **Still outstanding:** the application connects as
+   the owner, so enforcement is proven but not yet in force — switching the connection needs a
+   credential for the role and a second URL for migrations, since migrations need ownership the app role
+   must not have. Gate 2's "app role is not the owner" condition stays unmet until then.
+12. **The normative RLS policy, taken literally, denies every row.** `03-design.md` specifies
+   `AS RESTRICTIVE`. A restrictive policy can only *narrow* access and cannot grant it, so with no
+   permissive policy present the table denies everything — measured: a non-bypass role with the correct
+   `app.tenant_id` set still saw **zero** rows. D23 therefore creates a permissive policy with the same
+   predicate alongside the design's restrictive floor. The feature document needs the permissive policy
+   stated, or the next table will repeat this.
+13. **The patient endpoints cannot be built faithfully yet.** The eight routes need RBAC (feature 03,
+   not started); R7's treating-relationship rule needs `care_relationships`, which has no table and no
+   owner; merge needs step-up, blocked by D-003; `patient.merged`/`patient.merge_reversed` are required
+   *and* unregistered (the feature says doc 07 §1 must be extended before build); the identifier
+   algorithms and the `sex_at_birth` vocabulary are OPEN; and export and access-history are required in
+   prose with no declared route, schema or limit. T1-05 also demands a `patient_identifiers` table the
+   design explicitly forbids, and the task layer and feature layer name different test files for the
+   same obligations.
 
 ---
 
