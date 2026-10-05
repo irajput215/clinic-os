@@ -20,7 +20,15 @@ const baseItems: Item[] = [
 export function AppSidebar() {
   const { user: currentUser } = useAuth()
 
-  const items = currentUser?.is_superuser
+  // The administration API is authorised by `users:manage`, which the frontend cannot read
+  // before it calls an administration endpoint (there is no `/auth/capabilities` yet), so
+  // the entry is shown to a superuser and to any account that belongs to an organisation.
+  // The screen itself renders the API's `403` for an account that holds no `users:manage`.
+  const canSeeAdmin = Boolean(
+    currentUser?.is_superuser || currentUser?.tenant_id,
+  )
+
+  const items = canSeeAdmin
     ? [...baseItems, { icon: Users, title: "Admin", path: "/admin" }]
     : baseItems
 
