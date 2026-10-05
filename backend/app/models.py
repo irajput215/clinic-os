@@ -5,6 +5,10 @@ from pydantic import EmailStr
 from sqlalchemy import DateTime
 from sqlmodel import Field, Relationship, SQLModel
 
+# Domain modules register their tables by being imported; Alembic's env.py reads
+# SQLModel.metadata from this module, so every module model belongs on this path.
+from app.modules.identity_tenancy.models import Tenant  # noqa: F401
+
 
 def get_datetime_utc() -> datetime:
     return datetime.now(UTC)
