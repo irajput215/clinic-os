@@ -52,7 +52,8 @@ Read this first. **Done** means merged to `main` and verified; **Next** is order
 | D16 | clinicOS branding replaces the template's | PR #18 |
 | D17 | Self-registration reopened as **organisation registration**: one signup creates one tenant and makes the signer its administrator — supersedes D10 | PR #19 |
 | D18 | Readiness probe `GET /api/v1/health/ready/` — boolean only, never tenant-routed; liveness deliberately left independent of the database | PR #20 |
-| D19 | A deploy can no longer report success while the app is broken: the workflow fails when the readiness probe does not answer `200` | PR #20 · this change |
+| D19 | A deploy can no longer report success while the app is broken: the workflow fails when the readiness probe does not answer `200` | PR #20 · #22 |
+| D20 | The outage closed: the deployed credential corrected, then verified live — readiness `200`, login `200`, signup creates the organisation | Deploy run `37303519527`, green end to end |
 
 ### 🔄 In progress
 
@@ -66,7 +67,6 @@ Read this first. **Done** means merged to `main` and verified; **Next** is order
 | N2 | **TGA approvals** — manual entry with a validity window | The gate in N3 needs an `ACTIVE` approval to exist |
 | N3 | **The prescription safety gate** — dispatch refused without an approval at the grain | INV-2, and the screen that demonstrates the product's hard constraint |
 | N4 | **Isolation tests** — two tenants, absence assertions | Proves N1's RLS rather than asserting it |
-| N5 | **Verify the live deployment** — signup, login and the readiness probe | Deploys are automatic on merge to `main` (D19); this step is the check that the deploy that just ran actually serves, not a manual publish |
 
 ### ⏸ Blocked — cannot start
 
@@ -101,7 +101,7 @@ bundle · password recovery that can actually send mail.
 | Tests | **83 passing, 94% coverage** | `uv run pytest` |
 | CI | 15 checks green: backend, compose, 4 Playwright shards, pre-commit, zizmor, coverage | PR #15 |
 | Gate 1–7 | **None passed, none signed.** No evidence bundle exists | [`gates.md`](reference/gates.md) |
-| Deployment | FastAPI Cloud + Neon (`ap-southeast-2`), **automatic on merge to `main`**, and now **gated on the readiness probe** | D19 · [`§6`](#6-known-gaps-and-risks) |
+| Deployment | FastAPI Cloud + Neon (`ap-southeast-2`), **automatic on merge to `main`**, **gated on the readiness probe**, credential corrected and verified green | D19 · D20 · [`§6`](#6-known-gaps-and-risks) |
 
 ---
 
@@ -218,6 +218,11 @@ A defect to raise, not a judgement call to make silently.
   D19 close the detection half: the workflow now fails when the readiness probe does not answer `200`, so
   this class of outage can never again present as a green deploy. Also noted: that variable is stored in
   FastAPI Cloud as **non-secret**, so making it secret needs delete-and-recreate.
+  **Resolved** the same day: the current Neon credential was verified to authenticate and to point at the
+  same database (same alembic head `0bc1f345552b`, superuser and tenant intact) before being written, the
+  app redeployed, and the flow re-verified end to end — readiness `200`, login `200`, signup returning a
+  `tenant_id`. Deploy run `37303519527` is green including the verification step. The guard from D19 was
+  used for the write, so a credential fix could not double as a silent database move.
 - **Drift between the GitHub secret and the deployed environment cannot be *prevented* from CI, only
   detected.** Syncing the value from the workflow was attempted and is not possible:
   `FASTAPI_CLOUD_TOKEN` is a **deploy** token, accepted by `fastapi deploy` only. `fastapi cloud env
