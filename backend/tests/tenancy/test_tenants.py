@@ -6,16 +6,23 @@ vocabulary, unique lower-case slug). Design: ".../03-design.md", "Table: tenants
 constraints directly rather than through row-level security.
 """
 
+import uuid
 from collections.abc import Iterator
 from typing import Any
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, delete, select
 
+from app.core.config import settings
 from app.core.db import engine
 from app.modules.identity_tenancy.models import Tenant
-from app.modules.identity_tenancy.service import DEMO_TENANT_SLUG, seed_demo_tenant
+from app.modules.identity_tenancy.service import (
+    DEMO_TENANT_SLUG,
+    seed_demo_tenant,
+    slugify,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -122,3 +129,84 @@ def test_tenant_updated_at_advances_on_change() -> None:
 
         assert stored.updated_at > updated_at
         assert stored.created_at == created_at
+
+
+def test_slugify_produces_a_lowercase_routing_slug() -> None:
+    assert slugify("Northside Family Clinic") == "northside-family-clinic"
+    assert slugify("  St. Mary's  Hospital!! ") == "st-mary-s-hospital"
+    assert slugify("!!!") == "organisation"
+
+
+def test_signup_registers_an_organisation(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Step ① of docs/reference/business-flow.md."""
+    monkeypatch.setattr(settings, "USERS_OPEN_REGISTRATION", True)
+    clinic_name = f"Northside Clinic {uuid.uuid4()}"
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/signup",
+        json={
+            "email": f"admin-{uuid.uuid4()}@example.com",
+            "password": "correct-horse-battery",
+            "full_name": "Clinic Administrator",
+            "clinic_name": clinic_name,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["tenant_id"] is not None
+
+    with Session(engine) as session:
+        tenant = session.get(Tenant, uuid.UUID(body["tenant_id"]))
+        assert tenant is not None
+        assert tenant.legal_name == clinic_name
+        assert tenant.slug == slugify(clinic_name)
+        assert tenant.status == "ACTIVE"
+
+
+def test_two_clinics_may_share_a_name(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A name is not an identifier, so the slug is uniqued rather than rejected."""
+    monkeypatch.setattr(settings, "USERS_OPEN_REGISTRATION", True)
+    payload = {
+        "password": "correct-horse-battery",
+        "full_name": "Clinic Administrator",
+        "clinic_name": "Riverside Medical Centre",
+    }
+
+    slugs = []
+    for _ in range(2):
+        response = client.post(
+            f"{settings.API_V1_STR}/users/signup",
+            json={**payload, "email": f"admin-{uuid.uuid4()}@example.com"},
+        )
+        assert response.status_code == 200
+        with Session(engine) as session:
+            tenant = session.get(Tenant, uuid.UUID(response.json()["tenant_id"]))
+            assert tenant is not None
+            slugs.append(tenant.slug)
+
+    assert slugs[0] == "riverside-medical-centre"
+    assert slugs[1] != slugs[0]
+
+
+def test_signup_without_a_clinic_name_creates_an_unattached_account(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The platform administrator's path: an account with no organisation."""
+    monkeypatch.setattr(settings, "USERS_OPEN_REGISTRATION", True)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/signup",
+        json={
+            "email": f"staff-{uuid.uuid4()}@example.com",
+            "password": "correct-horse-battery",
+            "full_name": "Platform Operator",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["tenant_id"] is None

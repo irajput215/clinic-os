@@ -30,6 +30,10 @@ class UserRegister(SQLModel):
     email: EmailStr = Field(max_length=255)
     password: str = Field(min_length=8, max_length=128)
     full_name: str | None = Field(default=None, max_length=255)
+    # The organisation being registered. When present, the signup creates the tenant
+    # and makes the signer its administrator; the API keeps it optional so a platform
+    # administrator can still create an unattached account.
+    clinic_name: str | None = Field(default=None, max_length=255)
 
 
 # Properties to receive via API on update, all are optional
@@ -59,12 +63,24 @@ class User(UserBase, table=True):
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),
     )
+    # The organisation this account belongs to. Nullable for now: the platform
+    # administrator predates tenancy, and `tenants` is global rather than row-secured,
+    # so the column is a link rather than an isolation boundary. Enforcing it belongs
+    # with the first tenant-scoped table (patients), not with this one.
+    # SET NULL: closing an organisation must not fail because an account pointed at it.
+    tenant_id: uuid.UUID | None = Field(
+        default=None,
+        foreign_key="tenants.id",
+        index=True,
+        ondelete="SET NULL",
+    )
 
 
 # Properties to return via API, id is always required
 class UserPublic(UserBase):
     id: uuid.UUID
     created_at: datetime | None = None
+    tenant_id: uuid.UUID | None = None
 
 
 class UsersPublic(SQLModel):
