@@ -337,6 +337,19 @@ A defect to raise, not a judgement call to make silently.
   installation token", so a hook that reformats files turns the check red instead of committing.
 - **The pre-untracking `.env` values remain in git history.** Rotation is a Phase 0 exit task and is not
   evidenced anywhere in this repo.
+- **The production database credential has been in a chat transcript, and rotating it is deferred
+  by decision.** The owner deprioritised rotating `neondb_owner` while this is an MVP holding
+  synthetic data, which is a reasonable risk call rather than an oversight. The exposure is bounded:
+  the repository is not public, and `.env.cloud` holds only the earlier credential that no longer
+  authenticates (verified — it fails with `password authentication failed`). The plaintext copy at
+  `/tmp/neon_current_url` was deleted; the value can be re-read with `fastapi cloud env get`.
+  **Revisit trigger: the first real patient data, or any sharing of this repository or its history
+  outside the current circle.** Rotation is then `ALTER ROLE neondb_owner PASSWORD '<new>'` on Neon,
+  followed immediately by the FastAPI Cloud env var (which redeploys) and the GitHub `DATABASE_URL`
+  secret (which the deploy's migration step reads). Miss the second and the deploy breaks; miss both
+  and production 500s, which is exactly the outage recorded above. Keep the old value: one
+  `ALTER ROLE` rolls back. `admin1234` is in the same position and should be changed through the app,
+  not by an agent that would only re-expose it here.
 - **No gate has an evidence bundle**, and no sign-off record exists for Gates 1–7.
 
 ---
