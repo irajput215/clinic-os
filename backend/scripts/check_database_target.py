@@ -1,11 +1,19 @@
-"""Refuse to point the deployment at a different database than the one CI migrated.
+"""Refuse to point the deployment at a different database.
 
-`fastapi deploy` ships code only, so the Deploy workflow syncs the runtime `DATABASE_URL` from the
-GitHub secret. That sync exists to close credential drift, and it must not double as a way to move
-production onto a different database as a side effect of an unrelated merge.
+`fastapi deploy` ships code only and never carries configuration, so the runtime `DATABASE_URL` is
+managed by hand. Changing it must fix a *credential*, not move production onto another database: a
+different host is a different product decision, with a different data set, and it must never arrive
+as a side effect of correcting a password.
 
-So the two hosts are compared first, and a mismatch stops the deploy. A deliberate move is a
-different change with a different blast radius, not something a workflow does quietly.
+`FASTAPI_CLOUD_TOKEN` is a deploy token, so the Deploy workflow cannot read or write the app's
+environment and cannot run this check for you — `fastapi cloud env get`/`set` need an interactive
+login. Run this before a manual `env set`:
+
+    uv run fastapi cloud env get DATABASE_URL --json --app-id "$APP_ID" > /tmp/deployed.json
+    DATABASE_URL="<the new value>" uv run python scripts/check_database_target.py /tmp/deployed.json
+    # exit 0 -> same database, safe to set.  exit 1 -> stop and reconcile deliberately.
+
+Only hostnames are printed, never the credential.
 """
 
 from __future__ import annotations

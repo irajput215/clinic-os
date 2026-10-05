@@ -51,8 +51,8 @@ Read this first. **Done** means merged to `main` and verified; **Next** is order
 | D15 | This board, and the index corrections beside it | PR #16 |
 | D16 | clinicOS branding replaces the template's | PR #18 |
 | D17 | Self-registration reopened as **organisation registration**: one signup creates one tenant and makes the signer its administrator — supersedes D10 | PR #19 |
-| D18 | Readiness probe `GET /api/v1/health/ready/` — boolean only, never tenant-routed; liveness deliberately left independent of the database | this change |
-| D19 | A deploy can no longer report success while the app is broken: the runtime `DATABASE_URL` is synced from the GitHub secret, and the workflow fails when the app does not report ready | this change |
+| D18 | Readiness probe `GET /api/v1/health/ready/` — boolean only, never tenant-routed; liveness deliberately left independent of the database | PR #20 |
+| D19 | A deploy can no longer report success while the app is broken: the workflow fails when the readiness probe does not answer `200` | PR #20 · this change |
 
 ### 🔄 In progress
 
@@ -133,7 +133,8 @@ oracle). `users` and `login` remain the template's, pending features 02 and 03.
 
 ## 3. What changed during 2026-10-04 → 05
 
-Nine pull requests, all merged. Each is a measured step, not a feature.
+Nine pull requests, all merged, plus three follow-ups (#20–#21 and this change) to close the outage they
+exposed. Each is a measured step, not a feature.
 
 | PR | Change |
 |---|---|
@@ -146,7 +147,7 @@ Nine pull requests, all merged. Each is a measured step, not a feature.
 | #17 | Branding work merged into the wrong base branch — recovered, not lost, as #18 |
 | #18 | clinicOS branding ships for real; the auth forms validate on submit, not on blur |
 | #19 | Signup restored as organisation registration; one signup creates one tenant and its administrator |
-| this change | Readiness probe; the runtime `DATABASE_URL` synced from the GitHub secret; the deploy now fails when the app cannot serve |
+| #20 · #21 · this change | Readiness probe; the deploy now fails when the app cannot serve. A runtime-config sync was attempted and removed — the deploy token cannot manage app environment variables |
 
 Also in this window: six defects corrected in the document set itself ([`traceability.md`](reference/traceability.md),
 [`control-matrix.md`](reference/control-matrix.md), [`definition-of-done.md`](reference/definition-of-done.md),
@@ -214,9 +215,16 @@ A defect to raise, not a judgement call to make silently.
   code: `fastapi deploy` ships code only and never carries configuration, so FastAPI Cloud's
   `DATABASE_URL` held a credential Neon rejects (`password authentication failed for user 'neondb_owner'`)
   while the GitHub secret's credential migrated that same database successfully in the same run. D18 and
-  D19 close both halves: the runtime value is now synced from the single GitHub secret, and the workflow
-  fails when the readiness probe does not answer `200`. Also noted: that variable is stored in FastAPI
-  Cloud as **non-secret**, so making it secret needs delete-and-recreate.
+  D19 close the detection half: the workflow now fails when the readiness probe does not answer `200`, so
+  this class of outage can never again present as a green deploy. Also noted: that variable is stored in
+  FastAPI Cloud as **non-secret**, so making it secret needs delete-and-recreate.
+- **Drift between the GitHub secret and the deployed environment cannot be *prevented* from CI, only
+  detected.** Syncing the value from the workflow was attempted and is not possible:
+  `FASTAPI_CLOUD_TOKEN` is a **deploy** token, accepted by `fastapi deploy` only. `fastapi cloud env
+  get`/`set` require an interactive login and fail in CI with `{"code": "not_logged_in"}`. Until FastAPI
+  Cloud offers a scoped configuration credential, the runtime `DATABASE_URL` is maintained by hand and the
+  readiness gate is the backstop. What that cost: two Deploy runs (37302188799, 37302397756) failed and
+  skipped the code deploy before this was understood.
 - **`POST /api/v1/reset-password/`** is unauthenticated and, unlike its siblings, not rate limited.
 - **Password recovery cannot deliver mail** (`SMTP_HOST=localhost`), so it returns success and nothing
   arrives — a silent dead end.

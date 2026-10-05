@@ -48,36 +48,17 @@ jobs:
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
           FIRST_SUPERUSER: ${{ vars.FIRST_SUPERUSER }}
           FIRST_SUPERUSER_PASSWORD: ${{ secrets.FIRST_SUPERUSER_PASSWORD }}
-      - name: Sync runtime configuration to FastAPI Cloud
-        # The deployed app reads its own environment, never this workflow's, and `fastapi deploy`
-        # ships code only — it does not carry configuration with it. So the two drift silently:
-        # a release can migrate the database from here while the running app still holds a stale
-        # credential and returns 500 on every query that touches it.
-        #
-        # This is what makes GitHub the single source of truth: the credential that just ran the
-        # migrations above is the same one the running app is given. `--value-stdin` keeps the
-        # secret out of the process arguments.
-        #
-        # The hosts are compared first. Syncing a credential is the point of this step; moving
-        # production onto a *different* database is not, and must never happen as a side effect.
-        # The guard prints hostnames only, never the credential.
-        run: |
-          # `--app-id` is passed explicitly because `.fastapicloud/cloud.json` is not committed, so
-          # there is no local link for the CLI to resolve the app from in CI.
-          if ! uv run fastapi cloud env get DATABASE_URL --json \
-            --app-id "$FASTAPI_CLOUD_APP_ID" > "$RUNNER_TEMP/deployed_database.json"; then
-            echo "::error::Could not read DATABASE_URL from FastAPI Cloud."
-            cat "$RUNNER_TEMP/deployed_database.json"
-            exit 1
-          fi
-          uv run python scripts/check_database_target.py "$RUNNER_TEMP/deployed_database.json"
-          printf '%s' "$DATABASE_URL" | uv run fastapi cloud env set DATABASE_URL \
-            --value-stdin --secret --no-redeploy --app-id "$FASTAPI_CLOUD_APP_ID"
-        working-directory: backend
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          FASTAPI_CLOUD_TOKEN: ${{ secrets.FASTAPI_CLOUD_TOKEN }}
-          FASTAPI_CLOUD_APP_ID: ${{ secrets.FASTAPI_CLOUD_APP_ID }}
+      # There is deliberately no "sync the runtime configuration" step here, and the reason is worth
+      # recording. `fastapi deploy` ships code only and never carries configuration, so the runtime
+      # `DATABASE_URL` can drift from the GitHub secret; on 2026-10-05 it did, and production
+      # returned 500 on every database-backed route while this job stayed green.
+      #
+      # Syncing the value from here was tried and is not possible: `FASTAPI_CLOUD_TOKEN` is a
+      # *deploy* token and only `deploy` accepts it. `fastapi cloud env get`/`set` need an
+      # interactive login session and fail with `not_logged_in` in CI. So drift cannot be prevented
+      # from this workflow — only detected, by the readiness gate below. Fix the value once in the
+      # FastAPI Cloud environment (or with an authenticated `fastapi cloud env set`) and this job
+      # will tell you immediately if it ever goes stale again.
       - name: Deploy to FastAPI Cloud
         run: uv run fastapi deploy
         env:
