@@ -69,6 +69,226 @@ export type NewPassword = {
 };
 
 /**
+ * PatientCreate
+ *
+ * The body of `POST /api/v1/patients`.
+ *
+ * There is no `tenant_id` field and there never will be: `extra="forbid"` turns one into
+ * a `422` (INV-1). Identifier columns are absent for the same reason — their key custody
+ * is an open item (`04-database-erd.md` open item 5), so no value is accepted yet.
+ */
+export type PatientCreate = {
+    /**
+     * Given Name
+     */
+    given_name: string;
+    /**
+     * Family Name
+     */
+    family_name: string;
+    /**
+     * Preferred Name
+     */
+    preferred_name?: string | null;
+    /**
+     * Date Of Birth
+     */
+    date_of_birth: string;
+    /**
+     * Sex At Birth
+     */
+    sex_at_birth?: string | null;
+    /**
+     * Gender Identity
+     */
+    gender_identity?: string | null;
+    /**
+     * Address Line
+     */
+    address_line?: string | null;
+    /**
+     * Suburb
+     */
+    suburb?: string | null;
+    /**
+     * State
+     */
+    state?: string | null;
+    /**
+     * Postcode
+     */
+    postcode?: string | null;
+    /**
+     * Phone
+     */
+    phone?: string | null;
+    /**
+     * Email
+     */
+    email?: string | null;
+    /**
+     * Deceased At
+     */
+    deceased_at?: string | null;
+};
+
+/**
+ * PatientRead
+ *
+ * A patient as the API returns it.
+ *
+ * `from_attributes` lets the service hand over a declared model rather than a raw ORM
+ * entity. No identifier column and no `tenant_id` is declared: the caller already knows
+ * its own tenant, and nothing that is not needed is exposed.
+ */
+export type PatientRead = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Given Name
+     */
+    given_name: string;
+    /**
+     * Family Name
+     */
+    family_name: string;
+    /**
+     * Preferred Name
+     */
+    preferred_name?: string | null;
+    /**
+     * Date Of Birth
+     */
+    date_of_birth: string;
+    /**
+     * Sex At Birth
+     */
+    sex_at_birth?: string | null;
+    /**
+     * Gender Identity
+     */
+    gender_identity?: string | null;
+    /**
+     * Address Line
+     */
+    address_line?: string | null;
+    /**
+     * Suburb
+     */
+    suburb?: string | null;
+    /**
+     * State
+     */
+    state?: string | null;
+    /**
+     * Postcode
+     */
+    postcode?: string | null;
+    /**
+     * Phone
+     */
+    phone?: string | null;
+    /**
+     * Email
+     */
+    email?: string | null;
+    /**
+     * Deceased At
+     */
+    deceased_at?: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
+ * PatientUpdate
+ *
+ * The body of `PATCH /api/v1/patients/{patient_id}`.
+ *
+ * Every field is optional and applied with `exclude_unset`, so an omitted field is left
+ * alone and an explicit `null` clears a nullable one. A `null` for a NOT NULL column is
+ * rejected here rather than at the database.
+ */
+export type PatientUpdate = {
+    /**
+     * Given Name
+     */
+    given_name?: string | null;
+    /**
+     * Family Name
+     */
+    family_name?: string | null;
+    /**
+     * Preferred Name
+     */
+    preferred_name?: string | null;
+    /**
+     * Date Of Birth
+     */
+    date_of_birth?: string | null;
+    /**
+     * Sex At Birth
+     */
+    sex_at_birth?: string | null;
+    /**
+     * Gender Identity
+     */
+    gender_identity?: string | null;
+    /**
+     * Address Line
+     */
+    address_line?: string | null;
+    /**
+     * Suburb
+     */
+    suburb?: string | null;
+    /**
+     * State
+     */
+    state?: string | null;
+    /**
+     * Postcode
+     */
+    postcode?: string | null;
+    /**
+     * Phone
+     */
+    phone?: string | null;
+    /**
+     * Email
+     */
+    email?: string | null;
+    /**
+     * Deceased At
+     */
+    deceased_at?: string | null;
+};
+
+/**
+ * PatientsPublic
+ *
+ * A bounded page of patients plus the caller's total, following `UsersPublic`.
+ */
+export type PatientsPublic = {
+    /**
+     * Data
+     */
+    data: Array<PatientRead>;
+    /**
+     * Count
+     */
+    count: number;
+};
+
+/**
  * Token
  */
 export type Token = {
@@ -684,3 +904,118 @@ export type utilsHealthCheckResponses = {
 };
 
 export type utilsHealthCheckResponse = utilsHealthCheckResponses[keyof utilsHealthCheckResponses];
+
+export type patientsListPatientsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/patients';
+};
+
+export type patientsListPatientsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type patientsListPatientsError = patientsListPatientsErrors[keyof patientsListPatientsErrors];
+
+export type patientsListPatientsResponses = {
+    /**
+     * Successful Response
+     */
+    200: PatientsPublic;
+};
+
+export type patientsListPatientsResponse = patientsListPatientsResponses[keyof patientsListPatientsResponses];
+
+export type patientsCreatePatientData = {
+    body: PatientCreate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/patients';
+};
+
+export type patientsCreatePatientErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type patientsCreatePatientError = patientsCreatePatientErrors[keyof patientsCreatePatientErrors];
+
+export type patientsCreatePatientResponses = {
+    /**
+     * Successful Response
+     */
+    201: PatientRead;
+};
+
+export type patientsCreatePatientResponse = patientsCreatePatientResponses[keyof patientsCreatePatientResponses];
+
+export type patientsReadPatientData = {
+    body?: never;
+    path: {
+        /**
+         * Patient Id
+         */
+        patient_id: string;
+    };
+    query?: never;
+    url: '/api/v1/patients/{patient_id}';
+};
+
+export type patientsReadPatientErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type patientsReadPatientError = patientsReadPatientErrors[keyof patientsReadPatientErrors];
+
+export type patientsReadPatientResponses = {
+    /**
+     * Successful Response
+     */
+    200: PatientRead;
+};
+
+export type patientsReadPatientResponse = patientsReadPatientResponses[keyof patientsReadPatientResponses];
+
+export type patientsUpdatePatientData = {
+    body: PatientUpdate;
+    path: {
+        /**
+         * Patient Id
+         */
+        patient_id: string;
+    };
+    query?: never;
+    url: '/api/v1/patients/{patient_id}';
+};
+
+export type patientsUpdatePatientErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type patientsUpdatePatientError = patientsUpdatePatientErrors[keyof patientsUpdatePatientErrors];
+
+export type patientsUpdatePatientResponses = {
+    /**
+     * Successful Response
+     */
+    200: PatientRead;
+};
+
+export type patientsUpdatePatientResponse = patientsUpdatePatientResponses[keyof patientsUpdatePatientResponses];
