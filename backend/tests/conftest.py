@@ -6,6 +6,7 @@ from sqlmodel import Session, delete
 
 from app.core.config import settings
 from app.core.db import engine, init_db
+from app.core.rate_limit import limiter
 from app.main import app
 from app.models import User
 from tests.utils.user import authentication_token_from_email
@@ -33,6 +34,12 @@ def _refuse_to_run_against_a_remote_database() -> None:
 
 
 _refuse_to_run_against_a_remote_database()
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limits() -> None:
+    """The limiter is process-wide, so no test inherits another's window."""
+    limiter.clear()
 
 
 @pytest.fixture(scope="session", autouse=True)
