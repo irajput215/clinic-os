@@ -13,5 +13,6 @@ from sqlmodel import SQLModel
 from app.core.metadata import NAMING_CONVENTION
 from app.models import User
 from app.modules.identity_tenancy.models import Tenant
+from app.modules.patients.models import Patient
 
-__all__ = ["NAMING_CONVENTION", "SQLModel", "Tenant", "User"]
+__all__ = ["NAMING_CONVENTION", "SQLModel", "Patient", "Tenant", "User"]

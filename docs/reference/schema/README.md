@@ -4,6 +4,7 @@
 
 | Name | Columns | Comment | Type |
 | ---- | ------- | ------- | ---- |
+| [public.patients](public.patients.md) | 23 |  | BASE TABLE |
 | [public.tenants](public.tenants.md) | 8 |  | BASE TABLE |
 | [public.user](public.user.md) | 8 |  | BASE TABLE |
 
@@ -27,8 +28,35 @@
 ```mermaid
 erDiagram
 
+"public.patients" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.patients" }o--o| "public.patients" : "FOREIGN KEY (merged_into_patient_id) REFERENCES patients(id) ON DELETE RESTRICT"
 "public.user" }o--o| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL"
 
+"public.patients" {
+  varchar address_line
+  timestamp_with_time_zone created_at
+  date date_of_birth
+  timestamp_with_time_zone deceased_at
+  timestamp_with_time_zone deleted_at
+  varchar email
+  varchar family_name
+  varchar gender_identity
+  varchar given_name
+  uuid id
+  bytea ihi
+  bytea ihi_blind_index
+  bytea medicare_blind_index
+  bytea medicare_number
+  uuid merged_into_patient_id FK
+  varchar phone
+  varchar postcode
+  varchar preferred_name
+  varchar sex_at_birth
+  varchar state
+  varchar suburb
+  uuid tenant_id FK
+  timestamp_with_time_zone updated_at
+}
 "public.tenants" {
   timestamp_with_time_zone created_at
   varchar_32_ data_region
