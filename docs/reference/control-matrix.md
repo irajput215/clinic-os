@@ -40,6 +40,12 @@ re-expressed against the stack in [D-001](decisions/D-001-python-fastapi-stack.m
 | Phase | The delivery phase in which the control's implementation and evidence land. Phase 0 foundation · Phase 1 foundations · Phase 2 TGA approval engine · Phase 3 e-prescribing · Phase 4 pilot go-live. `0–1` means some work lands in Phase 0 and the evidence at the Phase 1 boundary |
 | Last reviewed | The review date of this row in this register |
 
+**How a row is identified.** This register deliberately carries **no row-ID column**. A row is
+identified by its section and its requirement text, and the source control IDs it came from survive in
+the `[merged: …]` citation in the **Control** cell. Only the six invariants in §11 have first-class IDs
+of their own (`INV-1`…`INV-6`). Where another document refers to "the control ID" of a row here, it
+means the source ID cited in that bracket — there is no repo-side identifier to point at.
+
 ### 1.1 The rule that makes a row a control
 
 **A row without an evidence artefact is not a control.** It is a claim, and it is a coverage gap.
@@ -70,6 +76,12 @@ requirements that name different instruments stay as two rows.
 Statuses in the source documents were set on 2026-02-14 against a build that does not exist here.
 They are **not** carried forward. Every row below is `Planned` unless a decision or an unresolved
 legal position holds it at `OPEN` or `REQUIRES LEGAL/REGULATORY VALIDATION`.
+
+**Not every identifier in those families is carried as its own row.** Nine identifiers named by the
+family ranges in the first row above — `APP-08`, `SBD-03`, `SBD-06`, `SBD-08`, `SBD-11`, `E8-03`,
+`E8-04`, `E8-05` and `IR-03` — appear nowhere in this register. Whether each is subsumed by a merged
+row or is a genuine coverage gap is not recorded anywhere today; O4 is the open item that settles it,
+and a source row may not be dropped silently (§13).
 
 ### 1.4 Modules the register names
 
@@ -294,7 +306,7 @@ Never close a validation row by writing an opinion. It closes when a named role 
 | Intended purpose per module and the device boundary assessed | TGA therapeutic goods framework | Intended-purpose statement per module; no clinical decision claims `[merged: 17 TGA-04]` | Module documentation | Intended-purpose statements | Compliance/Auditor | REQUIRES LEGAL/REGULATORY VALIDATION | 4 | 2026-10-04 |
 | Six-monthly Authorised Prescriber reporting where the pathway requires it | TGA Authorised Prescriber pathway | Reporting extract job with an approval record `[merged: 17 TGA-03; 08 Control summary; 22 §5]` | Reporting job; `reports` module | Extract and submission record | Compliance/Auditor | REQUIRES LEGAL/REGULATORY VALIDATION | 2 | 2026-10-04 |
 | Essential Eight baseline mapped per environment | ACSC Essential Eight | Baseline controls mapped to the gates, with a stated maturity target `[merged: 17 E8-01 to E8-08; 19 §14; 20 §15; 21 §13]` | CI scanning, image policy, access control, backups | Gate records; scan reports | Security Lead | OPEN — the maturity target per environment is unconfirmed (source `17` O3) | 0–4 | 2026-10-04 |
-| Compliance evidence: every control names an artefact and an owner | Internal control 12 | This register plus an evidence store keyed by control ID `[merged: 02 §1 control 12; 17 SBD-12; 24 §7]` | [`control-matrix.md`](control-matrix.md); evidence store | Versioned evidence store; signed checklists | Compliance/Auditor | Planned | 0–4 | 2026-10-04 |
+| Compliance evidence: every control names an artefact and an owner | Internal control 12 | This register plus a versioned evidence store keyed by **register section and requirement** — the register has no repo-side control ID column, so the source IDs in the `[merged: …]` citation are the only identifier a row has (§1) `[merged: 02 §1 control 12; 17 SBD-12; 24 §7]` | [`control-matrix.md`](control-matrix.md); evidence store | Versioned evidence store; signed checklists | Compliance/Auditor | Planned | 0–4 | 2026-10-04 |
 | No compliance claim beyond what the evidence shows | Engineering instruction (`00-README.md` rule 6) | Every regulatory statement is a pointer to the instrument, not a conclusion; unresolved items are marked and owned | This register; [`open-questions.md`](open-questions.md) | Register rows with status and owner | Compliance Lead | Planned | 0–4 | 2026-10-04 |
 | A control owner is a named person, not a role with no assignee | Internal decision | Control-owner map maintained with the matrix | Owner map | Owner map with a person per row | Compliance/Auditor | OPEN | 0–4 | 2026-10-04 |
 | The control register is reviewed on a schedule and a stale row is an open item | Internal evidence discipline | Quarterly review with a review date per row; a stale-row report | Review process | Updated rows; stale-row report | Compliance/Auditor | Planned | 0–4 | 2026-10-04 |

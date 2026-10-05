@@ -15,9 +15,9 @@ source: "clinic-os-secure-by-design/23-sprint-plan.md §2, §6, §7; clinic-os-s
 
 # Phase 0 — Foundation: tasks
 
-Discrete tasks for the five workstreams in [`plan.md`](../features/00-foundations/01-requirements.md). Each task is sized to **one focused
+Discrete tasks for the five workstreams in [`features/00-foundations/01-requirements.md`](../features/00-foundations/01-requirements.md). Each task is sized to **one focused
 session** and touches **at most ~5 files**. Controls are the twelve controls in
-[`../README.md`](../reference/build-contract.md) §6. No task in this list implements a ClinicOS domain feature — those
+[`build-contract.md`](../reference/build-contract.md) §6. No task in this list implements a ClinicOS domain feature — those
 belong to Phase 1 onward.
 
 | Workstream | Tasks | Points |
@@ -189,7 +189,7 @@ belong to Phase 1 onward.
 
 - [ ] **T0-20 — Assemble the Gate 1 evidence bundle and its index (days 9–10)**
   - Acceptance: every one of the eight Gate 1 checks has a linked artefact or an explicit blocked marker; the D-003 and D-004 blockers are stated with owners; the bundle index links each artefact to the control it proves; the sign-off record is prepared with the decision left **blank** because Gate 1 is signed at the Phase 1 boundary, not in Phase 0.
-  - Verify: walk the eight Gate 1 checks in [`phase.md`](../features/00-foundations/01-requirements.md) §6 against the bundle; confirm no artefact is claimed without a control link; confirm the bundle states that Gate 1 is **blocked** by D-003 and D-004.
+  - Verify: walk the eight Gate 1 checks in [`gates.md` § Gate 1](../reference/gates.md#gate-1-architecture) against the bundle; confirm no artefact is claimed without a control link; confirm the bundle states that Gate 1 is **blocked** by D-003 and D-004.
   - Files: `docs/features/00-foundations/01-requirements.md` (index reference), `docs/reference/evidence-storage.md`, bundle index, `docs/reference/gates.md` sign-off copy
   - Controls: 12 Compliance evidence (all controls are evidenced through the index)
   - Evidence: Gate 1 evidence bundle index + prepared sign-off record with the D-003/D-004 blockers named
@@ -198,7 +198,7 @@ belong to Phase 1 onward.
 
 ## Task rules
 
-- A task is not started until [`spec.md`](../features/00-foundations/01-requirements.md) is approved.
+- A task is not started until [`features/00-foundations/01-requirements.md`](../features/00-foundations/01-requirements.md) is approved.
 - Every task produces its **named evidence** in the same change that claims the control; a task with no
   artefact is not done ([`../../reference/definition-of-done.md`](../reference/definition-of-done.md) §8).
 - A task that introduces an open **High** or **Critical** finding is not done, and a **Critical** finding
@@ -216,7 +216,7 @@ belong to Phase 1 onward.
 | OQ-2 | [D-004](../reference/decisions/D-004-deployment-target.md) deployment decision | Gate 1 separation check, Gate 6, worker process model (T0-6) | CTO + Head of Platform |
 | OQ-3 | Region pin and residency evidence — **REQUIRES LEGAL/REGULATORY VALIDATION** | INV-6, Gate 6 | CTO + Compliance Lead |
 | OQ-6 | Import-boundary lint phase assignment (Phase 0 vs Phase 1 per D-002) | T0-3, Gate 1 evidence | CTO + Delivery Lead |
-| OQ-10 | `control-matrix.md`, `open-questions.md`, `traceability.md` referenced by [`../README.md`](../reference/build-contract.md) §9 are absent | T0-20 index, control 12 | Compliance Lead + CTO |
+| OQ-10 | ~~`control-matrix.md`, `open-questions.md`, `traceability.md` referenced by the [document map](../reference/build-contract.md) are absent~~ **RESOLVED** — all three now exist under [`docs/reference/`](../reference/): [`control-matrix.md`](../reference/control-matrix.md), [`open-questions.md`](../reference/open-questions.md), [`traceability.md`](../reference/traceability.md). T0-20's index must **cite** them, not record them as missing | T0-20 index, control 12 | Compliance Lead + CTO |
 | OQ-12 | Gate 1 architecture artefacts unverified for per-threat control/owner coverage and field-level classification | T0-20 bundle | Security Lead + Compliance Lead |
 
 ## Sources
@@ -229,6 +229,6 @@ belong to Phase 1 onward.
   separation, §10 pipeline
 - `clinic-os-secure-by-design/29-operations-and-observability.md` §8 secret classes and rotation
 - `clinic-os-secure-by-design/25-adr/ADR-004-docker.md`
-- Repo: [`phase.md`](../features/00-foundations/01-requirements.md), [`spec.md`](../features/00-foundations/01-requirements.md), [`plan.md`](../features/00-foundations/01-requirements.md),
-  [`../README.md`](../reference/build-contract.md), [`../../reference/gates.md`](../reference/gates.md),
-  [`../../reference/definition-of-done.md`](../reference/definition-of-done.md)
+- Repo: [`features/00-foundations/01-requirements.md`](../features/00-foundations/01-requirements.md),
+  [`build-contract.md`](../reference/build-contract.md), [`gates.md`](../reference/gates.md),
+  [`definition-of-done.md`](../reference/definition-of-done.md)

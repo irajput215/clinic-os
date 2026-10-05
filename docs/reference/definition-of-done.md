@@ -23,6 +23,12 @@ a reviewer uses, not a statement of intent.
 
 ## 1. The six-part test
 
+Parts 1–6 **are** the six parts, taken from `clinic-os-secure-by-design/24-definition-of-done.md`. A
+change that alters clinical behaviour additionally carries clinical acceptance and Clinical Safety
+Officer sign-off. That requirement is listed below as **Part 7** to keep one numbering through the
+document, but it is **not a seventh part**: it sits outside the six and, unlike every other item in
+this checklist, it cannot be waived.
+
 ### Part 1 — Functional
 
 - [ ] The feature works as stated in the acceptance criteria, **including every negative case**.
@@ -91,7 +97,7 @@ a reviewer uses, not a statement of intent.
 - [ ] The change is deployed to **Staging and verified there** before any production release.
 - [ ] The rollback or forward-fix path is stated.
 
-### Part 7 — Clinical (where applicable)
+### Part 7 — Clinical (additional to the six parts; where applicable)
 
 - [ ] Clinical acceptance by a practising prescriber for any clinical behaviour change.
 - [ ] The **Clinical Safety Officer sign-off cannot be waived.**
@@ -108,7 +114,7 @@ a reviewer uses, not a statement of intent.
 | Operations | Log sample, metric and dashboard reference, alert definition, runbook link | Head of Platform |
 | Compliance | Requirement-to-control mapping, evidence artefact, assumptions list | Compliance Lead |
 | Deployment | CI pipeline run record, image scan report, dependency scan report, migration review | Head of Platform |
-| Clinical | Clinical acceptance for a clinical behaviour change | Clinical Safety Officer |
+| Clinical (additional to the six parts) | Clinical acceptance for a clinical behaviour change | Clinical Safety Officer |
 
 ---
 
@@ -271,7 +277,7 @@ because the frontend must never be the enforcement point.
 
 | Scope | What Done means |
 |---|---|
-| Story | The six parts pass, and the pull request records the checklist |
+| Story | The six parts pass — plus clinical acceptance where clinical behaviour changed — and the pull request records the checklist |
 | Phase | Every committed story is Done or explicitly de-scoped, and the gate evidence is produced |
 | Milestone | The milestone exit gate is signed |
 | Release to production | Gates 6 and 7 signed, open Critical and High findings zero or accepted, restore drill current |

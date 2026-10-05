@@ -134,9 +134,9 @@ What overlaps, and where it is recorded:
 |---|:---:|---|
 | Source-internal: nine ADR follow-up rows restating a numbered-document open item | 9 | §3.6 rows 1–9 |
 | Source ↔ repo: source `24-definition-of-done.md` O1–O5 and repo [`definition-of-done.md`](definition-of-done.md) O1–O5 | 5 | §3.6 row 10 |
-| Source ↔ repo: feature [`01-tenancy-and-auth/spec.md`](../features/01-tenancy-and-clinics/01-requirements.md) item 2 (source `06` §6), item 9 (source `06` O2), item 10 (source `05` O6) | 3 | §3.6 row 11 |
-| Source ↔ repo: feature [`02-patient-register/spec.md`](../features/05-patients/01-requirements.md) O5 (source `04` O5), O6 (source `06` O5), O9 (source `04` O8), O10 (D-003 item 1) | 4 | §3.6 row 11 |
-| Source ↔ repo: feature [`05-prescription-safety-gate/spec.md`](../features/10-prescription-safety-gate/01-requirements.md) O1 (L7), O2 (L8) | 2 | §3.6 row 11 |
+| Source ↔ repo: feature [`01-tenancy-and-clinics/01-requirements.md`](../features/01-tenancy-and-clinics/01-requirements.md) item 2 (source `06` §6), item 9 (source `06` O2), item 10 (source `05` O6) | 3 | §3.6 row 11 |
+| Source ↔ repo: feature [`05-patients/01-requirements.md`](../features/05-patients/01-requirements.md) O5 (source `04` O5), O6 (source `06` O5), O9 (source `04` O8), O10 (D-003 item 1) | 4 | §3.6 row 11 |
+| Source ↔ repo: feature [`10-prescription-safety-gate/01-requirements.md`](../features/10-prescription-safety-gate/01-requirements.md) O1 (L7), O2 (L8) | 2 | §3.6 row 11 |
 | Repo-internal: `sdlc/README.md` O1/O2 restate D-003/D-004 item 1; `gates.md` O1–O3 restate source `26`/`13` items already carried | 5 | §3.6 row 12 |
 | **Distinct after the above** | **329 − 28 = 301** | |
 
@@ -151,7 +151,7 @@ Counts by document, for reconciliation against the source:
 | `01`–`29` | `01` 8 · `02` 8 · `03` 9 · `04` 8 · `05` 8 · `06` 7 · `07` 6 · `08` 7 · `09` 7 · `10` 8 · `11` 8 · `12` 8 · `13` 9 · `14` 9 · `15` 12 · `16` 10 · `17` 8 · `18` 10 · `19` 6 · `20` 7 · `21` 6 · `22` 6 · `23` 6 · `24` 5 · `26` 5 · `27` 6 · `28` 7 · `29` 10 | 195 |
 | `25-adr/` | `README` 3 · `ADR-001` 4 · `ADR-002` 4 · `ADR-003` 4 · `ADR-004` 4 · `ADR-005` 4 · `ADR-006` 5 · `ADR-007` 5 · `ADR-008` 5 · `ADR-009` 5 · `ADR-010` 5 · `ADR-011` 5 | 51 |
 | This repo, reference | `sdlc/README.md` 6 · `gates.md` 6 · `definition-of-done.md` 5 · `D-001` 2 · `D-002` 2 · `D-003` 6 · `D-004` 6 · `control-matrix.md` 6 | 39 |
-| This repo, feature specs | `01-tenancy-and-auth/spec.md` 10 · `02-patient-register/spec.md` 10 · `05-prescription-safety-gate/spec.md` 6 | 26 |
+| This repo, feature specs *(phase-era names)* | `01-tenancy-and-clinics/01-requirements.md` 10 · `05-patients/01-requirements.md` 10 · `10-prescription-safety-gate/01-requirements.md` 6 | 26 |
 | This document | its own two meta-items | 2 |
 
 The 26 feature-spec items are captured in §3.5 at the verification timestamp named there.
@@ -735,10 +735,13 @@ The 26 feature-spec items are captured in §3.5 at the verification timestamp na
 
 ### 3.5 Feature specifications under construction
 
-The feature specification layer at [`docs/features/`](../features/) is being written concurrently with
+The feature specification layer at [`docs/features/`](../features/) was being written concurrently with
 this register. The items below were captured at **2026-10-04**, which is the verification
-timestamp for this subsection. `03-clinical-records/spec.md` and `04-tga-approval-engine/spec.md` carry
-no open-items section at that timestamp; `05-prescription-safety-gate/spec.md` was still being added.
+timestamp for this subsection. At that timestamp the phase-era specs `03-clinical-records/spec.md` and
+`04-tga-approval-engine/spec.md` carried no open-items section, and `05-prescription-safety-gate/spec.md`
+was still being added. Those phase-era files have since been superseded by the numbered feature folders
+— all 17 of which now carry an `## Open items` section — so the names above are historical; see
+[`traceability.md`](traceability.md) §3.2.
 Each feature spec owns its own open items — those tables are the system of record, and this subsection
 is a checkpoint, not a second register.
 
@@ -817,15 +820,15 @@ Feature-spec rows that restate a source or decision-record item. These are count
 
 | # | Rows that are the same item | Why |
 |---|---|---|
-| 11a | [`01-tenancy-and-auth/spec.md`](../features/01-tenancy-and-clinics/01-requirements.md) item 2 and source `06-authentication-rbac.md` §6 | The same lockout-threshold reconciliation |
-| 11b | [`01-tenancy-and-auth/spec.md`](../features/01-tenancy-and-clinics/01-requirements.md) item 9 and source `06` O2 | The same authenticator-class question |
-| 11c | [`01-tenancy-and-auth/spec.md`](../features/01-tenancy-and-clinics/01-requirements.md) item 10 and source `05-tenant-isolation.md` O6 | The same cross-tenant-denial notification question |
-| 11d | [`02-patient-register/spec.md`](../features/05-patients/01-requirements.md) O5 and source `04-database-erd.md` O5 | The same blind-index key custody question |
-| 11e | [`02-patient-register/spec.md`](../features/05-patients/01-requirements.md) O6 and source `06` §11 O5 | The same `care_relationships` ownership question |
-| 11f | [`02-patient-register/spec.md`](../features/05-patients/01-requirements.md) O9 and source `04` O8 | The same merge-reversibility question |
-| 11g | [`02-patient-register/spec.md`](../features/05-patients/01-requirements.md) O10 and repo [`D-003`](decisions/D-003-identity-model.md) item 1 | The same identity decision |
-| 11h | [`05-prescription-safety-gate/spec.md`](../features/10-prescription-safety-gate/01-requirements.md) O1 and legal item L7 | The same e-prescribing-conformance question |
-| 11i | [`05-prescription-safety-gate/spec.md`](../features/10-prescription-safety-gate/01-requirements.md) O2 and legal item L8 | The same Schedule 8 and monitoring question |
+| 11a | [`01-tenancy-and-clinics/01-requirements.md`](../features/01-tenancy-and-clinics/01-requirements.md) item 2 and source `06-authentication-rbac.md` §6 | The same lockout-threshold reconciliation |
+| 11b | [`01-tenancy-and-clinics/01-requirements.md`](../features/01-tenancy-and-clinics/01-requirements.md) item 9 and source `06` O2 | The same authenticator-class question |
+| 11c | [`01-tenancy-and-clinics/01-requirements.md`](../features/01-tenancy-and-clinics/01-requirements.md) item 10 and source `05-tenant-isolation.md` O6 | The same cross-tenant-denial notification question |
+| 11d | [`05-patients/01-requirements.md`](../features/05-patients/01-requirements.md) O5 and source `04-database-erd.md` O5 | The same blind-index key custody question |
+| 11e | [`05-patients/01-requirements.md`](../features/05-patients/01-requirements.md) O6 and source `06` §11 O5 | The same `care_relationships` ownership question |
+| 11f | [`05-patients/01-requirements.md`](../features/05-patients/01-requirements.md) O9 and source `04` O8 | The same merge-reversibility question |
+| 11g | [`05-patients/01-requirements.md`](../features/05-patients/01-requirements.md) O10 and repo [`D-003`](decisions/D-003-identity-model.md) item 1 | The same identity decision |
+| 11h | [`10-prescription-safety-gate/01-requirements.md`](../features/10-prescription-safety-gate/01-requirements.md) O1 and legal item L7 | The same e-prescribing-conformance question |
+| 11i | [`10-prescription-safety-gate/01-requirements.md`](../features/10-prescription-safety-gate/01-requirements.md) O2 and legal item L8 | The same Schedule 8 and monitoring question |
 
 Repo-internal near-duplicates that remain in their own tables:
 

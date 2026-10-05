@@ -167,7 +167,7 @@ safety gate are enforced on **every** endpoint.
 prescribing APIs.
 
 **Entry criteria.** Every endpoint has a complete declaration (see the endpoint declaration standard in
-[`definition-of-done.md`](definition-of-done.md#endpoint-declaration-standard)).
+[`definition-of-done.md`](definition-of-done.md#4-endpoint-declaration-standard)).
 
 **Checks**
 
