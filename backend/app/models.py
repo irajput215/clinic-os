@@ -1,12 +1,16 @@
 import uuid
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Optional
 
 from pydantic import EmailStr
 from sqlalchemy import DateTime
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
 
 # The naming convention must be applied before this module defines any table.
 from app.core.metadata import NAMING_CONVENTION  # noqa: F401
+
+if TYPE_CHECKING:
+    from app.modules.identity_tenancy.models import Tenant
 
 
 def get_datetime_utc() -> datetime:
@@ -74,6 +78,21 @@ class User(UserBase, table=True):
         index=True,
         ondelete="SET NULL",
     )
+    # The reverse of `Tenant.users`. `SET NULL` is the rule on the column above, so removing an
+    # organisation detaches its accounts instead of refusing the delete or destroying them.
+    #
+    # `Optional[...]` rather than `Tenant | None`: SQLAlchemy resolves a relationship's target from
+    # the annotation, and `Tenant | None` is looked up as a class literally named "Tenant | None".
+    # The quotes stay because `Tenant` is imported only under TYPE_CHECKING — unquoting it would make
+    # this a runtime cross-module import, which build-contract §7 rules out ("no module reaches into
+    # another module's tables"). The foreign key above names the same table by string, for the same
+    # reason.
+    #
+    # NOTE: this is a one-line change to the legacy template layer, which AGENTS.md freezes. The
+    # module map (build-contract §7) gives `users` to the `users_roles` module, so the whole `User`
+    # model is due to move to `app/modules/users_roles/models.py`; when it does, this relationship
+    # moves with it. Recorded in docs/progress.md §4 rather than left as a silent exception.
+    tenant: Optional["Tenant"] = Relationship(back_populates="users")  # noqa: UP037, UP045
 
 
 # Properties to return via API, id is always required

@@ -11,7 +11,7 @@ permissions:
 jobs:
   test-backend:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -32,6 +32,19 @@ jobs:
       - name: Migrate DB
         run: uv run bash scripts/prestart.sh
         working-directory: backend
+      - name: Check the models and the migrations agree
+        # `alembic check` compares what the models describe with what the migrations built. It cannot
+        # see CHECK constraints at all — `tests/core/test_schema_conventions.py` covers that — but it
+        # does catch a model change made without a migration, which is the commoner mistake.
+        run: uv run alembic check
+        working-directory: backend
+      - name: Check the schema diagrams are up to date
+        # The diagrams under docs/reference/schema are generated from this database and committed, so
+        # a table or constraint change without regenerating them fails here instead of leaving the
+        # documentation quietly wrong.
+        env:
+          TBLS_DATABASE_URL: postgresql://postgres:changethis@localhost:5432/app?sslmode=disable
+        run: ./scripts/schema-diagram.sh --check
       - name: Run tests
         run: uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
         working-directory: backend

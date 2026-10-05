@@ -43,6 +43,7 @@ docs/
 | **Business flow** | [`reference/business-flow.md`](reference/business-flow.md) | Who does what, from a clinic signing up to a pharmacy dispensing |
 | **Delivery** | [`reference/build-contract.md`](reference/build-contract.md) | Invariants, controls, stack and the verified baseline |
 | **Requirements** | [`features/README.md`](features/README.md) | What must each feature do, for whom, and how is it proven? |
+| **Database** | [`reference/database-conventions.md`](reference/database-conventions.md) | How schemas, relationships and migrations are written, and [the generated ER diagrams](reference/schema/README.md) |
 | **Work breakdown** | [`tasks/`](tasks/) | In what order, with what dependencies, and blocked by what? |
 | **Shared contract** | [`reference/build-contract.md`](reference/build-contract.md), [`reference/gates.md`](reference/gates.md) | What must be true before work may proceed? |
 
