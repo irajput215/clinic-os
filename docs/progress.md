@@ -54,6 +54,7 @@ Read this first. **Done** means merged to `main` and verified; **Next** is order
 | D18 | Readiness probe `GET /api/v1/health/ready/` — boolean only, never tenant-routed; liveness deliberately left independent of the database | PR #20 |
 | D19 | A deploy can no longer report success while the app is broken: the workflow fails when the readiness probe does not answer `200` | PR #20 · #22 |
 | D20 | The outage closed: the deployed credential corrected, then verified live — readiness `200`, login `200`, signup creates the organisation | Deploy run `37303519527`, green end to end |
+| D21 | The two `tenants` check constraints renamed to what the models declare, and a test asserting **every** constraint and index name against the metadata | migration `f993c55e6eaf` · [`test_schema_conventions.py`](../backend/tests/core/test_schema_conventions.py) |
 
 ### 🔄 In progress
 
@@ -97,8 +98,8 @@ bundle · password recovery that can actually send mail.
 | Self-registration | **Open** — one signup creates an organisation and its administrator (D17) | `USERS_OPEN_REGISTRATION` |
 | Liveness vs readiness | **Separated.** Liveness answers without touching the database; readiness returns `503` when it cannot reach one | [`core/health.py`](../backend/app/core/health.py) |
 | Rate limiting | **Built** for login (20/min) and password recovery (5/min) | [`backend/app/core/rate_limit.py`](../backend/app/core/rate_limit.py) |
-| Database migrations | 9, head `0bc1f345552b`, `alembic check` clean | `uv run alembic check` |
-| Tests | **83 passing, 94% coverage** | `uv run pytest` |
+| Database migrations | 10, head `f993c55e6eaf`, `alembic check` clean | `uv run alembic check` |
+| Tests | **91 passing, 94% coverage** | `uv run pytest` |
 | CI | 15 checks green: backend, compose, 4 Playwright shards, pre-commit, zizmor, coverage | PR #15 |
 | Gate 1–7 | **None passed, none signed.** No evidence bundle exists | [`gates.md`](reference/gates.md) |
 | Deployment | FastAPI Cloud + Neon (`ap-southeast-2`), **automatic on merge to `main`**, **gated on the readiness probe**, credential corrected and verified green | D19 · D20 · [`§6`](#6-known-gaps-and-risks) |
@@ -147,7 +148,8 @@ exposed. Each is a measured step, not a feature.
 | #17 | Branding work merged into the wrong base branch — recovered, not lost, as #18 |
 | #18 | clinicOS branding ships for real; the auth forms validate on submit, not on blur |
 | #19 | Signup restored as organisation registration; one signup creates one tenant and its administrator |
-| #20 · #21 · this change | Readiness probe; the deploy now fails when the app cannot serve. A runtime-config sync was attempted and removed — the deploy token cannot manage app environment variables |
+| #20 · #21 · #22 · #23 | Readiness probe; the deploy now fails when the app cannot serve. A runtime-config sync was attempted and removed — the deploy token cannot manage app environment variables |
+| this change | D21: the two `tenants` check constraints renamed, and a test that compares every constraint and index name against the model metadata |
 
 Also in this window: six defects corrected in the document set itself ([`traceability.md`](reference/traceability.md),
 [`control-matrix.md`](reference/control-matrix.md), [`definition-of-done.md`](reference/definition-of-done.md),
@@ -186,6 +188,15 @@ A defect to raise, not a judgement call to make silently.
    rate limit and errors. The probe's declaration is recorded in its module docstrings
    ([`health.py`](../backend/app/api/routes/health.py)) rather than in a phase spec, because no phase owns
    it. It needs either a spec home or an explicit exemption.
+7. **`alembic check` cannot be the only guard on the schema, and the standing orders treat it as one.**
+   [AGENTS.md](../AGENTS.md) requires `uv run alembic check` before committing a model change, but
+   autogenerate **does not compare CHECK constraints**. Both `tenants` checks were double-prefixed in
+   every database — the deployed one and one built from scratch — and `alembic check` reported "no new
+   upgrade operations detected" throughout. The convention in [`core/metadata.py`](../backend/app/core/metadata.py)
+   was therefore not true of the schema, invisibly, for as long as those tables existed. D21 renames them;
+   [`test_schema_conventions.py`](../backend/tests/core/test_schema_conventions.py) now compares every
+   constraint and index name the models declare against the database, which is the check `alembic` does
+   not perform. **Raised, not settled:** whether the standing order keeps naming `alembic check` alone.
 
 ---
 
