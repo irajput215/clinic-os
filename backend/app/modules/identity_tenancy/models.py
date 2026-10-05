@@ -8,10 +8,13 @@ carries no row-level security.
 
 import uuid
 from datetime import UTC, datetime
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import sqlalchemy as sa
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
+
+if TYPE_CHECKING:
+    from app.models import User
 
 TenantStatus = Literal["ACTIVE", "SUSPENDED", "CLOSING", "CLOSED"]
 
@@ -60,3 +63,17 @@ class Tenant(SQLModel, table=True):
     updated_at: datetime = Field(
         default_factory=_utcnow, sa_column_kwargs={"onupdate": _utcnow}
     )
+
+    # One organisation holds many accounts. The reverse side is `User.tenant`, and the foreign key
+    # carries `ON DELETE SET NULL`: closing an organisation must not fail because an account pointed
+    # at it, and an orphaned account is a link to repair rather than data to destroy.
+    #
+    # This describes the schema as it is today — one account belongs to at most one organisation
+    # (D-003 leaves the identity model open, including whether a practitioner works across clinics
+    # through separate user rows or through memberships). Whoever settles D-003 changes this
+    # relationship, which is why it is declared here and not inferred at the call site.
+    # Quoted because `User` is imported only under TYPE_CHECKING: unquoting it would make this a
+    # runtime cross-module import, which build-contract §7 rules out ("no module reaches into another
+    # module's tables"). SQLAlchemy resolves the string against the class registry at mapper
+    # configuration.
+    users: list["User"] = Relationship(back_populates="tenant")  # noqa: UP037

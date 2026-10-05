@@ -340,6 +340,10 @@ docker compose up -d
   justification and expiry; edit `clinic-os-secure-by-design/` (it is an external read-only input);
   ship a feature with an open High or Critical finding.
 
+**Schema changes** additionally follow [`database-conventions.md`](database-conventions.md): where the
+four defining layers are, how relationships are declared, how `ondelete` is chosen, and which checks CI
+must pass. That document also records what `alembic check` cannot see on its own.
+
 ### Test data
 
 Synthetic only. No production data enters Development or Staging. Seeded fixtures carry a canary tenant

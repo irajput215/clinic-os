@@ -55,6 +55,7 @@ Read this first. **Done** means merged to `main` and verified; **Next** is order
 | D19 | A deploy can no longer report success while the app is broken: the workflow fails when the readiness probe does not answer `200` | PR #20 · #22 |
 | D20 | The outage closed: the deployed credential corrected, then verified live — readiness `200`, login `200`, signup creates the organisation | Deploy run `37303519527`, green end to end |
 | D21 | The two `tenants` check constraints renamed to what the models declare, and a test asserting **every** constraint and index name against the metadata | migration `f993c55e6eaf` · [`test_schema_conventions.py`](../backend/tests/core/test_schema_conventions.py) |
+| D22 | Schema conventions written down ([`database-conventions.md`](reference/database-conventions.md)); `User` ↔ `Tenant` relationships declared on both sides with a test; `alembic check` and the generated ER diagrams now gated in CI | [`schema-diagram.sh`](../scripts/schema-diagram.sh) · [`schema/`](reference/schema/README.md) · `.github/workflows/test-backend.yml` |
 
 ### 🔄 In progress
 
@@ -99,7 +100,8 @@ bundle · password recovery that can actually send mail.
 | Liveness vs readiness | **Separated.** Liveness answers without touching the database; readiness returns `503` when it cannot reach one | [`core/health.py`](../backend/app/core/health.py) |
 | Rate limiting | **Built** for login (20/min) and password recovery (5/min) | [`backend/app/core/rate_limit.py`](../backend/app/core/rate_limit.py) |
 | Database migrations | 10, head `f993c55e6eaf`, `alembic check` clean | `uv run alembic check` |
-| Tests | **91 passing, 94% coverage** | `uv run pytest` |
+| Tests | **93 passing, 94% coverage** | `uv run pytest` |
+| Schema diagrams | **Generated and committed**; CI fails when they are stale | [`docs/reference/schema/`](reference/schema/README.md) |
 | CI | 15 checks green: backend, compose, 4 Playwright shards, pre-commit, zizmor, coverage | PR #15 |
 | Gate 1–7 | **None passed, none signed.** No evidence bundle exists | [`gates.md`](reference/gates.md) |
 | Deployment | FastAPI Cloud + Neon (`ap-southeast-2`), **automatic on merge to `main`**, **gated on the readiness probe**, credential corrected and verified green | D19 · D20 · [`§6`](#6-known-gaps-and-risks) |
@@ -149,7 +151,7 @@ exposed. Each is a measured step, not a feature.
 | #18 | clinicOS branding ships for real; the auth forms validate on submit, not on blur |
 | #19 | Signup restored as organisation registration; one signup creates one tenant and its administrator |
 | #20 · #21 · #22 · #23 | Readiness probe; the deploy now fails when the app cannot serve. A runtime-config sync was attempted and removed — the deploy token cannot manage app environment variables |
-| this change | D21: the two `tenants` check constraints renamed, and a test that compares every constraint and index name against the model metadata |
+| this change | D21: the two `tenants` check constraints renamed, and a test that compares every constraint and index name against the model metadata. D22: schema conventions written down, relationships declared on both sides, and `alembic check` plus the generated ER diagrams gated in CI |
 
 Also in this window: six defects corrected in the document set itself ([`traceability.md`](reference/traceability.md),
 [`control-matrix.md`](reference/control-matrix.md), [`definition-of-done.md`](reference/definition-of-done.md),
@@ -207,6 +209,20 @@ A defect to raise, not a judgement call to make silently.
    converges both states instead. A rebuilt database and the deployed one agree on constraint names but
    were *built differently*, and nothing in the repo records that. Worth a decision: whether migrations
    get pinned against the convention with `op.f()` as a rule, not only where someone remembered.
+9. **`app/models.py` is frozen, and D22 added one line to it anyway.** `User.tenant` is the reverse of
+   `Tenant.users`, and it could not be declared without editing the legacy template layer, because the
+   module that owns `users` does not exist yet. The module map
+   ([`build-contract.md` §7](reference/build-contract.md)) already assigns `users` to `users_roles`, so
+   the `User` model is overdue to move to `app/modules/users_roles/models.py` — taking its schemas and
+   the template's `crud.py` with it. **Raised as a deferred refactor, not resolved**: the alternative was
+   leaving the relationship half-declared, which is worse. Two earlier changes to the same file were
+   unavoidable (the `tenant_id` column, the `updated_at` fix), so the pattern is established, not new.
+10. **The ER diagrams are generated but not auto-committed.** The ask was for diagrams that "regenerate
+   on every merge". They regenerate on demand, and CI **fails** when the committed copy is stale, which
+   reaches the same end by a different route. Auto-committing needs a token that can push to `main`, and
+   the `pr-push` step in `.github/workflows/pre-commit.yml` already fails with "did not issue an
+   installation token", so that path is known-broken here. **Raised:** fix the push token and
+   auto-commit, or keep the drift gate.
 
 ---
 
