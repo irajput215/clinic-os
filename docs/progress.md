@@ -26,7 +26,62 @@ claim with no artefact is a gap, not progress.
 
 ---
 
-## 1. Status at a glance — 2026-10-05
+## 1. The board
+
+Read this first. **Done** means merged to `main` and verified; **Next** is ordered.
+
+### ✅ Done — merged and verified
+
+| # | Item | Evidence |
+|:---:|---|---|
+| D1 | `.env` untracked, ignored, and replaced by `.env.example` | PR #11 |
+| D2 | Standing orders for contributors and agents — `AGENTS.md` | PR #12 |
+| D3 | Tenant-scoped transaction helper: `SET LOCAL`, refuses to open without a tenant | [`core/db.py`](../backend/app/core/db.py) |
+| D4 | `tenants` table, migration, and an opt-in demo seed | `706856e36a80` |
+| D5 | pytest refuses to run against a non-local database | [`tests/conftest.py`](../backend/tests/conftest.py) |
+| D6 | One constraint naming convention, one model registry | PR #13 · `fb0ce1f1fff5` |
+| D7 | `updated_at` is actually maintained | PR #13 |
+| D8 | Demo seed opt-in (`SEED_DEMO_TENANT`, default false) | PR #13 |
+| D9 | Unauthenticated `POST /private/users/` removed | PR #13 |
+| D10 | Self-registration closed by default; the signup page removed | PR #14 |
+| D11 | `item` domain dropped — table, API, UI and tests | PR #15 · `89d27ee38a6f` |
+| D12 | Rate limiting: login 20/min, password recovery 5/min | [`core/rate_limit.py`](../backend/app/core/rate_limit.py) |
+| D13 | Recovery HTML enumeration oracle removed | PR #15 |
+| D14 | Six defects corrected in this document set | commit `57c5878` |
+| D15 | This board, and the index corrections beside it | PR #16 |
+| D16 | clinicOS branding replaces the template's | this change |
+
+### 🔄 In progress
+
+**Nothing.** The working tree is clean and the next slice has not started. This row is empty on purpose.
+
+### ⏭ Next — in this order
+
+| # | Step | Why it is next |
+|:---:|---|---|
+| N1 | **Patients** — table, service, `POST`/`GET /api/v1/patients` | The first *tenant-scoped* table. It brings the first forced RLS policy, which is where INV-1 stops being an intention |
+| N2 | **TGA approvals** — manual entry with a validity window | The gate in N3 needs an `ACTIVE` approval to exist |
+| N3 | **The prescription safety gate** — dispatch refused without an approval at the grain | INV-2, and the screen that demonstrates the product's hard constraint |
+| N4 | **Isolation tests** — two tenants, absence assertions | Proves N1's RLS rather than asserting it |
+| N5 | **Redeploy and verify** | Deploys are manual; nothing ships by merging |
+
+### ⏸ Blocked — cannot start
+
+| Item | Blocked by |
+|---|---|
+| Feature 02: MFA, sessions, step-up | **D-003** (identity), undecided |
+| Gate 3 sign-off | D-003 |
+| Gate 6 and 7 evidence | **D-004** needs a record for the FastAPI Cloud + Neon choice |
+| Gate 1 sign-off | D-003 and D-004 both |
+| The `valid_to` boundary in the safety gate | **D-006**, awaiting the Clinical Safety Officer |
+
+### ⬜ Not started
+
+Features 01–16 as features (no feature is complete) · row-level security · the audit log · RBAC ·
+reporting and exports · integrations · CI security scanning (T0-13–T0-15) · every gate's evidence
+bundle · password recovery that can actually send mail.
+
+### Where each area stands
 
 | Area | State | Evidence |
 |---|---|---|
@@ -42,7 +97,7 @@ claim with no artefact is a gap, not progress.
 | Tests | **73 passing, 93% coverage** | `uv run pytest` |
 | CI | 15 checks green: backend, compose, 4 Playwright shards, pre-commit, zizmor, coverage | PR #15 |
 | Gate 1–7 | **None passed, none signed.** No evidence bundle exists | [`gates.md`](reference/gates.md) |
-| Deployment | FastAPI Cloud + Neon (`ap-southeast-2`); **behind `main`** | [`§6`](#6-known-gaps-and-risks) |
+| Deployment | FastAPI Cloud + Neon (`ap-southeast-2`), **current with `main`** | [`§6`](#6-known-gaps-and-risks) |
 
 ---
 
@@ -72,7 +127,7 @@ oracle). `users` and `login` remain the template's, pending features 02 and 03.
 
 ## 3. What changed during 2026-10-04 → 05
 
-Five pull requests, all merged. Each is a measured step, not a feature.
+Seven changes, all merged. Each is a measured step, not a feature.
 
 | PR | Change |
 |---|---|
@@ -81,6 +136,8 @@ Five pull requests, all merged. Each is a measured step, not a feature.
 | #13 | One constraint naming convention and one model registry; `updated_at` actually maintained; the demo seed made opt-in; `private` route removed |
 | #14 | Self-registration closed by default; the signup page removed |
 | #15 | The `item` domain dropped; rate limiting on login and recovery; the recovery HTML oracle removed |
+| #16 | This board, and the index corrections it required |
+| this change | clinicOS branding replaces the template's — wordmark, page titles, footer, and the four FastAPI SVG assets |
 
 Also in this window: six defects corrected in the document set itself ([`traceability.md`](reference/traceability.md),
 [`control-matrix.md`](reference/control-matrix.md), [`definition-of-done.md`](reference/definition-of-done.md),
@@ -121,9 +178,11 @@ A defect to raise, not a judgement call to make silently.
 
 ## 6. Known gaps and risks
 
-- **The deployment is behind `main`.** Verified against the live OpenAPI document: it still serves
-  `/api/v1/items/*` and `/api/v1/password-recovery-html-content/*`. It therefore also **does not have
-  rate limiting**, which means login is currently unlimited on the public URL.
+- **Deployment is manual.** Verified against the live OpenAPI document on 2026-10-05: 11 routes, with
+  `/api/v1/items/*` and the recovery HTML oracle gone, so the hardening through #15 **is** live and login
+  is rate limited. It was three pull requests behind until the deploy on the same day, which is the risk
+  worth naming: **merging does not deploy anything**, and a stale build served unlimited login attempts
+  for several hours.
 - **`POST /api/v1/reset-password/`** is unauthenticated and, unlike its siblings, not rate limited.
 - **Password recovery cannot deliver mail** (`SMTP_HOST=localhost`), so it returns success and nothing
   arrives — a silent dead end.
@@ -140,16 +199,19 @@ A defect to raise, not a judgement call to make silently.
 
 ---
 
-## 7. What would move this furthest, next
+## 7. Why that order
 
-The MVP demonstration slice, in this order — each step is small and ends in something showable:
+[The board's Next column](#1-the-board) is the single home for what comes next. The reasoning behind it:
 
-1. **Patients** — the first tenant-scoped table. It brings the first forced RLS policy, which is the
-   point at which INV-1 stops being an intention ([`05-patients`](features/05-patients/01-requirements.md)).
-2. **TGA approvals** — manual entry of an approval with its validity window.
-3. **The prescription safety gate** — dispatch refused without an `ACTIVE` approval at the grain. This is
-   INV-2, and it is the screen that demonstrates the product's hard constraint.
-4. **Redeploy**, so the hardening already merged (#13–#15) is what the public URL is actually running.
+- **Patients first** because it is the first *tenant-scoped* table. Until one exists, INV-1 is a design
+  statement; the moment one does, it carries a forced RLS policy and INV-1 becomes something a test can
+  fail ([`05-patients`](features/05-patients/01-requirements.md)).
+- **Approvals before prescribing** because the safety gate has nothing to check without an `ACTIVE`
+  approval at the grain.
+- **The gate before anything cosmetic** because it is the product's hard constraint, and the one screen
+  that shows a clinic owner what the platform refuses to do.
+- **Isolation tests with patients, not after them** because the RLS policy has to be proved in the same
+  change, not by a later audit.
 
 Deliberately excluded until after that: RBAC (feature 03), MFA and OIDC (feature 02, pending D-003),
 audit-log completeness (feature 04), reporting, integrations, and the gate sign-offs.

@@ -1,11 +1,6 @@
 import { Link } from "@tanstack/react-router"
 
-import { useTheme } from "@/components/theme-provider"
 import { cn } from "@/lib/utils"
-import icon from "/assets/images/fastapi-icon.svg"
-import iconLight from "/assets/images/fastapi-icon-light.svg"
-import logo from "/assets/images/fastapi-logo.svg"
-import logoLight from "/assets/images/fastapi-logo-light.svg"
 
 interface LogoProps {
   variant?: "full" | "icon" | "responsive"
@@ -13,48 +8,51 @@ interface LogoProps {
   asLink?: boolean
 }
 
+const MARK = "C"
+const WORDMARK = "clinicOS"
+
+/**
+ * The product wordmark. It is text rather than an image: the brand is a name, and a
+ * text mark needs no theme-specific asset to stay legible in both themes.
+ */
 export function Logo({
   variant = "full",
   className,
   asLink = true,
 }: LogoProps) {
-  const { resolvedTheme } = useTheme()
-  const isDark = resolvedTheme === "dark"
+  const showWordmark = variant !== "icon"
 
-  const fullLogo = isDark ? logoLight : logo
-  const iconLogo = isDark ? iconLight : icon
-
-  const content =
-    variant === "responsive" ? (
-      <>
-        <img
-          src={fullLogo}
-          alt="FastAPI"
-          className={cn(
-            "h-6 w-auto group-data-[collapsible=icon]:hidden",
-            className,
-          )}
-        />
-        <img
-          src={iconLogo}
-          alt="FastAPI"
-          className={cn(
-            "size-5 hidden group-data-[collapsible=icon]:block",
-            className,
-          )}
-        />
-      </>
-    ) : (
-      <img
-        src={variant === "full" ? fullLogo : iconLogo}
-        alt="FastAPI"
-        className={cn(variant === "full" ? "h-6 w-auto" : "size-5", className)}
-      />
-    )
+  const content = (
+    <span className={cn("flex items-center gap-2", className)}>
+      <span
+        aria-hidden
+        className={cn(
+          "grid size-6 shrink-0 place-items-center rounded-md bg-primary text-xs font-bold text-primary-foreground",
+          variant === "icon" && "size-5 text-[0.625rem]",
+        )}
+      >
+        {MARK}
+      </span>
+      <span
+        className={cn(
+          "font-semibold tracking-tight text-foreground",
+          variant === "icon" && "hidden",
+          variant === "responsive" && "group-data-[collapsible=icon]:hidden",
+        )}
+      >
+        {WORDMARK}
+      </span>
+      {!showWordmark && <span className="sr-only">{WORDMARK}</span>}
+    </span>
+  )
 
   if (!asLink) {
     return content
   }
 
-  return <Link to="/">{content}</Link>
+  return (
+    <Link to="/" aria-label={`${WORDMARK} home`}>
+      {content}
+    </Link>
+  )
 }
