@@ -44,6 +44,10 @@ jobs:
         working-directory: backend
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # Migrations should run as a role that owns the schema while the application stays least
+          # privilege. Until the dedicated secret exists this falls back to DATABASE_URL, so the
+          # workflow is unchanged.
+          MIGRATION_DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL || secrets.DATABASE_URL }}
           PROJECT_NAME: ${{ vars.PROJECT_NAME }}
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
           FIRST_SUPERUSER: ${{ vars.FIRST_SUPERUSER }}

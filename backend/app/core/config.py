@@ -29,15 +29,28 @@ class Settings(BaseSettings):
     PROJECT_NAME: str
     SENTRY_DSN: HttpUrl | None = None
     DATABASE_URL: PostgresDsn
+    # Migrations need an owning role; the application must run least privilege, and one URL cannot
+    # be both. Optional: when unset, Alembic falls back to DATABASE_URL and nothing changes. The
+    # deployment sets this, out of band, when the migration role is switched on.
+    MIGRATION_DATABASE_URL: PostgresDsn | None = None
 
-    @field_validator("DATABASE_URL", mode="before")
+    @field_validator("DATABASE_URL", "MIGRATION_DATABASE_URL", mode="before")
     @classmethod
-    def _use_psycopg_driver(cls, value: str | PostgresDsn) -> str:
+    def _use_psycopg_driver(cls, value: str | PostgresDsn | None) -> str | None:
+        if value is None:
+            return None
         database_url = str(value)
         for scheme in ("postgres://", "postgresql://"):
             if database_url.startswith(scheme):
                 return database_url.replace(scheme, "postgresql+psycopg://", 1)
         return database_url
+
+    @model_validator(mode="after")
+    def _default_migration_url(self) -> Self:
+        # Unset means "same as the application URL", which is exactly the previous behaviour.
+        if self.MIGRATION_DATABASE_URL is None:
+            self.MIGRATION_DATABASE_URL = self.DATABASE_URL
+        return self
 
     SMTP_TLS: bool = True
     SMTP_SSL: bool = False
@@ -96,6 +109,12 @@ class Settings(BaseSettings):
         self._check_default_secret("SECRET_KEY", self.SECRET_KEY)
         for host in self.DATABASE_URL.hosts():
             self._check_default_secret("DATABASE_URL password", host["password"])
+        migration_url = self.MIGRATION_DATABASE_URL or self.DATABASE_URL
+        if migration_url != self.DATABASE_URL:
+            for host in migration_url.hosts():
+                self._check_default_secret(
+                    "MIGRATION_DATABASE_URL password", host["password"]
+                )
         self._check_default_secret(
             "FIRST_SUPERUSER_PASSWORD", self.FIRST_SUPERUSER_PASSWORD
         )

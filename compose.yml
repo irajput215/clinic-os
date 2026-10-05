@@ -62,6 +62,9 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       EMAILS_FROM_EMAIL: ${EMAILS_FROM_EMAIL}
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?Variable not set}@db:5432/app
+      # Optional, and empty by default: unset means Alembic falls back to DATABASE_URL. Set it to
+      # run migrations as a schema-owning role while the application stays least privilege.
+      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:-}
       SENTRY_DSN: ${SENTRY_DSN:-}
       # Forwarded explicitly: this list is the container's whole environment, so a
       # variable set only in .env would be interpolated for Compose and never reach
