@@ -57,6 +57,7 @@ Read this first. **Done** means merged to `main` and verified; **Next** is order
 | D21 | The two `tenants` check constraints renamed to what the models declare, and a test asserting **every** constraint and index name against the metadata | migration `f993c55e6eaf` · [`test_schema_conventions.py`](../backend/tests/core/test_schema_conventions.py) |
 | D22 | Schema conventions written down ([`database-conventions.md`](reference/database-conventions.md)); `User` ↔ `Tenant` relationships declared on both sides with a test; `alembic check` and the generated ER diagrams now gated in CI | [`schema-diagram.sh`](../scripts/schema-diagram.sh) · [`schema/`](reference/schema/README.md) · `.github/workflows/test-backend.yml` |
 | D23 | `patients` created — the first tenant-scoped table — with forced RLS, a permissive policy that actually grants a caller its own rows, the design's restrictive floor, and `clinos_app` (no superuser, no `BYPASSRLS`, no `DELETE` grant) | migration `134a7201f6d2` · [`test_patients_isolation.py`](../backend/tests/isolation/test_patients_isolation.py) |
+| D24 | The five database roles created with least-privilege grants — `clinos_app` holds no `DELETE` or `TRUNCATE` — and `MIGRATION_DATABASE_URL` split from `DATABASE_URL` so migrations own and the app does not | migration `33c56ebab859` · [`test_app_role_is_not_owner.py`](../backend/tests/isolation/test_app_role_is_not_owner.py) · [`test_every_tenant_table_has_policy.py`](../backend/tests/isolation/test_every_tenant_table_has_policy.py) |
 
 ### 🔄 In progress
 
@@ -100,8 +101,8 @@ bundle · password recovery that can actually send mail.
 | Self-registration | **Open** — one signup creates an organisation and its administrator (D17) | `USERS_OPEN_REGISTRATION` |
 | Liveness vs readiness | **Separated.** Liveness answers without touching the database; readiness returns `503` when it cannot reach one | [`core/health.py`](../backend/app/core/health.py) |
 | Rate limiting | **Built** for login (20/min) and password recovery (5/min) | [`backend/app/core/rate_limit.py`](../backend/app/core/rate_limit.py) |
-| Database migrations | 11, head `134a7201f6d2`, `alembic check` clean | `uv run alembic check` |
-| Tests | **99 passing, 94% coverage** | `uv run pytest` |
+| Database migrations | 12, head `33c56ebab859`, `alembic check` clean | `uv run alembic check` |
+| Tests | **131 passing, 94% coverage** | `uv run pytest` |
 | Schema diagrams | **Generated and committed**; CI fails when they are stale | [`docs/reference/schema/`](reference/schema/README.md) |
 | CI | 15 checks green: backend, compose, 4 Playwright shards, pre-commit, zizmor, coverage | PR #15 |
 | Gate 1–7 | **None passed, none signed.** No evidence bundle exists | [`gates.md`](reference/gates.md) |
@@ -248,6 +249,38 @@ A defect to raise, not a judgement call to make silently.
    prose with no declared route, schema or limit. T1-05 also demands a `patient_identifiers` table the
    design explicitly forbids, and the task layer and feature layer name different test files for the
    same obligations.
+
+14. **Two feature designs specify contradictory grants for `users`, and one silently wins.**
+   `03-users-and-roles/03-design.md` grants `clinos_app` table-level `SELECT, INSERT, UPDATE ON users`;
+   `02-authentication/03-design.md` requires `REVOKE ALL ON users` plus column-level grants and, under
+   Branch B, `REVOKE SELECT (hashed_password)`. **A table-level `GRANT SELECT` survives a column-level
+   `REVOKE`** (verified in Postgres), so applying both is silently one or the other — and the loser would be
+   the protection on `hashed_password`. D24 therefore grants nothing on the existing `user` table, which is
+   fail-closed, and reserves it for T1-03 with the real `users` table (blocked by D-003). Consequence:
+   `clinos_auth`, `clinos_readonly_audit` and `clinos_retention` hold **no privilege on any table that exists
+   today** — every grant the design gives them names a table that has not landed.
+15. **The `patients` policy applies to `PUBLIC`, not to `clinos_app` as the design shows.** Left unchanged
+   because RLS shape is an ask-first boundary, and because a policy restricted to a role that does not yet
+   have a credential would deny everything. Recorded in the migration docstring; it becomes a real decision
+   when the application switches connection.
+16. **The test suite has a teardown fragility that a green run can hide.** `DELETE FROM tenants` is blocked
+   by `fk_patients_tenant_id_tenants` (RESTRICT, by design) whenever patient rows exist, and the
+   `clean_tenants` fixture does not delete patients first. A full-suite run showed 14 such errors, triggered
+   by leftover rows from an aborted run rather than by the change under test. It will mask a genuine failure
+   eventually and should be fixed.
+
+17. **The design's least privilege for `clinos_app` forbids what self-service signup does**, so the
+   roles from D24 are in place but inert. `01-tenancy-and-clinics/03-design.md` specifies
+   `REVOKE ALL ON tenants FROM clinos_app` plus a column-level `SELECT`, and grants nothing on `user` —
+   the design assumes tenants are provisioned centrally. Org signup (D17) *creates* a tenant, and login
+   reads `user.hashed_password` while signup inserts into `user`. Measured: `clinos_app` holds
+   `patients: INSERT, SELECT, UPDATE`; `tenants:` column-level `SELECT` on four columns; `user:` nothing.
+   **Switching `DATABASE_URL` to `clinos_app` today would therefore break login and signup** — the exact
+   outage this work exists to prevent. Activation is blocked on two decisions, not on code: whether the
+   application may `INSERT` a tenant, and how the authentication path obtains `hashed_password` (the
+   design's `clinos_auth` role implies a second runtime connection; authentication's shape is entangled
+   with D-003). Until then the deployed RLS policy remains unenforced and this must not be described as
+   isolation being in force.
 
 ---
 

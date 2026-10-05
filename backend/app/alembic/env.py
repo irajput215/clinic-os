@@ -39,7 +39,9 @@ target_metadata = SQLModel.metadata
 
 
 def get_url():
-    return str(settings.DATABASE_URL)
+    # Migrations need an owning role; the application runs least privilege. `MIGRATION_DATABASE_URL`
+    # is optional and falls back to `DATABASE_URL`, so an existing deployment is unchanged.
+    return str(settings.MIGRATION_DATABASE_URL)
 
 
 def run_migrations_offline():
