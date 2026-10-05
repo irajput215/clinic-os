@@ -269,6 +269,19 @@ A defect to raise, not a judgement call to make silently.
    by leftover rows from an aborted run rather than by the change under test. It will mask a genuine failure
    eventually and should be fixed.
 
+17. **The design's least privilege for `clinos_app` forbids what self-service signup does**, so the
+   roles from D24 are in place but inert. `01-tenancy-and-clinics/03-design.md` specifies
+   `REVOKE ALL ON tenants FROM clinos_app` plus a column-level `SELECT`, and grants nothing on `user` —
+   the design assumes tenants are provisioned centrally. Org signup (D17) *creates* a tenant, and login
+   reads `user.hashed_password` while signup inserts into `user`. Measured: `clinos_app` holds
+   `patients: INSERT, SELECT, UPDATE`; `tenants:` column-level `SELECT` on four columns; `user:` nothing.
+   **Switching `DATABASE_URL` to `clinos_app` today would therefore break login and signup** — the exact
+   outage this work exists to prevent. Activation is blocked on two decisions, not on code: whether the
+   application may `INSERT` a tenant, and how the authentication path obtains `hashed_password` (the
+   design's `clinos_auth` role implies a second runtime connection; authentication's shape is entangled
+   with D-003). Until then the deployed RLS policy remains unenforced and this must not be described as
+   isolation being in force.
+
 ---
 
 ## 5. Decisions and blockers
