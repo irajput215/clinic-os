@@ -30,7 +30,7 @@ export const Route = createFileRoute("/_layout/admin")({
   head: () => ({
     meta: [
       {
-        title: "Admin - clinicOS",
+        title: "Admin - ClinicOS",
       },
     ],
   }),
