@@ -44,7 +44,7 @@ export const Route = createFileRoute("/login")({
   head: () => ({
     meta: [
       {
-        title: "Log In - FastAPI Template",
+        title: "Log In - clinicOS",
       },
     ],
   }),
@@ -54,7 +54,10 @@ function Login() {
   const { loginMutation } = useAuth()
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
-    mode: "onBlur",
+    // Validate on submit, then keep the message current as the user corrects it.
+    // `onBlur` fired errors while someone was still moving between fields, which
+    // reads as being told off mid-typing.
+    mode: "onSubmit",
     criteriaMode: "all",
     defaultValues: {
       username: "",
@@ -71,6 +74,7 @@ function Login() {
     <AuthLayout>
       <Form {...form}>
         <form
+          noValidate
           onSubmit={form.handleSubmit(onSubmit)}
           className="flex flex-col gap-6"
         >

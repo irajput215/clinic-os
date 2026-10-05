@@ -60,7 +60,7 @@ export const Route = createFileRoute("/reset-password")({
   head: () => ({
     meta: [
       {
-        title: "Reset Password - FastAPI Template",
+        title: "Reset Password - clinicOS",
       },
     ],
   }),
@@ -73,7 +73,8 @@ function ResetPassword() {
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
-    mode: "onBlur",
+    // Same as login: the error belongs on submit, not while moving between fields.
+    mode: "onSubmit",
     criteriaMode: "all",
     defaultValues: {
       new_password: "",

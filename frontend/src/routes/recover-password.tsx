@@ -42,7 +42,7 @@ export const Route = createFileRoute("/recover-password")({
   head: () => ({
     meta: [
       {
-        title: "Recover Password - FastAPI Template",
+        title: "Recover Password - clinicOS",
       },
     ],
   }),
@@ -81,6 +81,7 @@ function RecoverPassword() {
     <AuthLayout>
       <Form {...form}>
         <form
+          noValidate
           onSubmit={form.handleSubmit(onSubmit)}
           className="flex flex-col gap-6"
         >
