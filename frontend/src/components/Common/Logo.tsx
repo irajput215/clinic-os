@@ -9,7 +9,7 @@ interface LogoProps {
 }
 
 const MARK = "C"
-const WORDMARK = "clinicOS"
+const WORDMARK = "ClinicOS"
 
 /**
  * The product wordmark. It is text rather than an image: the brand is a name, and a
