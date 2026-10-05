@@ -25,7 +25,7 @@ def test_expected_constraint_names_are_rendered() -> None:
     assert "pk_tenants" in names
     assert "ck_tenants_status" in names
     assert "ck_tenants_slug_lowercase" in names
-    assert "fk_item_owner_id_user" in names
+    assert "pk_user" in names
 
 
 def test_the_registry_registers_every_domain_module_table() -> None:

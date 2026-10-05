@@ -11,7 +11,7 @@ any table is defined.
 from sqlmodel import SQLModel
 
 from app.core.metadata import NAMING_CONVENTION
-from app.models import Item, User
+from app.models import User
 from app.modules.identity_tenancy.models import Tenant
 
-__all__ = ["NAMING_CONVENTION", "SQLModel", "Item", "Tenant", "User"]
+__all__ = ["NAMING_CONVENTION", "SQLModel", "Tenant", "User"]
