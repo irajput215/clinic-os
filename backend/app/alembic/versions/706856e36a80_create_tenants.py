@@ -36,7 +36,9 @@ def upgrade():
     sa.Column('updated_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
     sa.CheckConstraint("status IN ('ACTIVE', 'SUSPENDED', 'CLOSING', 'CLOSED')", name='ck_tenants_status'),
     sa.CheckConstraint('slug = lower(slug)', name='ck_tenants_slug_lowercase'),
-    sa.PrimaryKeyConstraint('id')
+    # Pinned: this migration predates the shared naming convention, and
+    # fb0ce1f1fff5 renames the constraint from this name.
+    sa.PrimaryKeyConstraint('id', name=op.f('tenants_pkey'))
     )
     op.create_index(op.f('ix_tenants_slug'), 'tenants', ['slug'], unique=True)
     # ### end Alembic commands ###
