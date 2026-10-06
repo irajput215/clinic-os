@@ -1,0 +1,86 @@
+name: Security Scanning
+
+# Phase 0 tasks T0-14 (wire the scanners with Critical blocking) and T0-15 (prove the pipeline
+# blocks a finding) in `docs/tasks/00-phase-0-foundation.md`, and requirement R11 of
+# `docs/features/16-operations-and-observability/01-requirements.md`: *"No secret in source, image,
+# task definition, build log or ticket; secret scanning runs pre-commit and in CI and a finding
+# blocks the build."*
+#
+# Both jobs **fail** on a finding — there is no `continue-on-error` and no "report only" mode,
+# because a scanner that cannot fail the build is a dashboard, not a control
+# (`docs/reference/gates.md` Gate 6: "scan reports are clean of Critical findings").
+#
+# `main` is this repository's default branch. The older workflows still name `master` in their
+# push trigger; those triggers are deliberately left alone here (`AGENTS.md`: ask before changing
+# CI pipeline order).
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# Deny by default: each job asks for exactly what it needs and nothing else.
+permissions: {}
+
+jobs:
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # The action lists the pull request's commits to scan the pull-request range. Without this
+      # read permission it gets `403 Resource not accessible by integration`, and the job fails for
+      # the wrong reason (observed on the first run of this workflow).
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history, not the diff: a secret that was committed and then deleted is still a
+          # live exposure (`29-operations-and-observability.md` §8.3), and the repository's own
+          # history is the finding `docs/README.md` §"Security findings" records.
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Scan for secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Required for organisations only; empty on a personal account, which is a no-op.
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+  dependency-scan:
+    name: Dependency scan (pip-audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: .python-version
+      - name: Install uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: "latest-known"
+      - name: Export the locked dependency set
+        # `--frozen` audits the committed `uv.lock`, never a freshly resolved graph: the gate must
+        # be about what ships. `--no-emit-workspace` keeps the local editable members out of the
+        # requirements file, which is what lets pip-audit run without a resolver.
+        run: |
+          uv export --frozen --no-emit-workspace --no-hashes --format requirements.txt > /tmp/requirements.txt
+          grep -c '==' /tmp/requirements.txt
+      - name: Audit the lock against the advisory database
+        # `--no-deps --disable-pip` audits exactly the pinned set with no resolution step, and
+        # `--strict` fails the job if a dependency cannot be collected at all — fail closed.
+        # pip-audit exits non-zero on any known vulnerability, which blocks the job.
+        run: |
+          uvx --from pip-audit==2.10.1 pip-audit \
+            --requirement /tmp/requirements.txt \
+            --strict --no-deps --disable-pip --progress-spinner=off
