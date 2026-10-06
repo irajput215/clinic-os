@@ -88,6 +88,11 @@ export class LoginService {
      * Reset Password
      *
      * Reset password
+     *
+     * Carries the same 5/min recovery limit as the request route
+     * (`docs/reference/build-contract.md` control 10): the reset token is a bearer credential that
+     * grants a session, so guessing one must be at least as expensive as asking for one. Both routes
+     * share the `password-recovery` window, which caps recovery work from one address in total.
      */
     public static resetPassword<ThrowOnError extends boolean = true>(options: Options<loginResetPasswordData, ThrowOnError>) {
         return (options.client ?? client).post<loginResetPasswordResponses, loginResetPasswordErrors, ThrowOnError>({
@@ -138,7 +143,10 @@ export class UsersService {
     /**
      * Delete User Me
      *
-     * Delete own user.
+     * Deactivate own user.
+     *
+     * Kept as `DELETE /users/me` for the clients that call it, but it deactivates: the account and its
+     * attribution survive, and its next request is `401`.
      */
     public static deleteUserMe<ThrowOnError extends boolean = true>(options?: Options<usersDeleteUserMeData, ThrowOnError>) {
         return (options?.client ?? client).delete<usersDeleteUserMeResponses, unknown, ThrowOnError>({
@@ -210,6 +218,14 @@ export class UsersService {
      *
      * Gated by `USERS_OPEN_REGISTRATION`. That is what makes self-registration safe:
      * a signup can only ever reach the tenant it just created.
+     *
+     * **Organisation registration is one transaction.** The tenant, the account and the
+     * Practice Owner grant commit together or not at all, so a failure anywhere leaves no
+     * half-provisioned account: no organisation without an administrator, and no account
+     * pointing at an organisation whose roles were never written. Every write runs on the
+     * one `tenant_transaction` session, which is also what makes the role provisioning's
+     * forced-RLS inserts legal (`app.tenant_id` is set inside that transaction). The tenant
+     * id is drawn before the transaction opens so the context can name it.
      */
     public static registerUser<ThrowOnError extends boolean = true>(options: Options<usersRegisterUserData, ThrowOnError>) {
         return (options.client ?? client).post<usersRegisterUserResponses, usersRegisterUserErrors, ThrowOnError>({
@@ -226,7 +242,11 @@ export class UsersService {
     /**
      * Delete User
      *
-     * Delete a user.
+     * Deactivate a user.
+     *
+     * Administered offboarding, answered with the route's existing `DELETE` verb: R14, and the reason
+     * the foreign keys on `user_roles` are `ON DELETE RESTRICT`. Nothing is removed from the database —
+     * the account, its grants and its audit attribution stay — and the account's next request is `401`.
      */
     public static deleteUser<ThrowOnError extends boolean = true>(options: Options<usersDeleteUserData, ThrowOnError>) {
         return (options.client ?? client).delete<usersDeleteUserResponses, usersDeleteUserErrors, ThrowOnError>({

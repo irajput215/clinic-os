@@ -80,10 +80,18 @@ def recover_password(email: str, session: SessionDep) -> Message:
     )
 
 
-@router.post("/reset-password/")
+@router.post(
+    "/reset-password/",
+    dependencies=[Depends(password_recovery_rate_limit)],
+)
 def reset_password(session: SessionDep, body: NewPassword) -> Message:
     """
     Reset password
+
+    Carries the same 5/min recovery limit as the request route
+    (`docs/reference/build-contract.md` control 10): the reset token is a bearer credential that
+    grants a session, so guessing one must be at least as expensive as asking for one. Both routes
+    share the `password-recovery` window, which caps recovery work from one address in total.
     """
     email = verify_password_reset_token(token=body.token)
     if not email:

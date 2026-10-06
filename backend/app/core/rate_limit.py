@@ -107,6 +107,9 @@ def rate_limit(
 # administrative class at 20/min; authentication is at least as sensitive, and
 # password recovery more so because every attempt can send mail.
 login_rate_limit = rate_limit(scope="login", limit=20, window_seconds=60)
+# One window for the whole recovery flow: `POST /password-recovery/{email}` and
+# `POST /reset-password/` share the `password-recovery` scope, so 5/min caps the flow rather than
+# each step of it. Spending a reset token is the step that grants a session, so it is limited too.
 password_recovery_rate_limit = rate_limit(scope="password-recovery", limit=5)
 # The administrative class: users, roles and permission grants. 20/min is the value in
 # `docs/features/03-users-and-roles/04-threat-model.md` T-03.11. The design says "per session"; this

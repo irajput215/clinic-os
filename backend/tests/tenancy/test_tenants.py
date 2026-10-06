@@ -12,18 +12,34 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, delete, select
 
 from app.core.config import settings
 from app.core.db import engine
+from app.models import User
+from app.modules.identity_tenancy import service as identity_tenancy_service
 from app.modules.identity_tenancy.models import Tenant
 from app.modules.identity_tenancy.service import (
     DEMO_TENANT_SLUG,
     seed_demo_tenant,
     slugify,
 )
+from app.modules.users_roles import service as users_roles_service
 from app.modules.users_roles.models import Role, RolePermission, UserRole
+
+# Every table one organisation signup writes. The atomicity test compares these counts.
+_COUNTED_TABLES = ("tenants", "roles", "role_permissions", "user_roles", '"user"')
+
+
+def _row_counts() -> dict[str, int]:
+    """Row counts for the registration tables, read as the owner (no RLS filter)."""
+    with engine.connect() as conn:
+        return {
+            table: int(conn.execute(text(f"SELECT count(*) FROM {table}")).scalar_one())
+            for table in _COUNTED_TABLES
+        }
 
 
 def _clear_tenants(session: Session) -> None:
@@ -205,6 +221,95 @@ def test_two_clinics_may_share_a_name(
 
     assert slugs[0] == "riverside-medical-centre"
     assert slugs[1] != slugs[0]
+
+
+def test_slug_suffixes_are_deterministic(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Collisions are resolved by the unique index, and the retry sequence is fixed, not random."""
+    monkeypatch.setattr(settings, "USERS_OPEN_REGISTRATION", True)
+
+    slugs = []
+    for _ in range(3):
+        response = client.post(
+            f"{settings.API_V1_STR}/users/signup",
+            json={
+                "email": f"admin-{uuid.uuid4()}@example.com",
+                "password": "correct-horse-battery",
+                "full_name": "Clinic Administrator",
+                "clinic_name": "Deterministic Clinic",
+            },
+        )
+        assert response.status_code == 200
+        with Session(engine) as session:
+            tenant = session.get(Tenant, uuid.UUID(response.json()["tenant_id"]))
+            assert tenant is not None
+            slugs.append(tenant.slug)
+
+    assert slugs == [
+        "deterministic-clinic",
+        "deterministic-clinic-2",
+        "deterministic-clinic-3",
+    ]
+
+
+def test_slug_retry_is_bounded_and_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The retry sequence has a terminus: it refuses rather than inventing a slug."""
+    with Session(engine) as session:
+        session.add(_tenant(slug="bounded-clinic"))
+        session.commit()
+
+    monkeypatch.setattr(identity_tenancy_service, "MAX_SLUG_ATTEMPTS", 1)
+
+    with (
+        Session(engine) as session,
+        pytest.raises(RuntimeError, match="free tenant slug"),
+    ):
+        identity_tenancy_service.create_tenant_for_signup(session, "Bounded Clinic")
+
+
+def test_a_failure_after_the_account_is_created_leaves_nothing_behind(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Organisation signup is one transaction: nothing half-provisioned survives a mid-way failure.
+
+    The failure is injected at the step after the account row has been written — the Practice Owner
+    grant — so the test proves the *whole* unit rolls back: the organisation, the account, the seven
+    role bundles and the grant. Before this change the tenant was committed before the account and the
+    grant ran in a third transaction, so this failure left an organisation with no administrator.
+    """
+    monkeypatch.setattr(settings, "USERS_OPEN_REGISTRATION", True)
+    email = f"admin-{uuid.uuid4()}@example.com"
+    clinic_name = f"Halfway Clinic {uuid.uuid4()}"
+    before = _row_counts()
+
+    def explode(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("injected failure after the account row was written")
+
+    monkeypatch.setattr(users_roles_service, "provision_tenant_in_transaction", explode)
+
+    with pytest.raises(RuntimeError, match="injected failure"):
+        client.post(
+            f"{settings.API_V1_STR}/users/signup",
+            json={
+                "email": email,
+                "password": "correct-horse-battery",
+                "full_name": "Clinic Administrator",
+                "clinic_name": clinic_name,
+            },
+        )
+
+    # Every table the registration writes is back where it started: no orphan organisation, account,
+    # role, permission bundle or grant.
+    assert _row_counts() == before
+    with Session(engine) as session:
+        assert (
+            session.exec(select(Tenant).where(Tenant.legal_name == clinic_name)).first()
+            is None
+        )
+        assert session.exec(select(User).where(User.email == email)).first() is None
 
 
 def test_signup_without_a_clinic_name_creates_an_unattached_account(

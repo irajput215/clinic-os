@@ -17,9 +17,11 @@ cache, so a tightened grant cannot keep authorising a previous request (R2, T-03
 
 The seven system roles are **per tenant** (`roles.tenant_id NOT NULL`, unique `(tenant_id, code)`), so
 they cannot be seeded once globally. They are created for a tenant when the tenant is created:
-`provision_tenant(...)` does it for self-service signup and assigns the bootstrap role, and
-`provision_tenant_roles(...)` does it without an owner (the demo tenant). The seed migration does the
-same for tenants that already existed when it ran.
+`provision_tenant_in_transaction(...)` does it — and assigns the bootstrap role — on a transaction the
+caller owns, which is what signup uses so the tenant, the account and the grant commit together;
+`provision_tenant(...)` is the same work with its own transaction, and `provision_tenant_roles(...)`
+does it without an owner (the demo tenant). The seed migration does the same for tenants that already
+existed when it ran.
 """
 
 import uuid
@@ -71,6 +73,7 @@ __all__ = [
     "list_permissions",
     "list_roles",
     "provision_tenant",
+    "provision_tenant_in_transaction",
     "provision_tenant_roles",
     "read_user_roles",
     "resolve_permissions",
@@ -164,32 +167,55 @@ def provision_tenant_roles(*, tenant_id: uuid.UUID) -> None:
         seed_tenant_roles(session, tenant_id=tenant_id)
 
 
-def provision_tenant(*, tenant_id: uuid.UUID, owner_user_id: uuid.UUID) -> None:
-    """Create a tenant's system roles and grant the signer the bootstrap role.
+def provision_tenant_in_transaction(
+    session: Session, *, tenant_id: uuid.UUID, owner_user_id: uuid.UUID
+) -> None:
+    """Seed a tenant's system roles and grant the signer the bootstrap role, on the caller's session.
+
+    The work of `provision_tenant`, minus the transaction: organisation signup creates the tenant,
+    the account and this grant as **one** unit, so the grant cannot open a transaction of its own —
+    a failure after the account exists would otherwise leave an organisation with no administrator,
+    or an account whose roles were never written.
+
+    The caller must already be inside `tenant_transaction` for this tenant (the `roles`, `user_roles`
+    and `role_permissions` inserts carry a `tenant_id` that the forced RLS `WITH CHECK` verifies
+    against `app.tenant_id`), and owns the commit.
 
     This is the organisation-signup bootstrap, not the grant endpoint: there is no prior actor whose
     permission set a grantability rule could check, so the *tenant's own* first account is made
     `PRACTICE_OWNER`. Every later grant goes through the policy layer and the R3 grantability rule:
     `assign_role` below calls `authorize_grant` on the incoming bundle before it writes anything.
     """
+    seed_tenant_roles(session, tenant_id=tenant_id)
+    owner_role = _roles_for_tenant(session, tenant_id)[BOOTSTRAP_ROLE_CODE]
+    already = session.exec(
+        select(UserRole).where(
+            UserRole.user_id == owner_user_id,
+            UserRole.role_id == owner_role.id,
+        )
+    ).first()
+    if already is None:
+        session.add(
+            UserRole(
+                user_id=owner_user_id,
+                role_id=owner_role.id,
+                tenant_id=tenant_id,
+                granted_by=owner_user_id,
+            )
+        )
+
+
+def provision_tenant(*, tenant_id: uuid.UUID, owner_user_id: uuid.UUID) -> None:
+    """Create a tenant's system roles and grant the signer the bootstrap role, in one transaction.
+
+    A standalone caller (a provisioning script, `initial_data.py`) gets the transaction here;
+    signup, which must commit this work together with the tenant and the account, calls
+    `provision_tenant_in_transaction` on the transaction it already owns.
+    """
     with tenant_transaction(tenant_id=tenant_id, actor_id=owner_user_id) as session:
-        seed_tenant_roles(session, tenant_id=tenant_id)
-        owner_role = _roles_for_tenant(session, tenant_id)[BOOTSTRAP_ROLE_CODE]
-        already = session.exec(
-            select(UserRole).where(
-                UserRole.user_id == owner_user_id,
-                UserRole.role_id == owner_role.id,
-            )
-        ).first()
-        if already is None:
-            session.add(
-                UserRole(
-                    user_id=owner_user_id,
-                    role_id=owner_role.id,
-                    tenant_id=tenant_id,
-                    granted_by=owner_user_id,
-                )
-            )
+        provision_tenant_in_transaction(
+            session, tenant_id=tenant_id, owner_user_id=owner_user_id
+        )
 
 
 def resolve_permissions(
