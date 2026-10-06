@@ -47,15 +47,41 @@ for `patients`: a model cannot express `CREATE POLICY`, and a database built fro
 `REVOKE DELETE, TRUNCATE` removes nothing (neither was ever granted) and is what makes the rule hold if
 a later grant adds one by mistake; `tests/isolation/test_app_role_is_not_owner.py` asserts the absence
 for every tenant table, and `tests/security/test_tenant_grants.py` asserts this table's exact grant set.
-`clinos_migrator` taking ownership is the design's line and the completion of the deferral recorded in
-`33c56ebab859_database_roles.py` (*"it owns `clinics` and `audit_log` when those migrations land"*).
-`clinos_app` never owns a table, and `clinos_migrator` is `NOLOGIN` with a null password, so ownership
-confers no reachable privilege — it exists so the running application role is never the owner.
+The third line is the one deviation, and it is the next section.
 
-**Production note.** `ALTER TABLE ... OWNER TO` requires the migration role to be a superuser or a
-member of `clinos_migrator`. That holds for every environment this repository migrates today (CI and
-local both run as `postgres`); a deployment that migrates as a lesser role fails here loudly rather than
-skipping the ownership line silently.
+## `ALTER TABLE clinics OWNER TO clinos_migrator` is deliberately **not** issued
+
+This migration originally issued it, reading `33c56ebab859_database_roles.py` (*"it owns `clinics` and
+`audit_log` when those migrations land"*) as a deferral to complete here. **That line broke the
+deployment, and it is removed.** It passed every check this repository runs and failed only in
+production, so the evidence is recorded rather than the conclusion:
+
+* `ALTER TABLE ... OWNER TO` requires the migration role to be a superuser **or a member of the target
+  role**, and the target role must itself hold `CREATE` on the table's schema.
+* CI and local migrate as `postgres`, a superuser, so both conditions hold and the migration is green —
+  which is exactly why nothing caught this before it shipped.
+* The deployment migrates as Neon's `neondb_owner`: `MIGRATION_DATABASE_URL` is unset, so it falls back
+  to `DATABASE_URL`, and no separate migration credential exists yet. That role is neither a superuser
+  nor a member of `clinos_migrator`, so the step failed with `InsufficientPrivilege: must be able to SET
+  ROLE "clinos_migrator"`. It failed before `fastapi deploy`, so nothing shipped and the migration —
+  being transactional — rolled back: the failure was total and loud, not partial.
+* Reproduced outside CI by migrating an empty database as a non-superuser role holding `CREATEROLE` and
+  `BYPASSRLS`, which is `neondb_owner`'s shape. With this one line removed the whole chain runs to
+  `head` with no other error, so it was the only blocker in the merged chain — not the first of several.
+
+`33c56ebab859` and `b7c1d9e4f2a3` (the audit log) faced the same design line and reached the same
+conclusion, recording it as a deviation: *"a migration that re-owned the table would make every later
+`ALTER TABLE` on it impossible for the role that actually runs migrations."* This migration now matches
+them. What the design actually requires of the tables that exist is the negative property — R15 and
+Gate 2's *"the application role is not the table owner and has no `BYPASSRLS`"* — and that still holds:
+the owner is the role that ran the migration, and `clinos_app` owns nothing. `clinos_migrator` remains
+`NOLOGIN PASSWORD NULL`, so the ownership it would have taken conferred no reachable privilege today;
+what it changed was the deployment's ability to migrate at all.
+
+**Raised, not settled.** Whether `clinos_migrator` should own the domain tables is a decision this
+repository has not taken. Taking it needs a migration credential that is a member of that role
+(`GRANT clinos_migrator TO <deployment role>`) and `CREATE` on schema `public` for it — two grants, both
+production-affecting, neither of them named by the design.
 """
 from alembic import op
 import sqlalchemy as sa
@@ -114,15 +140,17 @@ def upgrade():
         f'WITH CHECK ({_TENANT_MATCH})'
     )
 
-    # `clinos_app` never owns a table. Ownership by the NOLOGIN migrator role is what the design
-    # specifies and what 33c56ebab859 deferred to this migration.
-    op.execute('ALTER TABLE clinics OWNER TO clinos_migrator')
+    # `clinos_app` never owns a table (R15, Gate 2). Ownership is left with the role that runs this
+    # migration: the design's `ALTER TABLE clinics OWNER TO clinos_migrator` is deliberately not
+    # issued here — see the module docstring for the deployment failure that settled it.
 
 
 def downgrade():
-    # Ownership returns to the role running the migration before the table is dropped: `drop_table`
-    # would work either way as a superuser, but a downgrade that leaves the cluster with an owner
-    # nobody can address is a worse state than the one it started from.
+    # Ownership returns to the role running the migration before the table is dropped. That is a no-op
+    # for a database built by this revision, and it is kept for one built by the previous revision,
+    # which did issue the `OWNER TO clinos_migrator` this file no longer issues. `drop_table` would
+    # work either way as a superuser, but a downgrade that leaves the cluster with an owner nobody can
+    # address is a worse state than the one it started from.
     op.execute('ALTER TABLE clinics OWNER TO CURRENT_USER')
     op.execute('DROP POLICY pol_clinics_tenant_isolation ON clinics')
     op.execute('DROP POLICY pol_clinics_tenant_access ON clinics')
