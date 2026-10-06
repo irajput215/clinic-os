@@ -275,8 +275,8 @@ artefact paths this repo uses ([`gates.md`](../reference/gates.md#artefact-namin
 
 - [ ] **T2-34 — Verification UI presents evidence, not a default**
   - Acceptance: the document renders beside the extracted fields with the source page reachable in one action; per-field confidence and producing method are shown; candidate matches show the agreeing identifiers, score and reason; no candidate is pre-selected; the machine proposal is visible and requires explicit selection.
-  - Verify: `bun run test` in `frontend/` with the verification-queue spec, plus a usability check recorded by the Clinical Safety Officer
-  - Files: `frontend/src/routes/tga-inbox/`, `frontend/tests/`
+  - Verify: `bun run test` in `frontend-features/` with the verification-queue spec, plus a usability check recorded by the Clinical Safety Officer
+  - Files: `frontend-features/src/routes/tga-inbox/`, `frontend-features/tests/`
   - Controls: 2 (authorisation), 5 (output validation)
   - Evidence: Playwright run record and the usability note
 

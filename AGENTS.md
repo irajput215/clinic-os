@@ -25,11 +25,12 @@ uv run mypy app                           # strict
 uv run alembic revision --autogenerate -m "message"
 uv run alembic upgrade head
 
-# Frontend (run from frontend/)
-bun install && bun run dev
-bun run lint                              # biome
-bun run test                              # playwright
-bun run generate-client                   # regenerate the SDK from the backend OpenAPI
+# Frontend: frontend-features/, the only app (run from the repo root; workspace scripts)
+bun install && bun run dev                # :5174, proxies /api to the backend on :8000
+bun run lint && bun run typecheck         # biome, tsc
+bun run build                             # writes backend/app/frontend, served by the backend at /
+bun run test                              # playwright; PLAYWRIGHT_BASE_URL=http://127.0.0.1:8000 for the served build
+bash scripts/generate-client.sh           # regenerate the SDK from the backend OpenAPI
 
 # Whole stack
 docker compose up -d

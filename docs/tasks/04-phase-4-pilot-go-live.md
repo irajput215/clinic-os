@@ -160,8 +160,8 @@ names D-003, D-004 or none. A task in this list is not started until [`spec.md`]
 
 - [ ] **T4-16 — Run the sentinel leak tests (no PHI in any sink)**
   - Acceptance: sentinel values for a prescription payload, a clinical note, OCR text, a token and a key never appear in any log sink, error response or client bundle; the redaction block raises its signal.
-  - Verify: Observability tests O1–O4 pass; `cd backend && uv run pytest tests/security -q -k "sentinel or no_phi"`; `frontend/tests/security/storage-no-phi.spec.ts` passes.
-  - Files: `backend/tests/security/`, `frontend/tests/security/`, monitoring configuration
+  - Verify: Observability tests O1–O4 pass; `cd backend && uv run pytest tests/security -q -k "sentinel or no_phi"`; `frontend-features/tests/security/storage-no-phi.spec.ts` passes.
+  - Files: `backend/tests/security/`, `frontend-features/tests/security/`, monitoring configuration
   - Controls: Control 6 (Audit logging), Control 9 (Error handling)
   - Evidence: Sentinel leak test report (zero leaks)
   - Blocked by: none

@@ -8,6 +8,10 @@
 | No PHI in URLs; no `dangerouslySetInnerHTML` | done |
 | End-to-end tests in `tests/` pass against a real backend | done |
 | `GET /users/me/permissions` agreed with the backend owner | done |
+| Signup, password recovery and reset rebuilt from the removed `frontend/` (R10 to R13), e2e in `tests/account.spec.ts` | done |
+| Administration rebuilt from the removed `frontend/` (R14, R15), e2e in `tests/admin.spec.ts` | done |
+| Settings rebuilt from the removed `frontend/` (R16), e2e in `tests/settings.spec.ts` | done |
+| Served by the backend at `/` from the production build; CI e2e runs against that build ([ADR-F005](../../adr/ADR-F005-one-app-served-by-the-backend.md)) | done |
 
 `GET /api/v1/users/me/permissions` is served by `backend/app/modules/users_roles/router.py`
 (`read_own_permissions`) and tested in `backend/tests/users/test_own_permissions.py`. It is the

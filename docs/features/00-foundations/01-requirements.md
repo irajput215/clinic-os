@@ -37,7 +37,7 @@ the pipeline and the environment separation every later feature is measured agai
 
 | Workstream (`23-sprint-plan.md` §2) | This feature delivers | Exit gate |
 | --- | --- | --- |
-| Repository architecture | `backend/` + `frontend/` + `packages/` layout, pinned toolchains (D-002) | CI green on an empty baseline |
+| Repository architecture | `backend/` + `frontend-features/` + `packages/` layout, pinned toolchains (D-002) | CI green on an empty baseline |
 | Docker | Three images, multi-stage, minimal base, non-root, read-only root FS, health checks | Images build, run and scan clean |
 | Environment configuration | Namespaced variables, secrets outside git, fail-closed startup | Config checklist signed by the CTO |
 | CI skeleton | Fixed stage order including SAST, dependency, container and secret scans | A deliberately vulnerable fixture is blocked |

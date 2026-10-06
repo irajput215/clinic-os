@@ -29,7 +29,7 @@ Two document sets exist and they can conflict. This is the resolution order:
 
 | Rank | Source | Location | Role |
 |:---:|---|---|---|
-| 1 | **This repo's code and configuration** | `backend/`, `frontend/`, `compose*.yml` | What physically exists today |
+| 1 | **This repo's code and configuration** | `backend/`, `frontend-features/`, `compose*.yml` | What physically exists today |
 | 2 | **Decisions logged in `decisions/`** | [`docs/reference/decisions/`](decisions/) | Where this phase set deliberately diverges from rank 3, and why |
 | 3 | **The secure-by-design contract** | `clinic-os-secure-by-design/` — external, read-only, not version-controlled here | Normative for *controls, gates, invariants and regulatory obligations* |
 
@@ -44,7 +44,7 @@ never applied silently. See [`decisions/`](decisions/README.md).
 |---|---|---|---|
 | Language and framework | Node + strict TypeScript, `apps/*` monorepo | Python 3.14 + FastAPI, `backend/app` flat package | [D-001](decisions/D-001-python-fastapi-stack.md) |
 | Input validation | Zod, one schema per endpoint | Pydantic v2 models, one schema per endpoint | [D-001](decisions/D-001-python-fastapi-stack.md) |
-| Repo layout | `apps/frontend`, `apps/backend`, `apps/worker`, `packages/shared` | `backend/`, `frontend/`, `packages/` | [D-002](decisions/D-002-repo-layout.md) |
+| Repo layout | `apps/frontend`, `apps/backend`, `apps/worker`, `packages/shared` | `backend/`, `frontend-features/`, `packages/` | [D-002](decisions/D-002-repo-layout.md) |
 | Identity | Managed OIDC provider; *"we store no password hash"* | Self-hosted `PyJWT` + `pwdlib[argon2]` password auth shipped by the template | [D-003](decisions/D-003-identity-model.md) — **OPEN** |
 | Compute and infrastructure | ECS Fargate, RDS, S3, SQS, CloudFront+WAF, Terraform | `compose.yml` / `compose.deploy.yml` | [D-004](decisions/D-004-deployment-target.md) — **OPEN** |
 | Route paths | Unversioned: `/patients`, `/tga-approvals`, `/prescriptions/{id}/dispatch` | `/api/v1/...` per `settings.API_V1_STR`; provider webhooks stay unversioned | [D-005](decisions/D-005-route-path-convention.md) |
@@ -61,7 +61,7 @@ legitimate approval is an inconvenience, while dispensing outside an approval is
 
 ## 2. The stack this contract is written against
 
-Taken from `backend/pyproject.toml` and `frontend/package.json`.
+Taken from `backend/pyproject.toml` and `frontend-features/package.json`.
 
 | Layer | Choice | Version pin |
 |---|---|---|
@@ -78,7 +78,7 @@ Taken from `backend/pyproject.toml` and `frontend/package.json`.
 | Test | pytest + coverage | `>=7.4.3,<10.0.0` |
 | Lint/format | ruff | `>=0.2.2,<1.0.0` |
 | Types | mypy `strict = true`, plus `ty` | `>=1.8.0,<3.0.0` |
-| Frontend | React 19 + TanStack Router/Query/Table, Vite, Radix, Tailwind 4 | see `frontend/package.json` |
+| Frontend | React 19 + TanStack Router/Query/Table, Vite, Radix, Tailwind 4 | see `frontend-features/package.json` |
 | Frontend lint | Biome | `biome check` |
 | Frontend test | Playwright | `bunx playwright test` |
 | Client generation | `openapi-ts` from the FastAPI OpenAPI schema | `bun run generate-client` |
@@ -288,7 +288,7 @@ backend/app/
 | `admin` | Tenant configuration, break-glass, retention operations | `feature_flags`, `configuration`, `retention_jobs` | `/api/v1/admin/*` | 4 |
 
 **Legacy `/api/state` — NOT APPLICABLE HERE.** Section 12 records that `grep -rn "api/state" backend
-frontend/src` returns nothing: this endpoint does not exist in this repository. The source contract's
+frontend-features/src` returns nothing: this endpoint does not exist in this repository. The source contract's
 freeze-and-strangle migration (source doc 21 §3) therefore describes a **predecessor prototype** and is out
 of scope unless a legacy client is discovered. The Phase 1 workstream "State synchronisation" is
 **de-scoped pending confirmation**. Recorded here only so a reader of the source contract does not go
@@ -416,7 +416,7 @@ otherwise is the failure mode this document set exists to prevent.
 | **The root `.env` is tracked in git.** | `git ls-files --error-unmatch .env` succeeds; `.gitignore` does not exclude it | **Live violation of control 8.** Holds `SECRET_KEY`, `FIRST_SUPERUSER_PASSWORD`, `POSTGRES_PASSWORD`, all at the template default `changethis`. `SECRET_KEY=changethis` signs JWTs, so deploying as-is permits token forgery. Phase 0 exit task: untrack, gitignore, ship `.env.example`, rotate |
 | **CI has no security scanning at all.** | Across all 15 files in `.github/workflows/`: semgrep 0, trivy 0, gitleaks 0, bandit 0, pip-audit 0, safety 0, codeql 0 | Control 11 is unimplemented and Gate 1's "CI security pipeline stages are defined" check **fails**. Phase 0 must create it, not just document it |
 | **What CI does have.** | `test-backend.yml`, `test-docker-compose.yml`, `playwright.yml`, `pre-commit.yml`, `zizmor.yml`, `deploy.yml`, `deploy-docker-compose.yml`, plus housekeeping | Test and hygiene stages exist; `.pre-commit-config.yaml` runs ruff check/format, mypy, ty, biome, typos, zizmor — code hygiene and GitHub Actions linting, **no SAST/SCA/secret scanning** |
-| **`/api/state` does not exist.** | `grep -rn "api/state" backend frontend/src` returns nothing | The source's `/api/state` freeze-and-strangle migration (source doc 21 §3, technical risks T3 and T9) describes a **predecessor prototype**. It is out of scope unless a legacy client is discovered; the Phase 1 workstream "State synchronisation" is de-scoped pending confirmation |
+| **`/api/state` does not exist.** | `grep -rn "api/state" backend frontend-features/src` returns nothing | The source's `/api/state` freeze-and-strangle migration (source doc 21 §3, technical risks T3 and T9) describes a **predecessor prototype**. It is out of scope unless a legacy client is discovered; the Phase 1 workstream "State synchronisation" is de-scoped pending confirmation |
 | **No region pin.** | No Terraform, no AWS resource definitions, no `ap-southeast-2` reference anywhere | **INV-6 is not true or false — it is unimplemented.** A Gate 1 and Gate 6 gap (D-004) |
 
 Two of these are **security findings, not documentation gaps**: the tracked `.env` and the absent scanning
@@ -443,4 +443,4 @@ pipeline. They are the first tasks in Phase 0 for that reason.
 - `clinic-os-secure-by-design/23-sprint-plan.md` — sprint scope, exit criteria, dependency table
 - `clinic-os-secure-by-design/24-definition-of-done.md` — the six-part test
 - `clinic-os-secure-by-design/26-security-gates.md` — Gates 1–7
-- `backend/pyproject.toml`, `frontend/package.json` — the stack this contract is written against
+- `backend/pyproject.toml`, `frontend-features/package.json` — the stack this contract is written against
