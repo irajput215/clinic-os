@@ -369,7 +369,7 @@ export type RoleRead = {
 /**
  * RolesPublic
  *
- * The caller's roles, ordered by code, plus their count.
+ * The organisation's roles, ordered by code, plus their count.
  */
 export type RolesPublic = {
     /**
@@ -1268,6 +1268,10 @@ export type usersAssignRoleErrors = {
 export type usersAssignRoleError = usersAssignRoleErrors[keyof usersAssignRoleErrors];
 
 export type usersAssignRoleResponses = {
+    /**
+     * The account already held the role; nothing was written
+     */
+    200: RoleRead;
     /**
      * Successful Response
      */

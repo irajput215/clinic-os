@@ -149,7 +149,7 @@ def _not_found(what: str) -> HTTPException:
 
 @roles_router.get("", response_model=RolesPublic)
 def list_roles(*, actor: ActorDep) -> RolesPublic:
-    """List the caller's roles with each role's permission bundle."""
+    """List the organisation's roles with each role's permission bundle."""
     service.authorize(actor, USERS_ROLES_PERMISSIONS["list_roles"])
     return service.list_roles(tenant_id=actor.tenant_id)
 
@@ -189,6 +189,16 @@ def read_user_permissions(
     "/{user_id}/roles",
     response_model=RoleRead,
     status_code=status.HTTP_201_CREATED,
+    # The endpoint is idempotent rather than a `409`: a second POST for a role the account already
+    # holds answers `200` with the same body. Declaring it here is what keeps the contract and the
+    # generated client honest — without it the OpenAPI document advertises `201` only, and the SDK
+    # has no type for the answer the route actually sends.
+    responses={
+        status.HTTP_200_OK: {
+            "model": RoleRead,
+            "description": "The account already held the role; nothing was written",
+        }
+    },
 )
 def assign_role(
     *,

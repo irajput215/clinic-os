@@ -61,7 +61,7 @@ class RoleRead(SQLModel):
 
 
 class RolesPublic(SQLModel):
-    """The caller's roles, ordered by code, plus their count."""
+    """The organisation's roles, ordered by code, plus their count."""
 
     data: list[RoleRead]
     count: int

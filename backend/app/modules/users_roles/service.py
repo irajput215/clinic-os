@@ -151,8 +151,8 @@ def provision_tenant(*, tenant_id: uuid.UUID, owner_user_id: uuid.UUID) -> None:
 
     This is the organisation-signup bootstrap, not the grant endpoint: there is no prior actor whose
     permission set a grantability rule could check, so the *tenant's own* first account is made
-    `PRACTICE_OWNER`. Every later grant goes through the policy layer and the R5/R3 grantability rule,
-    which this slice does not build (the `/users/{id}/roles` endpoints are not in scope).
+    `PRACTICE_OWNER`. Every later grant goes through the policy layer and the R3 grantability rule:
+    `assign_role` below calls `authorize_grant` on the incoming bundle before it writes anything.
     """
     with tenant_transaction(tenant_id=tenant_id, actor_id=owner_user_id) as session:
         seed_tenant_roles(session, tenant_id=tenant_id)
@@ -307,8 +307,10 @@ def _role_bundle(
 def list_roles(*, tenant_id: uuid.UUID) -> RolesPublic:
     """Every role of the caller's tenant, with its permission bundle (design: `GET /roles`).
 
-    The tenant is the one the session resolved; RLS scopes the query as well, and the explicit
-    `tenant_id` predicate keeps it scoped for the current owner connection.
+    The tenant is the one the session resolved, so the list is the organisation's seven system roles
+    (plus any custom role of that tenant), not the roles the caller's own account holds. RLS scopes
+    the query as well, and the explicit `tenant_id` predicate keeps it scoped for the current owner
+    connection.
     """
     with tenant_transaction(tenant_id=tenant_id) as session:
         by_id, order = _permission_reads(session)
