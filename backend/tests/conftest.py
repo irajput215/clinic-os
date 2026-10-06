@@ -1,3 +1,4 @@
+import secrets
 from collections.abc import Generator
 
 import pytest
@@ -35,6 +36,16 @@ def _refuse_to_run_against_a_remote_database() -> None:
 
 
 _refuse_to_run_against_a_remote_database()
+
+
+# HS256 needs a key of at least 32 bytes (RFC 7518 §3.2); PyJWT warns below that, and the suite
+# turns every warning into an error. CI copies `.env.example`, whose `SECRET_KEY` is the
+# `REPLACE_ME` placeholder, so a test run signs with a fresh random key of the right length
+# instead. A key that is already long enough is kept. This touches only the test process; the
+# deployed configuration is never read from here.
+_HS256_MIN_KEY_BYTES = 32
+if len(settings.SECRET_KEY.encode()) < _HS256_MIN_KEY_BYTES:
+    settings.SECRET_KEY = secrets.token_urlsafe(48)
 
 
 @pytest.fixture(autouse=True)
