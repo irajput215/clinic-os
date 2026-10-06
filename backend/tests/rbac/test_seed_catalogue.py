@@ -42,13 +42,21 @@ def _stored_permission_codes(tenant_id: uuid.UUID) -> set[str]:
         return {permission.code for permission in stored}
 
 
-def test_the_permission_catalogue_is_the_19_declared_codes(rbac: RbacApi) -> None:
+def test_the_permission_catalogue_is_the_declared_codes(rbac: RbacApi) -> None:
+    """The catalogue as `catalog.py` declares it, which is 19 + Feature 08's `tga_approval:revoke`.
+
+    Feature 08's endpoints table requires a `tga_approval:revoke` permission
+    (`docs/features/08-tga-approvals/03-design.md`), and the alternative — reusing
+    `tga_approval:verify` — would let a `COMPLIANCE_AUDITOR` revoke an approval, which that feature's
+    US-7 forbids. This test's own docstring is the rule it follows here: *"a change to the matrix
+    must change `catalog.py` and this test together"*.
+    """
     owner = rbac.register_tenant(clinic_name="Catalogue Clinic")
     assert owner.tenant_id is not None
     stored = _stored_permission_codes(owner.tenant_id)
-    assert len(PERMISSION_CATALOGUE) == 19
+    assert len(PERMISSION_CATALOGUE) == 20
     assert stored == PERMISSION_CODES
-    assert len(stored) == 19
+    assert len(stored) == 20
 
 
 @pytest.mark.parametrize("code", CANDIDATE_CODES)
