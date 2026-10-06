@@ -6,8 +6,13 @@ import { expect, test } from "./fixtures"
  * The signed-out account flows: organisation signup, password recovery and reset.
  *
  * Budget note: `POST /password-recovery/{email}` and `POST /reset-password/` share one 5/min window
- * per address, and sign-in is 20/min. This file spends 4 recovery calls and 2 sign-ins; keep it
- * that way, or the suite starts failing on `429` instead of on behaviour.
+ * per client address (`backend/app/core/rate_limit.py`), and sign-in is 20/min. This file spends 4
+ * recovery calls and 2 sign-ins against one backend per run (CI gives every shard its own backend);
+ * keep it that way, or the suite starts failing on `429` instead of on behaviour. The recovery tests
+ * are never retried: a retry would spend the same window again and fail on `429`, hiding the real
+ * failure, and CI fails a run on any flaky test (`--fail-on-flaky-tests`), so a retry could never
+ * rescue it anyway. Running the whole file twice inside a minute against one backend will also hit
+ * the limit; that is the control working, not a defect.
  */
 
 const MAILPIT = process.env.MAILPIT_HOST ?? "http://localhost:8025"
@@ -165,6 +170,8 @@ test.describe("organisation signup", () => {
 })
 
 test.describe("password recovery", () => {
+  test.describe.configure({ retries: 0 })
+
   test("the emailed link sets a new password that then signs in", async ({
     page,
     request,
@@ -199,7 +206,7 @@ test.describe("password recovery", () => {
     const html = await waitForEmailHtml(request, email)
     const link = html.match(/\/reset-password\?token=[^"'<\s]+/)?.[0]
     expect(link, "reset link in the email").toBeTruthy()
-    await page.goto(link!.replaceAll("&amp;", "&"))
+    await page.goto(link!.replace(/&amp;/g, "&"))
 
     const fresh = newPassword()
     await page.getByLabel("New password", { exact: true }).fill(fresh)

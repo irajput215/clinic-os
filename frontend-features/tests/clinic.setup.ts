@@ -18,7 +18,7 @@ const PATIENTS = [
 
 setup("sign up a clinic and add patients", async ({ request }) => {
   const run = randomBytes(4).toString("hex")
-  const clinic: Clinic = {
+  const clinic: Omit<Clinic, "token"> = {
     email: `owner-${run}@e2e.example.com`,
     password: `E2e-${randomBytes(9).toString("base64url")}`,
     fullName: "Dr Sarah Okafor",
@@ -60,5 +60,8 @@ setup("sign up a clinic and add patients", async ({ request }) => {
   }
 
   mkdirSync("playwright/.auth", { recursive: true })
-  writeFileSync(CLINIC_FILE, JSON.stringify(clinic))
+  writeFileSync(
+    CLINIC_FILE,
+    JSON.stringify({ ...clinic, token: access_token } satisfies Clinic),
+  )
 })
