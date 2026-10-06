@@ -169,14 +169,18 @@ def test_the_app_role_cannot_delete_or_truncate_clinics() -> None:
     _refused("TRUNCATE TABLE clinics")
 
 
-def test_the_migrator_owns_clinics_and_the_app_role_owns_neither_table() -> None:
-    """`03-design.md`: `ALTER TABLE clinics OWNER TO clinos_migrator` — `clinos_app` never owns a table."""
+def test_the_app_role_owns_neither_tenancy_table() -> None:
+    """R15 / Gate 2 — `clinos_app` never owns a table.
+
+    `03-design.md` also says `ALTER TABLE clinics OWNER TO clinos_migrator`, and `3aec419d218b`
+    deliberately does not issue it: it needs the migration role to be a superuser or a member of
+    `clinos_migrator`, which the deployment's role is not, and it failed the deploy with
+    `InsufficientPrivilege: must be able to SET ROLE "clinos_migrator"` (the migration docstring
+    carries the evidence). This assertion is therefore the property the design actually requires of a
+    table that exists — the application role is not the owner — for both tables, rather than the name
+    of whichever role took the owner's place.
+    """
     with engine.connect() as conn:
-        assert (
-            conn.execute(_TABLE_OWNER, {"table": "clinics"}).scalar_one()
-            == "clinos_migrator"
-        )
-        assert (
-            conn.execute(_TABLE_OWNER, {"table": "care_relationships"}).scalar_one()
-            != "clinos_app"
-        )
+        for table in ("clinics", "care_relationships"):
+            owner = conn.execute(_TABLE_OWNER, {"table": table}).scalar_one()
+            assert owner != "clinos_app", f"{table} is owned by the application role"
