@@ -61,7 +61,12 @@ def test_every_state_change_and_verification_is_audited(
         clinic.owner, clinic.patient_id, approval_reference="TGA-2026-000401"
     )
     assert api.activate(clinic.owner, second, verifier=verifier).status_code == 200
-    assert api.match(clinic.owner, clinic.patient_id, date_of_service="2026-06-01").status_code == 200
+    assert (
+        api.match(
+            clinic.owner, clinic.patient_id, date_of_service="2026-06-01"
+        ).status_code
+        == 200
+    )
 
     created_events = api.audit_events(tenant_id=tenant_id, action=CREATED)
     assert len(created_events) == 2
@@ -75,7 +80,9 @@ def test_every_state_change_and_verification_is_audited(
     assert all(event["actor_id"] == verifier.user_id for event in verified_events)
 
     state_changes = api.audit_events(tenant_id=tenant_id, action=STATE_CHANGE)
-    assert [event["resource_id"] for event in state_changes] == [uuid.UUID(created["id"])]
+    assert [event["resource_id"] for event in state_changes] == [
+        uuid.UUID(created["id"])
+    ]
     assert all(event["actor_id"] == clinic.owner.user_id for event in state_changes)
 
     matches = api.audit_events(tenant_id=tenant_id, action=MATCHED)

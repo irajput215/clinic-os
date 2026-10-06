@@ -480,6 +480,405 @@ export type RolesPublic = {
 };
 
 /**
+ * SupersedeChainLink
+ *
+ * One row of the reconstructible history: what replaced what, and when it stopped being live.
+ */
+export type SupersedeChainLink = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * State
+     */
+    state: string;
+    /**
+     * Valid From
+     */
+    valid_from: string;
+    /**
+     * Valid To
+     */
+    valid_to: string;
+    /**
+     * Supersedes Id
+     */
+    supersedes_id: string | null;
+    /**
+     * Superseded By Id
+     */
+    superseded_by_id: string | null;
+};
+
+/**
+ * TgaApprovalCreate
+ *
+ * `POST /api/v1/tga-approvals` — a manual entry, which starts `PENDING` (R1, R5, US-1).
+ *
+ * There is no `state`, no `source`, no `created_by`, no `verified_by` and no `tenant_id`: every one
+ * of those is the server's, and a body that carries one is refused as an unknown field.
+ */
+export type TgaApprovalCreate = {
+    /**
+     * Valid From
+     */
+    valid_from: string;
+    /**
+     * Valid To
+     */
+    valid_to: string;
+    /**
+     * Patient Id
+     */
+    patient_id: string;
+    /**
+     * Tga Category
+     */
+    tga_category: string;
+    /**
+     * Dosage Form
+     */
+    dosage_form: string;
+    /**
+     * Approval Reference
+     */
+    approval_reference: string;
+    /**
+     * Creation Reason
+     */
+    creation_reason: string;
+};
+
+/**
+ * TgaApprovalDetail
+ *
+ * The detail read: the approval plus its supersede chain (T2-12).
+ */
+export type TgaApprovalDetail = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Tenant Id
+     */
+    tenant_id: string;
+    /**
+     * Patient Id
+     */
+    patient_id: string;
+    /**
+     * Tga Category
+     */
+    tga_category: string;
+    /**
+     * Dosage Form
+     */
+    dosage_form: string;
+    /**
+     * Approval Reference
+     */
+    approval_reference: string;
+    /**
+     * Valid From
+     */
+    valid_from: string;
+    /**
+     * Valid To
+     */
+    valid_to: string;
+    /**
+     * State
+     */
+    state: string;
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Created By
+     */
+    created_by: string;
+    /**
+     * Verified By
+     */
+    verified_by: string | null;
+    /**
+     * Verified At
+     */
+    verified_at: string | null;
+    /**
+     * Revoked By
+     */
+    revoked_by: string | null;
+    /**
+     * Revoked At
+     */
+    revoked_at: string | null;
+    /**
+     * Revoked Reason Code
+     */
+    revoked_reason_code: string | null;
+    /**
+     * Superseded By Id
+     */
+    superseded_by_id: string | null;
+    /**
+     * Supersedes Id
+     */
+    supersedes_id: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+    /**
+     * Supersede Chain
+     */
+    supersede_chain?: Array<SupersedeChainLink>;
+};
+
+/**
+ * TgaApprovalRead
+ *
+ * One approval. No `validity_interval` column, no internals, no document store key.
+ */
+export type TgaApprovalRead = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Tenant Id
+     */
+    tenant_id: string;
+    /**
+     * Patient Id
+     */
+    patient_id: string;
+    /**
+     * Tga Category
+     */
+    tga_category: string;
+    /**
+     * Dosage Form
+     */
+    dosage_form: string;
+    /**
+     * Approval Reference
+     */
+    approval_reference: string;
+    /**
+     * Valid From
+     */
+    valid_from: string;
+    /**
+     * Valid To
+     */
+    valid_to: string;
+    /**
+     * State
+     */
+    state: string;
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Created By
+     */
+    created_by: string;
+    /**
+     * Verified By
+     */
+    verified_by: string | null;
+    /**
+     * Verified At
+     */
+    verified_at: string | null;
+    /**
+     * Revoked By
+     */
+    revoked_by: string | null;
+    /**
+     * Revoked At
+     */
+    revoked_at: string | null;
+    /**
+     * Revoked Reason Code
+     */
+    revoked_reason_code: string | null;
+    /**
+     * Superseded By Id
+     */
+    superseded_by_id: string | null;
+    /**
+     * Supersedes Id
+     */
+    supersedes_id: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
+ * TgaApprovalRevoke
+ *
+ * `POST /api/v1/tga-approvals/{id}/revoke` — a mandatory reason **code** (R9, T2-14).
+ *
+ * A code, not free text: `03-design.md` fixes that for `revoked_reason_code`, and free text in a
+ * revocation reason is clinical narrative that would reach the audit trail and the logs.
+ */
+export type TgaApprovalRevoke = {
+    /**
+     * Reason Code
+     */
+    reason_code: string;
+};
+
+/**
+ * TgaApprovalSupersede
+ *
+ * `POST /api/v1/tga-approvals/{id}/supersede` — the replacement grant (T2-9, design §2).
+ *
+ * The replacement is created `PENDING` like any other manual entry: extensions and dosage changes
+ * require a new grant record, and a new grant record requires independent verification (R5, R12).
+ * What makes it a *supersede* is that `supersedes_id` names the grant it replaces, and the
+ * predecessor moves to `SUPERSEDED` — atomically, in the transaction that activates the
+ * replacement — rather than being edited in place.
+ */
+export type TgaApprovalSupersede = {
+    /**
+     * Valid From
+     */
+    valid_from: string;
+    /**
+     * Valid To
+     */
+    valid_to: string;
+    /**
+     * Approval Reference
+     */
+    approval_reference: string;
+    /**
+     * Creation Reason
+     */
+    creation_reason: string;
+};
+
+/**
+ * TgaApprovalVerify
+ *
+ * `POST /api/v1/tga-approvals/{id}/verify` — step 2 of four-eyes (R5, T2-13).
+ *
+ * The verifier must re-enter the application number from the source document: a verification that
+ * does not carry the reference it is verifying is not a check of anything, and the service refuses
+ * a mismatch. The actor is never in the body — it is the authenticated session.
+ */
+export type TgaApprovalVerify = {
+    /**
+     * Tga Application Number
+     */
+    tga_application_number: string;
+};
+
+/**
+ * TgaApprovalsPublic
+ *
+ * One keyset page of approvals.
+ */
+export type TgaApprovalsPublic = {
+    /**
+     * Data
+     */
+    data: Array<TgaApprovalRead>;
+    /**
+     * Count
+     */
+    count: number;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+};
+
+/**
+ * TgaMatchRequest
+ *
+ * `POST /api/v1/tga-approvals/match` — the point-in-time gate lookup (T2-27, T2-29).
+ *
+ * `POST` and not `GET`, deliberately: `patient_id`, the category, the dosage form and the service
+ * date are all PHI-adjacent, and a query string is written to access logs, proxy logs and browser
+ * history. `date_of_service` is the consultation date the decision is evaluated at — never "now",
+ * which is what makes a late expiry sweep unable to allow an expired approval (design, "Expiry
+ * handling").
+ */
+export type TgaMatchRequest = {
+    /**
+     * Patient Id
+     */
+    patient_id: string;
+    /**
+     * Tga Category
+     */
+    tga_category: string;
+    /**
+     * Dosage Form
+     */
+    dosage_form: string;
+    /**
+     * Date Of Service
+     */
+    date_of_service: string;
+};
+
+/**
+ * TgaMatchResponse
+ *
+ * The gate's answer (T2-27).
+ *
+ * `matched = false` is a `200`, not an error: a non-match is the safety gate working, and the
+ * reason code is what the prescribing screen explains. `state` and `approval_id` are populated even
+ * on a refusal when a row at the grain exists, so the clinician can be told *why*.
+ */
+export type TgaMatchResponse = {
+    /**
+     * Matched
+     */
+    matched: boolean;
+    /**
+     * Reason Code
+     */
+    reason_code: string | null;
+    /**
+     * State
+     */
+    state: string | null;
+    /**
+     * Approval Id
+     */
+    approval_id: string | null;
+    validity_interval: ValidityInterval | null;
+    /**
+     * Date Of Service
+     */
+    date_of_service: string;
+    /**
+     * Evaluated Timezone
+     */
+    evaluated_timezone: string;
+};
+
+/**
  * Token
  */
 export type Token = {
@@ -739,6 +1138,26 @@ export type ValidationError = {
     ctx?: {
         [key: string]: unknown;
     };
+};
+
+/**
+ * ValidityInterval
+ *
+ * The window a match was decided against, with the boundary rule it was read under.
+ */
+export type ValidityInterval = {
+    /**
+     * Valid From
+     */
+    valid_from: string;
+    /**
+     * Valid To
+     */
+    valid_to: string;
+    /**
+     * Bounds
+     */
+    bounds?: '[)';
 };
 
 export type healthReadinessData = {
@@ -1536,3 +1955,212 @@ export type auditReadAuditEventResponses = {
 };
 
 export type auditReadAuditEventResponse = auditReadAuditEventResponses[keyof auditReadAuditEventResponses];
+
+export type tgaApprovalsCreateTgaApprovalData = {
+    body: TgaApprovalCreate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/tga-approvals';
+};
+
+export type tgaApprovalsCreateTgaApprovalErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type tgaApprovalsCreateTgaApprovalError = tgaApprovalsCreateTgaApprovalErrors[keyof tgaApprovalsCreateTgaApprovalErrors];
+
+export type tgaApprovalsCreateTgaApprovalResponses = {
+    /**
+     * Successful Response
+     */
+    201: TgaApprovalRead;
+};
+
+export type tgaApprovalsCreateTgaApprovalResponse = tgaApprovalsCreateTgaApprovalResponses[keyof tgaApprovalsCreateTgaApprovalResponses];
+
+export type tgaApprovalsMatchTgaApprovalData = {
+    body: TgaMatchRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/tga-approvals/match';
+};
+
+export type tgaApprovalsMatchTgaApprovalErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type tgaApprovalsMatchTgaApprovalError = tgaApprovalsMatchTgaApprovalErrors[keyof tgaApprovalsMatchTgaApprovalErrors];
+
+export type tgaApprovalsMatchTgaApprovalResponses = {
+    /**
+     * Successful Response
+     */
+    200: TgaMatchResponse;
+};
+
+export type tgaApprovalsMatchTgaApprovalResponse = tgaApprovalsMatchTgaApprovalResponses[keyof tgaApprovalsMatchTgaApprovalResponses];
+
+export type tgaApprovalsReadTgaApprovalData = {
+    body?: never;
+    path: {
+        /**
+         * Approval Id
+         */
+        approval_id: string;
+    };
+    query?: never;
+    url: '/api/v1/tga-approvals/{approval_id}';
+};
+
+export type tgaApprovalsReadTgaApprovalErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type tgaApprovalsReadTgaApprovalError = tgaApprovalsReadTgaApprovalErrors[keyof tgaApprovalsReadTgaApprovalErrors];
+
+export type tgaApprovalsReadTgaApprovalResponses = {
+    /**
+     * Successful Response
+     */
+    200: TgaApprovalDetail;
+};
+
+export type tgaApprovalsReadTgaApprovalResponse = tgaApprovalsReadTgaApprovalResponses[keyof tgaApprovalsReadTgaApprovalResponses];
+
+export type tgaApprovalsVerifyTgaApprovalData = {
+    body: TgaApprovalVerify;
+    path: {
+        /**
+         * Approval Id
+         */
+        approval_id: string;
+    };
+    query?: never;
+    url: '/api/v1/tga-approvals/{approval_id}/verify';
+};
+
+export type tgaApprovalsVerifyTgaApprovalErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type tgaApprovalsVerifyTgaApprovalError = tgaApprovalsVerifyTgaApprovalErrors[keyof tgaApprovalsVerifyTgaApprovalErrors];
+
+export type tgaApprovalsVerifyTgaApprovalResponses = {
+    /**
+     * Successful Response
+     */
+    200: TgaApprovalRead;
+};
+
+export type tgaApprovalsVerifyTgaApprovalResponse = tgaApprovalsVerifyTgaApprovalResponses[keyof tgaApprovalsVerifyTgaApprovalResponses];
+
+export type tgaApprovalsRevokeTgaApprovalData = {
+    body: TgaApprovalRevoke;
+    path: {
+        /**
+         * Approval Id
+         */
+        approval_id: string;
+    };
+    query?: never;
+    url: '/api/v1/tga-approvals/{approval_id}/revoke';
+};
+
+export type tgaApprovalsRevokeTgaApprovalErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type tgaApprovalsRevokeTgaApprovalError = tgaApprovalsRevokeTgaApprovalErrors[keyof tgaApprovalsRevokeTgaApprovalErrors];
+
+export type tgaApprovalsRevokeTgaApprovalResponses = {
+    /**
+     * Successful Response
+     */
+    200: TgaApprovalRead;
+};
+
+export type tgaApprovalsRevokeTgaApprovalResponse = tgaApprovalsRevokeTgaApprovalResponses[keyof tgaApprovalsRevokeTgaApprovalResponses];
+
+export type tgaApprovalsSupersedeTgaApprovalData = {
+    body: TgaApprovalSupersede;
+    path: {
+        /**
+         * Approval Id
+         */
+        approval_id: string;
+    };
+    query?: never;
+    url: '/api/v1/tga-approvals/{approval_id}/supersede';
+};
+
+export type tgaApprovalsSupersedeTgaApprovalErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type tgaApprovalsSupersedeTgaApprovalError = tgaApprovalsSupersedeTgaApprovalErrors[keyof tgaApprovalsSupersedeTgaApprovalErrors];
+
+export type tgaApprovalsSupersedeTgaApprovalResponses = {
+    /**
+     * Successful Response
+     */
+    201: TgaApprovalRead;
+};
+
+export type tgaApprovalsSupersedeTgaApprovalResponse = tgaApprovalsSupersedeTgaApprovalResponses[keyof tgaApprovalsSupersedeTgaApprovalResponses];
+
+export type tgaApprovalsListPatientTgaApprovalsData = {
+    body?: never;
+    path: {
+        /**
+         * Patient Id
+         */
+        patient_id: string;
+    };
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+    };
+    url: '/api/v1/patients/{patient_id}/tga-approvals';
+};
+
+export type tgaApprovalsListPatientTgaApprovalsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type tgaApprovalsListPatientTgaApprovalsError = tgaApprovalsListPatientTgaApprovalsErrors[keyof tgaApprovalsListPatientTgaApprovalsErrors];
+
+export type tgaApprovalsListPatientTgaApprovalsResponses = {
+    /**
+     * Successful Response
+     */
+    200: TgaApprovalsPublic;
+};
+
+export type tgaApprovalsListPatientTgaApprovalsResponse = tgaApprovalsListPatientTgaApprovalsResponses[keyof tgaApprovalsListPatientTgaApprovalsResponses];

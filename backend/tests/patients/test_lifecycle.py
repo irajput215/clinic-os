@@ -127,7 +127,17 @@ def test_list_limit_is_capped_by_the_server_maximum(api: PatientsApi) -> None:
 def test_the_four_declared_paths_are_served() -> None:
     """Exactly the declared paths, with no trailing slash and no `DELETE`."""
     openapi = app.openapi()
-    paths = sorted(path for path in openapi["paths"] if path.startswith(PATIENTS_URL))
+    # `GET /api/v1/patients/{patient_id}/tga-approvals` is feature 08's route, not this module's: the
+    # design names that path, and the module that owns the resource owns the route (it is declared in
+    # `app/modules/tga_approvals/router.py`). It is filtered out by its exact path — not by a name
+    # pattern — so this census stays about the patients module, and stays exact: a fourth patients
+    # route, or a trailing-slash variant of any of these, still fails the assertion below.
+    owned_by_another_module = (f"{PATIENTS_URL}/{{patient_id}}/tga-approvals",)
+    paths = sorted(
+        path
+        for path in openapi["paths"]
+        if path.startswith(PATIENTS_URL) and path not in owned_by_another_module
+    )
 
     assert paths == [PATIENTS_URL, f"{PATIENTS_URL}/{{patient_id}}"]
     assert set(openapi["paths"][PATIENTS_URL]) == {"post", "get"}

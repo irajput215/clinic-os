@@ -64,8 +64,8 @@ from app.modules.tga_approvals.schemas import (
     TgaApprovalCreate,
     TgaApprovalDetail,
     TgaApprovalRead,
-    TgaApprovalsPublic,
     TgaApprovalRevoke,
+    TgaApprovalsPublic,
     TgaApprovalSupersede,
     TgaApprovalVerify,
     TgaMatchRequest,
@@ -127,7 +127,9 @@ def _authorize(
     enforce(decision)
 
 
-def _enforce(actor: Actor, permission: str, resource: ResourceRef | None = None) -> None:
+def _enforce(
+    actor: Actor, permission: str, resource: ResourceRef | None = None
+) -> None:
     """Apply the policy decision for a **read**, without a denial event.
 
     The platform's audit catalogue has no TGA read action (`app/modules/audit/actions.py` is a closed
@@ -146,7 +148,10 @@ def _patient_exists(actor: Actor, patient_id: uuid.UUID) -> None:
     facade (`docs/reference/build-contract.md` §7), and `None` is that facade's answer for "absent"
     and "another tenant's" alike, so the refusal discloses nothing (R8).
     """
-    if patients_service.get_patient(tenant_id=actor.tenant_id, patient_id=patient_id) is None:
+    if (
+        patients_service.get_patient(tenant_id=actor.tenant_id, patient_id=patient_id)
+        is None
+    ):
         raise _not_found()
 
 
@@ -155,7 +160,9 @@ def create_tga_approval(
     *, actor: ActorDep, approval_in: TgaApprovalCreate
 ) -> TgaApprovalRead:
     """Record a manual entry. It starts `PENDING`; a second clinician activates it (R1, R5, US-1)."""
-    _authorize(actor, TGA_APPROVAL_PERMISSIONS["create"], action=service.APPROVAL_CREATE)
+    _authorize(
+        actor, TGA_APPROVAL_PERMISSIONS["create"], action=service.APPROVAL_CREATE
+    )
     _patient_exists(actor, approval_in.patient_id)
     result = service.create_approval(
         tenant_id=actor.tenant_id,
@@ -175,7 +182,9 @@ def list_patient_tga_approvals(
     *,
     actor: ActorDep,
     patient_id: uuid.UUID,
-    limit: Annotated[int, Query(ge=1, le=service.MAX_PAGE_SIZE)] = service.DEFAULT_PAGE_SIZE,
+    limit: Annotated[
+        int, Query(ge=1, le=service.MAX_PAGE_SIZE)
+    ] = service.DEFAULT_PAGE_SIZE,
     cursor: str | None = None,
 ) -> TgaApprovalsPublic:
     """A patient's approvals, keyset-paginated, tenant-scoped by RLS (F15, US-2)."""
@@ -216,9 +225,7 @@ def match_tga_approval(
 def read_tga_approval(*, actor: ActorDep, approval_id: uuid.UUID) -> TgaApprovalDetail:
     """One approval and its supersede chain. Another tenant's id is `404`, never `403` (R8, S1)."""
     _enforce(actor, TGA_APPROVAL_READ)
-    detail = service.get_approval(
-        tenant_id=actor.tenant_id, approval_id=approval_id
-    )
+    detail = service.get_approval(tenant_id=actor.tenant_id, approval_id=approval_id)
     if detail is None:
         raise _not_found()
     return detail

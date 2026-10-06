@@ -158,7 +158,9 @@ def test_every_terminal_state_refuses_every_outbound_transition() -> None:
     for terminal in ("EXPIRED", "REJECTED", "REVOKED", "SUPERSEDED"):
         assert LEGAL_TRANSITIONS[terminal] == frozenset()
     assert LEGAL_TRANSITIONS["PENDING"] == frozenset({"ACTIVE", "REJECTED", "REVOKED"})
-    assert LEGAL_TRANSITIONS["ACTIVE"] == frozenset({"SUPERSEDED", "EXPIRED", "REVOKED"})
+    assert LEGAL_TRANSITIONS["ACTIVE"] == frozenset(
+        {"SUPERSEDED", "EXPIRED", "REVOKED"}
+    )
 
 
 def test_revoke_requires_a_reason_code_and_stores_it(
@@ -183,9 +185,7 @@ def test_revoke_requires_a_reason_code_and_stores_it(
     other = api.create(
         clinic.owner, clinic.patient_id, approval_reference="TGA-2026-000125"
     )
-    free_text = api.revoke(
-        clinic.owner, other["id"], reason_code="patient asked me to"
-    )
+    free_text = api.revoke(clinic.owner, other["id"], reason_code="patient asked me to")
     assert free_text.status_code == 422, free_text.text
 
 
@@ -245,8 +245,8 @@ def test_the_half_open_boundary_decides_when_a_row_is_due(
 
 def _sydney_today() -> date:
     """Today in `Australia/Sydney`, read from the same zone constant the service uses."""
-    from zoneinfo import ZoneInfo
     from datetime import datetime
+    from zoneinfo import ZoneInfo
 
     return datetime.now(ZoneInfo(service.SYDNEY_TIMEZONE)).date()
 
@@ -283,7 +283,9 @@ def test_supersede_leaves_exactly_one_live_record_and_a_walkable_chain(
 
     predecessor = api.row(first["id"])
     assert predecessor["state"] == "SUPERSEDED"
-    assert predecessor["superseded_by_id"] == second["id"]
+    # `api.row` reads the column through SQLAlchemy, which hands back a `uuid.UUID`; the API body
+    # carries it as a string. Coerced, as `test_verification.py` does for `resource_id`.
+    assert predecessor["superseded_by_id"] == uuid.UUID(second["id"])
     assert api.row(second["id"])["state"] == "ACTIVE"
 
     detail = api.read(clinic.owner, first["id"])
@@ -294,7 +296,9 @@ def test_supersede_leaves_exactly_one_live_record_and_a_walkable_chain(
     assert len(live) == 1 and live[0]["id"] == second["id"]
 
 
-def test_a_duplicate_grain_entry_is_refused(api: TgaApi, clinic: TenantWithPatient) -> None:
+def test_a_duplicate_grain_entry_is_refused(
+    api: TgaApi, clinic: TenantWithPatient
+) -> None:
     """T2-12: the same grain and window while a live row exists is `409 DUPLICATE_APPROVAL_GRAIN`."""
     api.create(clinic.owner, clinic.patient_id)
     duplicate = api.create_raw(clinic.owner, clinic.patient_id)

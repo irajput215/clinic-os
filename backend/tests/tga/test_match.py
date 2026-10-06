@@ -42,7 +42,12 @@ def test_the_boundary_is_half_open_and_lives_in_one_function() -> None:
 
 
 def _active_approval(
-    api: TgaApi, clinic: TenantWithPatient, *, valid_from: str, valid_to: str, reference: str
+    api: TgaApi,
+    clinic: TenantWithPatient,
+    *,
+    valid_from: str,
+    valid_to: str,
+    reference: str,
 ) -> dict[str, object]:
     verifier = api.second_clinician(owner=clinic.owner)
     approval = api.create(
@@ -115,7 +120,9 @@ def test_the_two_dates_around_the_boundary_decide_it(
     assert before.json()["reason_code"] == MatchReason.NOT_YET_EFFECTIVE.value
 
 
-def test_no_row_at_the_grain_is_not_found(api: TgaApi, clinic: TenantWithPatient) -> None:
+def test_no_row_at_the_grain_is_not_found(
+    api: TgaApi, clinic: TenantWithPatient
+) -> None:
     """The negative matrix's first row: no approval for the patient at all."""
     response = api.match(clinic.owner, clinic.patient_id)
     assert response.status_code == 200, response.text
@@ -157,9 +164,7 @@ def test_every_non_active_state_blocks_with_its_own_reason(
         "EXPIRED": MatchReason.EXPIRED,
     }
     for index, (state, reason) in enumerate(expected.items()):
-        patient = api.create_patient(
-            clinic.owner, family_name=f"Synthetic{index}"
-        )
+        patient = api.create_patient(clinic.owner, family_name=f"Synthetic{index}")
         api.insert_approval(
             tenant_id=clinic.owner.tenant_id,
             patient_id=patient,

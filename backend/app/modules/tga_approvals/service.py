@@ -252,10 +252,14 @@ def service_date_today(session: Session) -> date:
     instances disagree — or a container in UTC during a Sydney evening — would otherwise expire a
     different set of rows depending on which worker ran.
     """
-    value = session.connection().execute(
-        text("SELECT (CURRENT_TIMESTAMP AT TIME ZONE :zone)::date"),
-        {"zone": SYDNEY_TIMEZONE},
-    ).scalar_one()
+    value = (
+        session.connection()
+        .execute(
+            text("SELECT (CURRENT_TIMESTAMP AT TIME ZONE :zone)::date"),
+            {"zone": SYDNEY_TIMEZONE},
+        )
+        .scalar_one()
+    )
     assert isinstance(value, date), "the database clock must answer with a date"
     return value
 
@@ -334,7 +338,9 @@ def audit_denial(
     with tenant_transaction(
         tenant_id=tenant_id, actor_id=actor_id, actor_role=actor_role
     ) as session:
-        _record(session, action=action, resource_id=None, result="DENIED", reason=reason)
+        _record(
+            session, action=action, resource_id=None, result="DENIED", reason=reason
+        )
 
 
 # --------------------------------------------------------------------------------------------
@@ -372,15 +378,15 @@ def _chain(
     replacement. The walk is bounded, so a corrupt cycle terminates rather than hanging a request.
     """
     seen = {row.id}
-    links: list[SupersedeChainLink] = [
-        SupersedeChainLink.model_validate(row)
-    ]
+    links: list[SupersedeChainLink] = [SupersedeChainLink.model_validate(row)]
 
     current = row
     for _ in range(_MAX_CHAIN_HOPS):
         if current.supersedes_id is None or current.supersedes_id in seen:
             break
-        previous = _load(session, tenant_id=tenant_id, approval_id=current.supersedes_id)
+        previous = _load(
+            session, tenant_id=tenant_id, approval_id=current.supersedes_id
+        )
         if previous is None:
             break
         seen.add(previous.id)
@@ -491,9 +497,7 @@ def list_approvals(
         rows: Sequence[TgaApproval] = session.exec(
             select(TgaApproval)
             .where(*conditions)
-            .order_by(
-                col(TgaApproval.created_at).desc(), col(TgaApproval.id).desc()
-            )
+            .order_by(col(TgaApproval.created_at).desc(), col(TgaApproval.id).desc())
             .limit(limit + 1)
         ).all()
         page, overflow = rows[:limit], rows[limit:]
@@ -814,7 +818,9 @@ def verify_approval(
     If the row was created by [`supersede_approval`][app.modules.tga_approvals.service.supersede_approval],
     its predecessor moves to `SUPERSEDED` in this same transaction, so the moment the replacement
     becomes live is the moment the old grant stops being live. Exactly one non-superseded record
-    remains, and the exclusion constraint proves it.
+    remains, and the exclusion constraint proves it. The predecessor is moved **first** — the
+    constraint is checked per statement, not at commit — and control 4 is settled before either
+    write, so a refusal can never commit a half-applied supersede.
     """
     with tenant_transaction(
         tenant_id=tenant_id, actor_id=actor_id, actor_role=actor_role
@@ -860,29 +866,34 @@ def verify_approval(
                 "The application number does not match the record being verified",
             )
 
-        try:
-            _transition(
+        predecessor = _predecessor_to_supersede(session, tenant_id=tenant_id, row=row)
+
+        # The legality of the replacement's own transition is settled **before** anything is
+        # written. A refusal is returned from inside the `with` block and the block commits — that is
+        # the whole point of the `Refusal` shape — so if the predecessor were superseded first and
+        # the replacement then turned out not to be activatable, the commit would leave the
+        # organisation with no live grant at the grain and no replacement to show for it.
+        if "ACTIVE" not in LEGAL_TRANSITIONS.get(row.state, frozenset()):
+            _record(
                 session,
-                tenant_id=tenant_id,
-                row=row,
-                to_state="ACTIVE",
-                reason=None,
-                actor_id=actor_id,
                 action=APPROVAL_VERIFY,
-                verified_by=actor_id,
+                resource_id=row.id,
+                result="DENIED",
+                reason=ILLEGAL_STATE_TRANSITION,
             )
-        except IllegalTransition:
             return _refuse(
                 ILLEGAL_STATE_TRANSITION,
                 status.HTTP_409_CONFLICT,
                 f"A {row.state} approval cannot be verified",
             )
 
-        _record(session, action=APPROVAL_VERIFY, resource_id=row.id)
-
-        predecessor = _predecessor_to_supersede(
-            session, tenant_id=tenant_id, row=row
-        )
+        # The predecessor leaves `ACTIVE` **before** the replacement enters it, and both statements
+        # are in this one transaction. The order is not a preference: `no_overlapping_active_approvals`
+        # is a partial exclusion constraint on `state = 'ACTIVE'` and PostgreSQL checks it per
+        # statement rather than at commit, so activating the replacement first collides with the very
+        # grant it replaces (measured — it raises `23P01` on the `UPDATE`). The grain is never
+        # unguarded: nothing outside this transaction can observe the instant between the two
+        # statements, and the exclusion constraint proves that the moment both are written.
         if predecessor is not None:
             _transition(
                 session,
@@ -894,6 +905,19 @@ def verify_approval(
                 action=APPROVAL_STATE_CHANGE,
                 superseded_by=row.id,
             )
+
+        _transition(
+            session,
+            tenant_id=tenant_id,
+            row=row,
+            to_state="ACTIVE",
+            reason=None,
+            actor_id=actor_id,
+            action=APPROVAL_VERIFY,
+            verified_by=actor_id,
+        )
+
+        _record(session, action=APPROVAL_VERIFY, resource_id=row.id)
 
         session.refresh(row)
         return _read(row)
@@ -1118,10 +1142,18 @@ def _decide(
 ) -> _Decision:
     """The negative decision matrix, in one place.
 
-    Order matters and is the order the matrix is written in: a row that exists but is not `ACTIVE`
-    is refused for the reason its state names, before its dates are considered; then the window is
-    evaluated at `date_of_service` through
-    [`within_validity_window`][app.modules.tga_approvals.service.within_validity_window].
+    The row that decides is the one whose window **contains `date_of_service`**, whatever its state:
+    the gate is asked about *this* consultation date, so a row that covers it explains the answer
+    better than a row that does not. An `ACTIVE` covering row allows; a covering row in any other
+    state blocks for the reason its own state names — which is the matrix's *"Superseded Row — In
+    window"* row, and the only reading under which `TGA_APPROVAL_SUPERSEDED` is reachable for a date
+    an approval actually covered.
+
+    Only when **no** row covers the date do the dates decide: an elapsed `ACTIVE` grant says
+    `EXPIRED`, one that has not started says `NOT_YET_EFFECTIVE`, both measured against
+    `date_of_service` through
+    [`within_validity_window`][app.modules.tga_approvals.service.within_validity_window] and never
+    against "now". With no live row at the grain at all, the most recent row's state is the reason.
 
     A row at a *different* grain is reported as a category or dosage-form mismatch rather than as
     "not found", because the two produce different clinical actions: a mismatch says the patient has
@@ -1146,20 +1178,28 @@ def _decide(
     # whose windows do not overlap — a renewal starting the day the previous grant ends is exactly
     # that case, and it is legal. The row that decides is therefore the one whose window contains the
     # service date, not simply the first `ACTIVE` row found.
+    covering = [
+        row
+        for row in same_grain
+        if within_validity_window(
+            valid_from=row.valid_from,
+            valid_to=row.valid_to,
+            date_of_service=date_of_service,
+        )
+    ]
+    live = [row for row in covering if row.state == "ACTIVE"]
+    if live:
+        return _Decision(reason=None, row=live[0])
+    if covering:
+        # A row covers the date and is not live. Its state is the reason, and the row is the one to
+        # show: `REVOKED`, `SUPERSEDED`, `REJECTED`, `PENDING` and a stale `EXPIRED` each have their
+        # own code in the matrix. `rows` arrives newest first, so the most recent covering row is
+        # taken when a grain holds more than one.
+        row = covering[0]
+        return _Decision(reason=_STATE_REASONS[row.state], row=row)
+
     active = [row for row in same_grain if row.state == "ACTIVE"]
     if active:
-        covering = [
-            row
-            for row in active
-            if within_validity_window(
-                valid_from=row.valid_from,
-                valid_to=row.valid_to,
-                date_of_service=date_of_service,
-            )
-        ]
-        if covering:
-            return _Decision(reason=None, row=covering[0])
-
         # Nothing covers the date. The reason is taken from the window that explains it: an elapsed
         # grant says `EXPIRED`, one that has not started says `NOT_YET_EFFECTIVE`. Both are decided
         # against `date_of_service` and neither is decided against "now".

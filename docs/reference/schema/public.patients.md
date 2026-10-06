@@ -13,7 +13,7 @@
 | family_name | varchar |  | false |  |  |  |
 | gender_identity | varchar |  | true |  |  |  |
 | given_name | varchar |  | false |  |  |  |
-| id | uuid | gen_random_uuid() | false | [public.patients](public.patients.md) |  |  |
+| id | uuid | gen_random_uuid() | false | [public.patients](public.patients.md) [public.tga_approvals](public.tga_approvals.md) |  |  |
 | ihi | bytea |  | true |  |  |  |
 | ihi_blind_index | bytea |  | true |  |  |  |
 | medicare_blind_index | bytea |  | true |  |  |  |
@@ -25,7 +25,7 @@
 | sex_at_birth | varchar |  | true |  |  |  |
 | state | varchar |  | true |  |  |  |
 | suburb | varchar |  | true |  |  |  |
-| tenant_id | uuid |  | false |  | [public.tenants](public.tenants.md) |  |
+| tenant_id | uuid |  | false | [public.tga_approvals](public.tga_approvals.md) | [public.tenants](public.tenants.md) |  |
 | updated_at | timestamp with time zone |  | false |  |  |  |
 
 ## Constraints
@@ -63,6 +63,7 @@
 erDiagram
 
 "public.patients" }o--o| "public.patients" : "FOREIGN KEY (merged_into_patient_id) REFERENCES patients(id) ON DELETE RESTRICT"
+"public.tga_approvals" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
 "public.patients" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 
 "public.patients" {
@@ -89,6 +90,31 @@ erDiagram
   varchar suburb
   uuid tenant_id FK
   timestamp_with_time_zone updated_at
+}
+"public.tga_approvals" {
+  varchar approval_reference
+  timestamp_with_time_zone created_at
+  uuid created_by
+  varchar creation_reason
+  varchar dosage_form
+  uuid id
+  uuid patient_id FK
+  timestamp_with_time_zone revoked_at
+  uuid revoked_by
+  varchar revoked_reason_code
+  varchar source
+  uuid source_document_id
+  varchar state
+  uuid superseded_by_id
+  uuid supersedes_id FK
+  uuid tenant_id FK
+  varchar tga_category
+  timestamp_with_time_zone updated_at
+  date valid_from
+  date valid_to
+  daterange validity_interval
+  timestamp_with_time_zone verified_at
+  uuid verified_by
 }
 "public.tenants" {
   timestamp_with_time_zone created_at

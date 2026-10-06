@@ -2,7 +2,7 @@
 
 import { type Client, type Options as Options2, type TDataShape, urlSearchParamsBodySerializer } from './client';
 import { client } from './client.gen';
-import type { auditListAuditEventsData, auditListAuditEventsErrors, auditListAuditEventsResponses, auditReadAuditEventData, auditReadAuditEventErrors, auditReadAuditEventResponses, healthReadinessData, healthReadinessErrors, healthReadinessResponses, loginLoginAccessTokenData, loginLoginAccessTokenErrors, loginLoginAccessTokenResponses, loginRecoverPasswordData, loginRecoverPasswordErrors, loginRecoverPasswordResponses, loginResetPasswordData, loginResetPasswordErrors, loginResetPasswordResponses, loginTestTokenData, loginTestTokenResponses, patientsCreatePatientData, patientsCreatePatientErrors, patientsCreatePatientResponses, patientsListPatientsData, patientsListPatientsErrors, patientsListPatientsResponses, patientsReadPatientData, patientsReadPatientErrors, patientsReadPatientResponses, patientsUpdatePatientData, patientsUpdatePatientErrors, patientsUpdatePatientResponses, permissionsListPermissionsData, permissionsListPermissionsResponses, rolesListRolesData, rolesListRolesResponses, usersAssignRoleData, usersAssignRoleErrors, usersAssignRoleResponses, usersCreateUserData, usersCreateUserErrors, usersCreateUserResponses, usersDeleteUserData, usersDeleteUserErrors, usersDeleteUserMeData, usersDeleteUserMeResponses, usersDeleteUserResponses, usersReadUserByIdData, usersReadUserByIdErrors, usersReadUserByIdResponses, usersReadUserMeData, usersReadUserMeResponses, usersReadUserPermissionsData, usersReadUserPermissionsErrors, usersReadUserPermissionsResponses, usersReadUserRolesData, usersReadUserRolesErrors, usersReadUserRolesResponses, usersReadUsersData, usersReadUsersErrors, usersReadUsersResponses, usersRegisterUserData, usersRegisterUserErrors, usersRegisterUserResponses, usersRevokeRoleData, usersRevokeRoleErrors, usersRevokeRoleResponses, usersUpdatePasswordMeData, usersUpdatePasswordMeErrors, usersUpdatePasswordMeResponses, usersUpdateUserData, usersUpdateUserErrors, usersUpdateUserMeData, usersUpdateUserMeErrors, usersUpdateUserMeResponses, usersUpdateUserResponses, utilsHealthCheckData, utilsHealthCheckResponses, utilsTestEmailData, utilsTestEmailErrors, utilsTestEmailResponses } from './types.gen';
+import type { auditListAuditEventsData, auditListAuditEventsErrors, auditListAuditEventsResponses, auditReadAuditEventData, auditReadAuditEventErrors, auditReadAuditEventResponses, healthReadinessData, healthReadinessErrors, healthReadinessResponses, loginLoginAccessTokenData, loginLoginAccessTokenErrors, loginLoginAccessTokenResponses, loginRecoverPasswordData, loginRecoverPasswordErrors, loginRecoverPasswordResponses, loginResetPasswordData, loginResetPasswordErrors, loginResetPasswordResponses, loginTestTokenData, loginTestTokenResponses, patientsCreatePatientData, patientsCreatePatientErrors, patientsCreatePatientResponses, patientsListPatientsData, patientsListPatientsErrors, patientsListPatientsResponses, patientsReadPatientData, patientsReadPatientErrors, patientsReadPatientResponses, patientsUpdatePatientData, patientsUpdatePatientErrors, patientsUpdatePatientResponses, permissionsListPermissionsData, permissionsListPermissionsResponses, rolesListRolesData, rolesListRolesResponses, tgaApprovalsCreateTgaApprovalData, tgaApprovalsCreateTgaApprovalErrors, tgaApprovalsCreateTgaApprovalResponses, tgaApprovalsListPatientTgaApprovalsData, tgaApprovalsListPatientTgaApprovalsErrors, tgaApprovalsListPatientTgaApprovalsResponses, tgaApprovalsMatchTgaApprovalData, tgaApprovalsMatchTgaApprovalErrors, tgaApprovalsMatchTgaApprovalResponses, tgaApprovalsReadTgaApprovalData, tgaApprovalsReadTgaApprovalErrors, tgaApprovalsReadTgaApprovalResponses, tgaApprovalsRevokeTgaApprovalData, tgaApprovalsRevokeTgaApprovalErrors, tgaApprovalsRevokeTgaApprovalResponses, tgaApprovalsSupersedeTgaApprovalData, tgaApprovalsSupersedeTgaApprovalErrors, tgaApprovalsSupersedeTgaApprovalResponses, tgaApprovalsVerifyTgaApprovalData, tgaApprovalsVerifyTgaApprovalErrors, tgaApprovalsVerifyTgaApprovalResponses, usersAssignRoleData, usersAssignRoleErrors, usersAssignRoleResponses, usersCreateUserData, usersCreateUserErrors, usersCreateUserResponses, usersDeleteUserData, usersDeleteUserErrors, usersDeleteUserMeData, usersDeleteUserMeResponses, usersDeleteUserResponses, usersReadUserByIdData, usersReadUserByIdErrors, usersReadUserByIdResponses, usersReadUserMeData, usersReadUserMeResponses, usersReadUserPermissionsData, usersReadUserPermissionsErrors, usersReadUserPermissionsResponses, usersReadUserRolesData, usersReadUserRolesErrors, usersReadUserRolesResponses, usersReadUsersData, usersReadUsersErrors, usersReadUsersResponses, usersRegisterUserData, usersRegisterUserErrors, usersRegisterUserResponses, usersRevokeRoleData, usersRevokeRoleErrors, usersRevokeRoleResponses, usersUpdatePasswordMeData, usersUpdatePasswordMeErrors, usersUpdatePasswordMeResponses, usersUpdateUserData, usersUpdateUserErrors, usersUpdateUserMeData, usersUpdateUserMeErrors, usersUpdateUserMeResponses, usersUpdateUserResponses, utilsHealthCheckData, utilsHealthCheckResponses, utilsTestEmailData, utilsTestEmailErrors, utilsTestEmailResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -508,6 +508,130 @@ export class AuditService {
             responseType: 'json',
             security: [{ scheme: 'bearer', type: 'http' }],
             url: '/api/v1/audit/events/{event_id}',
+            ...options
+        });
+    }
+}
+
+export class TgaApprovalsService {
+    /**
+     * Create Tga Approval
+     *
+     * Record a manual entry. It starts `PENDING`; a second clinician activates it (R1, R5, US-1).
+     */
+    public static approvalsCreateTgaApproval<ThrowOnError extends boolean = true>(options: Options<tgaApprovalsCreateTgaApprovalData, ThrowOnError>) {
+        return (options.client ?? client).post<tgaApprovalsCreateTgaApprovalResponses, tgaApprovalsCreateTgaApprovalErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/tga-approvals',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * Match Tga Approval
+     *
+     * Evaluate the grain at `date_of_service`. A non-match is a `200` with `matched = false`.
+     */
+    public static approvalsMatchTgaApproval<ThrowOnError extends boolean = true>(options: Options<tgaApprovalsMatchTgaApprovalData, ThrowOnError>) {
+        return (options.client ?? client).post<tgaApprovalsMatchTgaApprovalResponses, tgaApprovalsMatchTgaApprovalErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/tga-approvals/match',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * Read Tga Approval
+     *
+     * One approval and its supersede chain. Another tenant's id is `404`, never `403` (R8, S1).
+     */
+    public static approvalsReadTgaApproval<ThrowOnError extends boolean = true>(options: Options<tgaApprovalsReadTgaApprovalData, ThrowOnError>) {
+        return (options.client ?? client).get<tgaApprovalsReadTgaApprovalResponses, tgaApprovalsReadTgaApprovalErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/tga-approvals/{approval_id}',
+            ...options
+        });
+    }
+    
+    /**
+     * Verify Tga Approval
+     *
+     * Activate a pending approval. The creator cannot be the verifier (R5, T2-13, T2-15).
+     */
+    public static approvalsVerifyTgaApproval<ThrowOnError extends boolean = true>(options: Options<tgaApprovalsVerifyTgaApprovalData, ThrowOnError>) {
+        return (options.client ?? client).post<tgaApprovalsVerifyTgaApprovalResponses, tgaApprovalsVerifyTgaApprovalErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/tga-approvals/{approval_id}/verify',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * Revoke Tga Approval
+     *
+     * Revoke with a mandatory reason code. A revoked approval authorises nothing (R6, US-6).
+     */
+    public static approvalsRevokeTgaApproval<ThrowOnError extends boolean = true>(options: Options<tgaApprovalsRevokeTgaApprovalData, ThrowOnError>) {
+        return (options.client ?? client).post<tgaApprovalsRevokeTgaApprovalResponses, tgaApprovalsRevokeTgaApprovalErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/tga-approvals/{approval_id}/revoke',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * Supersede Tga Approval
+     *
+     * Create the replacement grant for an approval (T2-9).
+     *
+     * The replacement is `PENDING` like any manual entry: the predecessor becomes `SUPERSEDED` in the
+     * transaction that **verifies** the replacement, so a verified approval's grain and dates are never
+     * edited in place (R12) and no single actor can create and activate a grant (R5).
+     */
+    public static approvalsSupersedeTgaApproval<ThrowOnError extends boolean = true>(options: Options<tgaApprovalsSupersedeTgaApprovalData, ThrowOnError>) {
+        return (options.client ?? client).post<tgaApprovalsSupersedeTgaApprovalResponses, tgaApprovalsSupersedeTgaApprovalErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/tga-approvals/{approval_id}/supersede',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * List Patient Tga Approvals
+     *
+     * A patient's approvals, keyset-paginated, tenant-scoped by RLS (F15, US-2).
+     */
+    public static approvalsListPatientTgaApprovals<ThrowOnError extends boolean = true>(options: Options<tgaApprovalsListPatientTgaApprovalsData, ThrowOnError>) {
+        return (options.client ?? client).get<tgaApprovalsListPatientTgaApprovalsResponses, tgaApprovalsListPatientTgaApprovalsErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/patients/{patient_id}/tga-approvals',
             ...options
         });
     }

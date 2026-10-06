@@ -67,7 +67,9 @@ class TgaApi:
             self._tenant_ids.append(actor.tenant_id)
         return actor
 
-    def second_clinician(self, *, owner: ActorSession, role_code: str = "DOCTOR") -> ActorSession:
+    def second_clinician(
+        self, *, owner: ActorSession, role_code: str = "DOCTOR"
+    ) -> ActorSession:
         """A second account in the owner's organisation — the independent verifier of R5."""
         assert owner.tenant_id is not None
         return self.rbac.add_actor(
@@ -98,7 +100,9 @@ class TgaApi:
             headers=actor.headers,
         )
 
-    def create(self, actor: ActorSession, patient_id: uuid.UUID, **overrides: Any) -> dict[str, Any]:
+    def create(
+        self, actor: ActorSession, patient_id: uuid.UUID, **overrides: Any
+    ) -> dict[str, Any]:
         response = self.create_raw(actor, patient_id, **overrides)
         assert response.status_code == 201, response.text
         return response.json()
@@ -136,9 +140,15 @@ class TgaApi:
         )
 
     def revoke(
-        self, actor: ActorSession, approval_id: str, *, reason_code: str | None = "CLINICAL_ERROR"
+        self,
+        actor: ActorSession,
+        approval_id: str,
+        *,
+        reason_code: str | None = "CLINICAL_ERROR",
     ) -> Response:
-        body: dict[str, Any] = {} if reason_code is None else {"reason_code": reason_code}
+        body: dict[str, Any] = (
+            {} if reason_code is None else {"reason_code": reason_code}
+        )
         return self.client.post(
             f"{APPROVALS_URL}/{approval_id}/revoke", json=body, headers=actor.headers
         )
@@ -186,15 +196,17 @@ class TgaApi:
             )
             return [dict(row) for row in rows]
 
-    def audit_events(self, *, tenant_id: uuid.UUID, action: str) -> list[dict[str, Any]]:
+    def audit_events(
+        self, *, tenant_id: uuid.UUID, action: str
+    ) -> list[dict[str, Any]]:
         """The platform audit trail for one action, read as the owner."""
         with engine.connect() as conn:
             rows = (
                 conn.execute(
                     text(
-                        'SELECT action, result, reason, resource_id, actor_id, tenant_id'
-                        ' FROM audit_log WHERE tenant_id = :tenant_id AND action = :action'
-                        " ORDER BY \"timestamp\", event_id"
+                        "SELECT action, result, reason, resource_id, actor_id, tenant_id"
+                        " FROM audit_log WHERE tenant_id = :tenant_id AND action = :action"
+                        ' ORDER BY "timestamp", event_id'
                     ),
                     {"tenant_id": tenant_id, "action": action},
                 )
@@ -230,7 +242,9 @@ class TgaApi:
         verifier = verified_by or (uuid.uuid4() if state == "ACTIVE" else None)
         # An `ACTIVE` row must carry its verification (`ck_tga_approvals_active_verified`), and the
         # verifier must differ from the creator (`ck_tga_approvals_four_eyes`).
-        moment = verified_at or ("2026-01-02T00:00:00+00:00" if state == "ACTIVE" else None)
+        moment = verified_at or (
+            "2026-01-02T00:00:00+00:00" if state == "ACTIVE" else None
+        )
         with engine.begin() as conn:
             return uuid.UUID(
                 str(
@@ -266,8 +280,8 @@ class TgaApi:
                             "superseded_by_id": superseded_by_id,
                             "revoked_reason_code": revoked_reason_code,
                         },
-                    )
-                ).scalar_one()
+                    ).scalar_one()
+                )
             )
 
     def approval_count(self, tenant_id: uuid.UUID) -> int:

@@ -20,9 +20,10 @@ Three rules shape every schema here:
 
 import uuid
 from datetime import date, datetime
-from typing import Annotated, Final, Literal
+from typing import Annotated, Final, Literal, LiteralString
 
-from pydantic import BaseModel, ConfigDict, Field, PydanticCustomError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic_core import PydanticCustomError
 
 from app.modules.tga_approvals.models import (
     CATEGORY_PATTERN,
@@ -33,9 +34,10 @@ from app.modules.tga_approvals.models import (
 )
 
 # The code R3 names. It is a Pydantic error `type`, which is the one member of a `422` body that is
-# machine-readable and value-free.
-WINDOW_EXCEEDS_MAX_DURATION: Final[str] = "ERR_WINDOW_EXCEEDS_MAX_DURATION"
-WINDOW_NOT_FORWARD: Final[str] = "ERR_WINDOW_NOT_FORWARD"
+# machine-readable and value-free. `LiteralString`, not `str`: `pydantic_core` requires an error
+# `type` to be a literal, because a computed one would be a code no client could rely on.
+WINDOW_EXCEEDS_MAX_DURATION: Final[LiteralString] = "ERR_WINDOW_EXCEEDS_MAX_DURATION"
+WINDOW_NOT_FORWARD: Final[LiteralString] = "ERR_WINDOW_NOT_FORWARD"
 
 _TGA_CATEGORY = Annotated[str, Field(pattern=CATEGORY_PATTERN, max_length=32)]
 _DOSAGE_FORM = Annotated[str, Field(pattern=DOSAGE_FORM_PATTERN, max_length=32)]
@@ -51,7 +53,7 @@ def _max_valid_to(valid_from: date) -> date:
     """
     try:
         anniversary = valid_from.replace(year=valid_from.year + MAX_DURATION_YEARS)
-    except ValueError:  # 29 February -> 28 February, which is what PostgreSQL's interval does
+    except ValueError:  # 29 Feb clamps to 28 Feb, as PostgreSQL's interval does
         anniversary = valid_from.replace(
             year=valid_from.year + MAX_DURATION_YEARS, day=28
         )
@@ -67,7 +69,7 @@ class _WindowedRequest(BaseModel):
     valid_to: date
 
     @model_validator(mode="after")
-    def _window(self) -> "_WindowedRequest":
+    def _window(self) -> _WindowedRequest:
         if self.valid_to <= self.valid_from:
             raise PydanticCustomError(
                 WINDOW_NOT_FORWARD,

@@ -85,12 +85,24 @@ depends_on = None
 _TENANT_MATCH = "tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid"
 
 # The derived cast/index key. One expression, used by the trigger and by the check that documents it.
+#
+# The two places it appears do **not** spell it identically, and the difference is load-bearing:
+#
+# * in a `CHECK` constraint the bare column names resolve against the row being tested, so
+#   `daterange(valid_from, valid_to, '[)')` is the row's own dates;
+# * inside a PL/pgSQL function the bare names resolve against the function's variables — of which
+#   there are none — so the same text raises `UndefinedColumn: column "valid_from" does not exist`
+#   on the first write. The trigger must qualify the columns with `NEW.`.
+#
+# They are one expression conceptually and two strings here so a reader cannot copy the constraint's
+# text into the function and believe it is the same thing.
 _INTERVAL_SQL = "daterange(valid_from, valid_to, '[)')"
+_INTERVAL_NEW_SQL = "daterange(NEW.valid_from, NEW.valid_to, '[)')"
 
 _INTERVAL_FUNCTION = f"""
 CREATE OR REPLACE FUNCTION tga_approval_interval() RETURNS trigger AS $fn$
 BEGIN
-    NEW.validity_interval := {_INTERVAL_SQL};
+    NEW.validity_interval := {_INTERVAL_NEW_SQL};
     RETURN NEW;
 END;
 $fn$ LANGUAGE plpgsql;

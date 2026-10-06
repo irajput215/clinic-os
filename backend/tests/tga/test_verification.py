@@ -39,7 +39,9 @@ def test_the_creator_cannot_verify_their_own_entry(
     assert denials[0]["resource_id"] == uuid.UUID(approval["id"])
 
 
-def test_an_independent_clinician_verifies_it(api: TgaApi, clinic: TenantWithPatient) -> None:
+def test_an_independent_clinician_verifies_it(
+    api: TgaApi, clinic: TenantWithPatient
+) -> None:
     """F4, US-5: the second actor activates it, `verified_by`/`verified_at` are recorded, and the
     lifecycle carries both actors."""
     verifier = api.second_clinician(owner=clinic.owner)

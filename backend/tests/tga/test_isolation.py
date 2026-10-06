@@ -12,10 +12,10 @@ import uuid
 
 import pytest
 from sqlalchemy import text
-from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.exc import IntegrityError, ProgrammingError
 
 from app.core.db import engine
-from tests.tga.conftest import TenantWithPatient, TgaApi, problem_code
+from tests.tga.conftest import TenantWithPatient, TgaApi
 
 INSUFFICIENT_PRIVILEGE = "42501"
 
@@ -84,7 +84,9 @@ def test_the_match_route_does_not_answer_for_another_tenants_patient(
     assert response.json()["approval_id"] is None
 
 
-def test_the_app_role_sees_zero_foreign_rows(api: TgaApi, clinic: TenantWithPatient) -> None:
+def test_the_app_role_sees_zero_foreign_rows(
+    api: TgaApi, clinic: TenantWithPatient
+) -> None:
     """S2, S3: raw SQL as `clinos_app`, with no application filter, and with no tenant at all."""
     intruder = api.register(clinic_name="Synthetic Clinic B")
     approval = api.create(clinic.owner, clinic.patient_id)
@@ -107,7 +109,9 @@ def test_the_app_role_sees_zero_foreign_rows(api: TgaApi, clinic: TenantWithPati
             # No tenant context at all: `NULLIF(..., '')::uuid` is NULL, `tenant_id = NULL` matches
             # nothing, so the fail-closed answer is zero rows rather than every row.
             conn.execute(text("SELECT set_config('app.tenant_id', '', true)"))
-            total = conn.execute(text("SELECT count(*) FROM tga_approvals")).scalar_one()
+            total = conn.execute(
+                text("SELECT count(*) FROM tga_approvals")
+            ).scalar_one()
             assert int(total) == 0
 
 
@@ -147,7 +151,9 @@ def test_an_insert_that_forges_another_tenants_key_is_refused(
 def test_the_app_role_cannot_delete_or_truncate_an_approval() -> None:
     """S12c, R13: hard deletion is refused by **privilege**, not by convention."""
     for statement in ("DELETE FROM tga_approvals", "TRUNCATE tga_approvals"):
-        assert _statement_as_clinos_app(statement, {}) == INSUFFICIENT_PRIVILEGE, statement
+        assert _statement_as_clinos_app(statement, {}) == INSUFFICIENT_PRIVILEGE, (
+            statement
+        )
 
 
 def test_the_event_log_is_append_only_by_grant() -> None:
@@ -232,7 +238,10 @@ def test_a_patient_from_another_tenant_cannot_be_named(
                 text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
                 {"tenant_id": str(intruder.tenant_id)},
             )
-            with pytest.raises(ProgrammingError) as refused:
+            # `23503` is an *integrity* constraint violation (the composite foreign key), not the
+            # `42501` access-rule violation a policy raises — so SQLAlchemy surfaces it as
+            # `IntegrityError`. The SQLSTATE asserted below is the substance of the case.
+            with pytest.raises(IntegrityError) as refused:
                 conn.execute(
                     text(
                         "INSERT INTO tga_approvals (tenant_id, patient_id, tga_category,"

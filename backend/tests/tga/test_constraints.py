@@ -108,7 +108,9 @@ def test_adjacent_windows_do_not_overlap_because_the_boundary_is_half_open(
     assert api.row(str(renewal))["state"] == "ACTIVE"
 
 
-def test_two_tenants_may_hold_the_same_grain(api: TgaApi, clinic: TenantWithPatient) -> None:
+def test_two_tenants_may_hold_the_same_grain(
+    api: TgaApi, clinic: TenantWithPatient
+) -> None:
     """T2-3: the constraint is per tenant, so `tenant_id` leads it — a global collision would leak."""
     other = api.register(clinic_name="Synthetic Clinic B")
     assert clinic.owner.tenant_id is not None and other.tenant_id is not None
@@ -201,7 +203,7 @@ def test_four_eyes_is_a_database_check(api: TgaApi, clinic: TenantWithPatient) -
 
 
 def test_an_active_row_must_carry_its_verification(
-    api: TgaApi, clinic: TenantWithPatient
+    clinic: TenantWithPatient,
 ) -> None:
     """T2-4: `state = 'ACTIVE'` implies `verified_at IS NOT NULL`."""
     assert clinic.owner.tenant_id is not None
@@ -223,7 +225,9 @@ def test_an_active_row_must_carry_its_verification(
     assert "ck_tga_approvals_active_verified" in str(refused.value)
 
 
-def test_a_verified_approval_is_immutable(api: TgaApi, clinic: TenantWithPatient) -> None:
+def test_a_verified_approval_is_immutable(
+    api: TgaApi, clinic: TenantWithPatient
+) -> None:
     """F10, S12d, T-04.3: the trigger raises `VERIFIED_APPROVAL_IMMUTABLE` on the core fields."""
     assert clinic.owner.tenant_id is not None
     approval = api.insert_approval(

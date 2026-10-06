@@ -136,7 +136,9 @@ CODE_PATTERN = r"^[A-Z][A-Z0-9_]{0,63}$"
 # a leap day the way PostgreSQL's interval does (2024-02-29 + 2 years = 2026-02-28), so the two agree
 # on the boundary rather than on the easy cases only.
 MAX_DURATION_YEARS: Final[int] = 2
-MAX_DURATION_SQL: Final[str] = f"(valid_from + interval '{MAX_DURATION_YEARS} years')::date"
+MAX_DURATION_SQL: Final[str] = (
+    f"(valid_from + interval '{MAX_DURATION_YEARS} years')::date"
+)
 
 # A shared TypeEngine instance: types are immutable, and `sa_column` wants an instance.
 _TIMESTAMPTZ = sa.DateTime(timezone=True)
@@ -154,21 +156,15 @@ class TgaApproval(SQLModel, table=True):
         # R3 — the maximum validity window. Enforced here *and* in the service: the service answers
         # `422 ERR_WINDOW_EXCEEDS_MAX_DURATION` with a field error, and this refuses the row if the
         # service is ever bypassed.
-        sa.CheckConstraint(
-            f"valid_to <= {MAX_DURATION_SQL}", name="max_duration"
-        ),
+        sa.CheckConstraint(f"valid_to <= {MAX_DURATION_SQL}", name="max_duration"),
         # The window runs forwards. A zero-length or reversed window is not an approval.
         sa.CheckConstraint("valid_to > valid_from", name="window"),
         # R4 — the controlled state vocabulary.
         sa.CheckConstraint(f"state IN ({_STATE_SQL})", name="state"),
         sa.CheckConstraint(f"source IN ({_SOURCE_SQL})", name="source"),
         # HIGHLY_SENSITIVE shape, not a clinical vocabulary: see the module docstring.
-        sa.CheckConstraint(
-            f"tga_category ~ '{CATEGORY_PATTERN}'", name="tga_category"
-        ),
-        sa.CheckConstraint(
-            f"dosage_form ~ '{CATEGORY_PATTERN}'", name="dosage_form"
-        ),
+        sa.CheckConstraint(f"tga_category ~ '{CATEGORY_PATTERN}'", name="tga_category"),
+        sa.CheckConstraint(f"dosage_form ~ '{CATEGORY_PATTERN}'", name="dosage_form"),
         sa.CheckConstraint(
             f"approval_reference ~ '{REFERENCE_PATTERN}'", name="approval_reference"
         ),

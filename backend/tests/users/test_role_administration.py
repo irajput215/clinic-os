@@ -13,6 +13,7 @@ The denial path is asserted first, because a route that only works is not eviden
 import uuid
 
 from app.core.config import settings
+from app.modules.users_roles.catalog import PERMISSION_CATALOGUE
 from tests.utils.rbac import ActorSession, RbacApi
 
 ROLES_URL = f"{settings.API_V1_STR}/roles"
@@ -121,16 +122,24 @@ def test_a_caller_with_the_permission_lists_roles_with_their_bundles(
 def test_a_caller_with_the_permission_lists_the_permission_catalogue(
     rbac: RbacApi,
 ) -> None:
-    """R7: the catalogue is global reference data, read-only, and the 19 declared codes."""
+    """R7: the catalogue is global reference data, read-only, and exactly what `catalog.py` declares.
+
+    The expected set is read from the catalogue itself rather than from a count written down here:
+    feature 08 adds `tga_approval:revoke` (migration `e5a9d3b8c2f4`), and a magic number would make
+    every future permission a false failure. The assertion is still exact — the endpoint serves the
+    catalogue and nothing but the catalogue, with no duplicates.
+    """
     owner = rbac.register_tenant(clinic_name="Catalogue Clinic")
     assert owner.tenant_id is not None
 
     response = rbac.client.get(PERMISSIONS_URL, headers=owner.headers)
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["count"] == 19
+    declared = {code for code, _description in PERMISSION_CATALOGUE}
+    assert body["count"] == len(declared)
     codes = [permission["code"] for permission in body["data"]]
-    assert len(set(codes)) == 19
+    assert set(codes) == declared
+    assert len(codes) == len(declared), "the catalogue is served without duplicates"
     assert "users:manage" in codes
     # A candidate code is never granted (OPEN-1).
     assert "role:manage" not in codes
