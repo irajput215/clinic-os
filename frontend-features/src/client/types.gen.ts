@@ -132,6 +132,222 @@ export type Body_login_login_access_token = {
 };
 
 /**
+ * ClinicalRecordAppend
+ *
+ * The body of `PATCH /api/v1/clinical-records/{id}` and of `POST .../amendments`.
+ *
+ * Both routes append: the design says they are *"the same code path"*, so they share this schema.
+ * A version is a complete document, not a patch to be merged, so the narrative is required in
+ * full — an append that omitted it would have to copy the previous narrative forward, which would
+ * silently attribute old text to a new author and time.
+ *
+ * `amendment_reason` is the design's API field for the `reason` column. Requirement R7 makes it
+ * mandatory whenever the new version number is above 1; that check needs the record's current
+ * version, so it runs in the service with the record loaded, and answers
+ * `422 AMENDMENT_REASON_REQUIRED`.
+ */
+export type ClinicalRecordAppend = {
+    /**
+     * Body
+     */
+    body?: string | null;
+    /**
+     * Body Format
+     */
+    body_format?: string | null;
+    soap?: SoapNote | null;
+    /**
+     * Amendment Reason
+     */
+    amendment_reason?: string | null;
+};
+
+/**
+ * ClinicalRecordCreate
+ *
+ * The body of `POST /api/v1/clinical-records` (R1, R2).
+ *
+ * There is no `tenant_id`, `author_id`, `signed_at`, `version` or `current_version` field and
+ * there never will be: `extra="forbid"` turns one into a `422` (R2).
+ */
+export type ClinicalRecordCreate = {
+    /**
+     * Patient Id
+     */
+    patient_id: string;
+    /**
+     * Record Type
+     */
+    record_type?: string;
+    /**
+     * Body
+     */
+    body?: string | null;
+    /**
+     * Body Format
+     */
+    body_format?: string | null;
+    soap?: SoapNote | null;
+};
+
+/**
+ * ClinicalRecordDetail
+ *
+ * A record plus every version, ascending (R9). The shape `GET .../{id}` returns.
+ */
+export type ClinicalRecordDetail = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Patient Id
+     */
+    patient_id: string;
+    /**
+     * Record Type
+     */
+    record_type: string;
+    /**
+     * Author Id
+     */
+    author_id: string;
+    /**
+     * Current Version
+     */
+    current_version: number;
+    /**
+     * Signed At
+     */
+    signed_at?: string | null;
+    /**
+     * Deleted At
+     */
+    deleted_at?: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Versions
+     */
+    versions: Array<ClinicalRecordVersionRead>;
+};
+
+/**
+ * ClinicalRecordSummary
+ *
+ * One timeline entry: the record's metadata and its current version's narrative.
+ */
+export type ClinicalRecordSummary = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Patient Id
+     */
+    patient_id: string;
+    /**
+     * Record Type
+     */
+    record_type: string;
+    /**
+     * Author Id
+     */
+    author_id: string;
+    /**
+     * Current Version
+     */
+    current_version: number;
+    /**
+     * Signed At
+     */
+    signed_at?: string | null;
+    /**
+     * Deleted At
+     */
+    deleted_at?: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    latest_version: ClinicalRecordVersionRead;
+};
+
+/**
+ * ClinicalRecordVersionRead
+ *
+ * One version as the API returns it.
+ *
+ * No `tenant_id` is declared: the caller already knows its own tenant, and nothing that is not
+ * needed is exposed. `body` is `HIGHLY_SENSITIVE` and this model is the **only** place it is
+ * serialised — never into a log line, an error envelope or an audit payload (INV-5, R15).
+ */
+export type ClinicalRecordVersionRead = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Clinical Record Id
+     */
+    clinical_record_id: string;
+    /**
+     * Version
+     */
+    version: number;
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * Body Format
+     */
+    body_format: string;
+    /**
+     * Author Id
+     */
+    author_id: string;
+    /**
+     * Signed At
+     */
+    signed_at?: string | null;
+    /**
+     * Supersedes Version
+     */
+    supersedes_version?: number | null;
+    /**
+     * Amendment Reason
+     */
+    amendment_reason?: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+};
+
+/**
+ * ClinicalRecordsPublic
+ *
+ * A keyset page of the patient timeline plus the cursor for the next page.
+ */
+export type ClinicalRecordsPublic = {
+    /**
+     * Data
+     */
+    data: Array<ClinicalRecordSummary>;
+    /**
+     * Count
+     */
+    count: number;
+    /**
+     * Next Cursor
+     */
+    next_cursor?: string | null;
+};
+
+/**
  * HTTPValidationError
  */
 export type HTTPValidationError = {
@@ -477,6 +693,33 @@ export type RolesPublic = {
      * Count
      */
     count: number;
+};
+
+/**
+ * SoapNote
+ *
+ * The `subjective` / `objective` / `assessment` / `plan` authoring surface.
+ *
+ * This is a **serialisation** of the single narrative column, never a storage shape: the service
+ * renders it into `clinical_record_versions.body` and no SOAP column exists anywhere (R3).
+ */
+export type SoapNote = {
+    /**
+     * Subjective
+     */
+    subjective?: string | null;
+    /**
+     * Objective
+     */
+    objective?: string | null;
+    /**
+     * Assessment
+     */
+    assessment?: string | null;
+    /**
+     * Plan
+     */
+    plan?: string | null;
 };
 
 /**
@@ -1627,3 +1870,221 @@ export type auditReadAuditEventResponses = {
 };
 
 export type auditReadAuditEventResponse = auditReadAuditEventResponses[keyof auditReadAuditEventResponses];
+
+export type clinicalRecordsCreateClinicalRecordData = {
+    body: ClinicalRecordCreate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/clinical-records';
+};
+
+export type clinicalRecordsCreateClinicalRecordErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type clinicalRecordsCreateClinicalRecordError = clinicalRecordsCreateClinicalRecordErrors[keyof clinicalRecordsCreateClinicalRecordErrors];
+
+export type clinicalRecordsCreateClinicalRecordResponses = {
+    /**
+     * Successful Response
+     */
+    201: ClinicalRecordDetail;
+};
+
+export type clinicalRecordsCreateClinicalRecordResponse = clinicalRecordsCreateClinicalRecordResponses[keyof clinicalRecordsCreateClinicalRecordResponses];
+
+export type clinicalRecordsReadClinicalRecordData = {
+    body?: never;
+    path: {
+        /**
+         * Record Id
+         */
+        record_id: string;
+    };
+    query?: never;
+    url: '/api/v1/clinical-records/{record_id}';
+};
+
+export type clinicalRecordsReadClinicalRecordErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type clinicalRecordsReadClinicalRecordError = clinicalRecordsReadClinicalRecordErrors[keyof clinicalRecordsReadClinicalRecordErrors];
+
+export type clinicalRecordsReadClinicalRecordResponses = {
+    /**
+     * Successful Response
+     */
+    200: ClinicalRecordDetail;
+};
+
+export type clinicalRecordsReadClinicalRecordResponse = clinicalRecordsReadClinicalRecordResponses[keyof clinicalRecordsReadClinicalRecordResponses];
+
+export type clinicalRecordsAppendClinicalRecordVersionData = {
+    body: ClinicalRecordAppend;
+    path: {
+        /**
+         * Record Id
+         */
+        record_id: string;
+    };
+    query?: never;
+    url: '/api/v1/clinical-records/{record_id}';
+};
+
+export type clinicalRecordsAppendClinicalRecordVersionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type clinicalRecordsAppendClinicalRecordVersionError = clinicalRecordsAppendClinicalRecordVersionErrors[keyof clinicalRecordsAppendClinicalRecordVersionErrors];
+
+export type clinicalRecordsAppendClinicalRecordVersionResponses = {
+    /**
+     * Successful Response
+     */
+    200: ClinicalRecordDetail;
+};
+
+export type clinicalRecordsAppendClinicalRecordVersionResponse = clinicalRecordsAppendClinicalRecordVersionResponses[keyof clinicalRecordsAppendClinicalRecordVersionResponses];
+
+export type clinicalRecordsReadClinicalRecordVersionData = {
+    body?: never;
+    path: {
+        /**
+         * Record Id
+         */
+        record_id: string;
+        /**
+         * Version
+         */
+        version: number;
+    };
+    query?: never;
+    url: '/api/v1/clinical-records/{record_id}/versions/{version}';
+};
+
+export type clinicalRecordsReadClinicalRecordVersionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type clinicalRecordsReadClinicalRecordVersionError = clinicalRecordsReadClinicalRecordVersionErrors[keyof clinicalRecordsReadClinicalRecordVersionErrors];
+
+export type clinicalRecordsReadClinicalRecordVersionResponses = {
+    /**
+     * Successful Response
+     */
+    200: ClinicalRecordVersionRead;
+};
+
+export type clinicalRecordsReadClinicalRecordVersionResponse = clinicalRecordsReadClinicalRecordVersionResponses[keyof clinicalRecordsReadClinicalRecordVersionResponses];
+
+export type clinicalRecordsListPatientClinicalRecordsData = {
+    body?: never;
+    path: {
+        /**
+         * Patient Id
+         */
+        patient_id: string;
+    };
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+    };
+    url: '/api/v1/patients/{patient_id}/clinical-records';
+};
+
+export type clinicalRecordsListPatientClinicalRecordsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type clinicalRecordsListPatientClinicalRecordsError = clinicalRecordsListPatientClinicalRecordsErrors[keyof clinicalRecordsListPatientClinicalRecordsErrors];
+
+export type clinicalRecordsListPatientClinicalRecordsResponses = {
+    /**
+     * Successful Response
+     */
+    200: ClinicalRecordsPublic;
+};
+
+export type clinicalRecordsListPatientClinicalRecordsResponse = clinicalRecordsListPatientClinicalRecordsResponses[keyof clinicalRecordsListPatientClinicalRecordsResponses];
+
+export type clinicalRecordsAmendClinicalRecordData = {
+    body: ClinicalRecordAppend;
+    path: {
+        /**
+         * Record Id
+         */
+        record_id: string;
+    };
+    query?: never;
+    url: '/api/v1/clinical-records/{record_id}/amendments';
+};
+
+export type clinicalRecordsAmendClinicalRecordErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type clinicalRecordsAmendClinicalRecordError = clinicalRecordsAmendClinicalRecordErrors[keyof clinicalRecordsAmendClinicalRecordErrors];
+
+export type clinicalRecordsAmendClinicalRecordResponses = {
+    /**
+     * Successful Response
+     */
+    201: ClinicalRecordDetail;
+};
+
+export type clinicalRecordsAmendClinicalRecordResponse = clinicalRecordsAmendClinicalRecordResponses[keyof clinicalRecordsAmendClinicalRecordResponses];
+
+export type clinicalRecordsSignClinicalRecordData = {
+    body?: never;
+    path: {
+        /**
+         * Record Id
+         */
+        record_id: string;
+    };
+    query?: never;
+    url: '/api/v1/clinical-records/{record_id}/sign';
+};
+
+export type clinicalRecordsSignClinicalRecordErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type clinicalRecordsSignClinicalRecordError = clinicalRecordsSignClinicalRecordErrors[keyof clinicalRecordsSignClinicalRecordErrors];
+
+export type clinicalRecordsSignClinicalRecordResponses = {
+    /**
+     * Successful Response
+     */
+    200: ClinicalRecordDetail;
+};
+
+export type clinicalRecordsSignClinicalRecordResponse = clinicalRecordsSignClinicalRecordResponses[keyof clinicalRecordsSignClinicalRecordResponses];

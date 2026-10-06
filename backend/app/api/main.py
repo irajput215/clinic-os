@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.api.routes import health, login, users, utils
 from app.modules.audit.router import router as audit_router
+from app.modules.clinical_records.router import router as clinical_records_router
 from app.modules.identity_tenancy.router import router as tenants_router
 from app.modules.patients.router import router as patients_router
 from app.modules.users_roles.router import (
@@ -21,3 +22,4 @@ api_router.include_router(permissions_router)
 api_router.include_router(user_roles_router)
 api_router.include_router(tenants_router)
 api_router.include_router(audit_router)
+api_router.include_router(clinical_records_router)

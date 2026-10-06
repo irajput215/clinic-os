@@ -129,6 +129,18 @@ def test_the_four_declared_paths_are_served() -> None:
     openapi = app.openapi()
     paths = sorted(path for path in openapi["paths"] if path.startswith(PATIENTS_URL))
 
-    assert paths == [PATIENTS_URL, f"{PATIENTS_URL}/{{patient_id}}"]
+    # The patients feature declares four routes; it does not own the whole `/patients/` namespace.
+    # Feature 06 declares one more beneath it — `GET /api/v1/patients/{patient_id}/clinical-records`
+    # (`06-clinical-records/03-design.md`, "Endpoints") — so that path is named here rather than the
+    # assertion forbidding every nested path. The list stays exact: a route under `/patients/` that
+    # no design declares still fails, which is the property this test exists to protect.
+    clinical_records_path = f"{PATIENTS_URL}/{{patient_id}}/clinical-records"
+
+    assert paths == [
+        PATIENTS_URL,
+        f"{PATIENTS_URL}/{{patient_id}}",
+        clinical_records_path,
+    ]
     assert set(openapi["paths"][PATIENTS_URL]) == {"post", "get"}
     assert set(openapi["paths"][f"{PATIENTS_URL}/{{patient_id}}"]) == {"get", "patch"}
+    assert set(openapi["paths"][clinical_records_path]) == {"get"}
