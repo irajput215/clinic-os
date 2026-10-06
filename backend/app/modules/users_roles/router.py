@@ -92,19 +92,23 @@ is `grant_delete_on_the_rbac_link_tables`; the append-only audit trail is the hi
 - Authentication: Yes
 - Permission: `users:manage`
 - Tenant scope: both — the session resolves the tenant; both the target account and the role are matched against it
-- Ownership rule: the account, the role and the assignment all belong to the session's tenant; otherwise `404` and nothing is removed
+- Ownership rule: the account, the role and the assignment all belong to the session's tenant, and the removal must leave somebody who can manage users (R8) — otherwise `404`, or `409 LAST_ADMINISTRATOR`
 - Input schema: none — `user_id` and `role_id` are UUID path parameters
 - Output schema: none — `204 No Content` on success
 - Audit: deferred — feature 04 (audit log) is not built; the design names `ROLE_REVOKED`
 - Rate limit: 20/min per client address — the design (T-03.11) says per session; the in-process limiter keys on the connection address, reported
-- Errors: `401` (unauthenticated), `403` (`PERMISSION_NOT_HELD`, or no organisation on the account), `404` (absent account, role or assignment, or another tenant's), `422` (malformed UUID), `429`; fails closed = yes
+- Errors: `401` (unauthenticated), `403` (`PERMISSION_NOT_HELD`, or no organisation on the account), `404` (absent account, role or assignment, or another tenant's), `409` (`LAST_ADMINISTRATOR` — R8: removing it would leave the organisation with nobody holding `users:manage`), `422` (malformed UUID), `429`; fails closed = yes
 - Step-up: deferred — feature 02's step-up is not built and is blocked by D-003; the design requires a fresh, single-use, 5-minute passkey/hardware-key step-up for this route
 
 Out of scope for this slice, and why: the user-lifecycle routes (`GET`/`POST /users`,
 `POST /users/{id}/deactivate`) belong to T1-03, blocked by D-003; `PUT /roles/{id}/permissions`
-changes the fixed permission matrix and needs the step-up mechanism, so it is deferred with R8's
-"last administrator" rule; `GET /auth/capabilities` belongs to feature 02; and every audit event is
-deferred to feature 04.
+changes the fixed permission matrix and needs the step-up mechanism, so it is deferred; `GET
+/auth/capabilities` belongs to feature 02; and every audit event is deferred to feature 04.
+
+R8's other half — system roles are not deletable — has no route to enforce it on: there is no
+`DELETE /roles/{id}` in the design's endpoint table. Its "last Administrator permission cannot be
+removed" half is enforced on the revoke route above, because that is the operation that removes a
+granting role from an account.
 """
 
 import uuid
@@ -114,7 +118,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from app.api.deps import ActorDep
 from app.core.rate_limit import admin_rate_limit
 from app.modules.users_roles import service
-from app.modules.users_roles.catalog import USERS_ROLES_PERMISSIONS
+from app.modules.users_roles.catalog import LAST_ADMINISTRATOR, USERS_ROLES_PERMISSIONS
 from app.modules.users_roles.schemas import (
     PermissionsPublic,
     RoleAssignmentCreate,
@@ -225,11 +229,38 @@ def assign_role(
 
 
 @user_roles_router.delete(
-    "/{user_id}/roles/{role_id}", status_code=status.HTTP_204_NO_CONTENT
+    "/{user_id}/roles/{role_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    # R8's refusal is part of the contract, so it is declared: an organisation cannot lose its last
+    # holder of `users:manage`, and the generated client can type the answer.
+    responses={
+        status.HTTP_409_CONFLICT: {
+            "description": (
+                "Refused: this is the organisation's last role granting `users:manage` (R8). "
+                "Assign another administrator first."
+            )
+        }
+    },
 )
 def revoke_role(*, actor: ActorDep, user_id: uuid.UUID, role_id: uuid.UUID) -> Response:
-    """Revoke a role from an account. The delete is real; the audit trail is the history."""
+    """Revoke a role from an account. The delete is real; the audit trail is the history.
+
+    R8: the removal that would leave the organisation with nobody holding `users:manage` is refused
+    `409 LAST_ADMINISTRATOR` and nothing is removed.
+    """
     service.authorize(actor, USERS_ROLES_PERMISSIONS["revoke_role"])
-    if not service.revoke_role(actor=actor, user_id=user_id, role_id=role_id):
+    outcome = service.revoke_role(actor=actor, user_id=user_id, role_id=role_id)
+    if outcome is service.RevokeOutcome.LAST_ADMINISTRATOR:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": LAST_ADMINISTRATOR,
+                "message": (
+                    "This is the organisation's last account that can manage users; assign "
+                    "another administrator before revoking this role."
+                ),
+            },
+        )
+    if outcome is not service.RevokeOutcome.REVOKED:
         raise _not_found("Role assignment")
     return Response(status_code=status.HTTP_204_NO_CONTENT)

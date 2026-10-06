@@ -322,3 +322,80 @@ def test_a_body_field_the_design_does_not_expose_is_422(rbac: RbacApi) -> None:
     )
 
     assert rbac.client.post(url, json={}, headers=owner.headers).status_code == 422
+
+
+def test_revoking_the_last_role_granting_users_manage_is_409(rbac: RbacApi) -> None:
+    """R8: the organisation cannot lose its last holder of `users:manage`.
+
+    `PRACTICE_OWNER` is the tenant's first account and the only role granting `users:manage` here, so
+    removing it would leave nobody able to manage users. A refusal must also remove nothing, and the
+    tenant must still be able to manage users afterwards — a `409` that had already deleted the row
+    would be a lockout with extra steps.
+    """
+    owner = rbac.register_tenant(clinic_name="Last Administrator Clinic")
+    assert owner.tenant_id is not None
+    practice_owner_role = _role_id(rbac, owner, "PRACTICE_OWNER")
+
+    refused = rbac.client.delete(
+        f"{_user_roles_url(owner.user_id)}/{practice_owner_role}", headers=owner.headers
+    )
+    assert refused.status_code == 409, refused.text
+    assert _denied_code(refused) == "LAST_ADMINISTRATOR"
+    assert rbac.assignment_codes(tenant_id=owner.tenant_id, user_id=owner.user_id) == [
+        "PRACTICE_OWNER"
+    ], "a refused last-administrator revoke removed the assignment"
+    assert rbac.client.get(ROLES_URL, headers=owner.headers).status_code == 200
+
+
+def test_revoking_a_granting_role_is_allowed_while_another_holder_remains(
+    rbac: RbacApi,
+) -> None:
+    """R8 refuses the *last* granting role, not every granting role.
+
+    The owner grants `ADMINISTRATOR` to a second account — a bundle the owner holds — and only then
+    gives up `PRACTICE_OWNER`. The organisation still has an administrator, so the revoke is `204`.
+    """
+    owner = rbac.register_tenant(clinic_name="Second Administrator Clinic")
+    assert owner.tenant_id is not None
+    other = rbac.add_actor(tenant_id=owner.tenant_id, granted_by=owner.user_id)
+    administrator_role = _role_id(rbac, owner, "ADMINISTRATOR")
+    practice_owner_role = _role_id(rbac, owner, "PRACTICE_OWNER")
+
+    granted = rbac.client.post(
+        _user_roles_url(other.user_id),
+        json={"role_id": str(administrator_role)},
+        headers=owner.headers,
+    )
+    assert granted.status_code == 201, granted.text
+
+    revoked = rbac.client.delete(
+        f"{_user_roles_url(owner.user_id)}/{practice_owner_role}", headers=owner.headers
+    )
+    assert revoked.status_code == 204, revoked.text
+    assert rbac.assignment_codes(tenant_id=owner.tenant_id, user_id=owner.user_id) == []
+    # The new administrator can still reach the administration API.
+    assert rbac.client.get(ROLES_URL, headers=other.headers).status_code == 200
+
+
+def test_revoking_a_role_that_does_not_grant_users_manage_is_unaffected(
+    rbac: RbacApi,
+) -> None:
+    """R8 bites on the administering permission only; a clinical role revokes as before."""
+    owner = rbac.register_tenant(clinic_name="Clinical Revoke Clinic")
+    assert owner.tenant_id is not None
+    target = rbac.add_actor(tenant_id=owner.tenant_id, granted_by=owner.user_id)
+    doctor_role = _role_id(rbac, owner, "DOCTOR")
+
+    granted = rbac.client.post(
+        _user_roles_url(target.user_id),
+        json={"role_id": str(doctor_role)},
+        headers=owner.headers,
+    )
+    assert granted.status_code == 201, granted.text
+    revoked = rbac.client.delete(
+        f"{_user_roles_url(target.user_id)}/{doctor_role}", headers=owner.headers
+    )
+    assert revoked.status_code == 204, revoked.text
+    assert (
+        rbac.assignment_codes(tenant_id=owner.tenant_id, user_id=target.user_id) == []
+    )

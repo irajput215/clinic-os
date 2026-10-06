@@ -322,6 +322,9 @@ export class UsersService {
      * Revoke Role
      *
      * Revoke a role from an account. The delete is real; the audit trail is the history.
+     *
+     * R8: the removal that would leave the organisation with nobody holding `users:manage` is refused
+     * `409 LAST_ADMINISTRATOR` and nothing is removed.
      */
     public static revokeRole<ThrowOnError extends boolean = true>(options: Options<usersRevokeRoleData, ThrowOnError>) {
         return (options.client ?? client).delete<usersRevokeRoleResponses, usersRevokeRoleErrors, ThrowOnError>({

@@ -208,4 +208,35 @@ test.describe("Administration", () => {
     await expect(page.getByText("You do not have permission")).toBeVisible()
     await expect(page.getByTestId("error-component")).toHaveCount(0)
   })
+
+  test("refuses to revoke the organisation's last administrator (R8)", async ({
+    page,
+  }) => {
+    // A freshly registered organisation has exactly one account holding `users:manage`, so
+    // revoking its `PRACTICE_OWNER` is the removal R8 refuses. The API answers `409`
+    // `LAST_ADMINISTRATOR` and removes nothing; the dialog has to say why rather than show a
+    // generic failure, and the role must still be listed afterwards.
+    await registerClinicAndLogIn(page)
+
+    await page.goto("/admin?tab=access")
+    await expect(page.getByTestId("user-access-panel")).toBeVisible()
+    await expect(
+      page
+        .getByTestId("user-roles")
+        .getByText("PRACTICE_OWNER", { exact: true }),
+    ).toBeVisible()
+
+    await page.getByTestId("revoke-role-PRACTICE_OWNER").click()
+    await page.getByTestId("confirm-revoke-role").click()
+
+    const refused = page.getByTestId("revoke-error")
+    await expect(refused).toBeVisible()
+    await expect(refused).toContainText("last account that can manage users")
+    // Nothing was removed, so the list is unchanged rather than optimistically updated.
+    await expect(
+      page
+        .getByTestId("user-roles")
+        .getByText("PRACTICE_OWNER", { exact: true }),
+    ).toBeVisible()
+  })
 })
