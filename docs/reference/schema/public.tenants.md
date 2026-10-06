@@ -6,7 +6,7 @@
 | ---- | ---- | ------- | -------- | -------- | ------- | ------- |
 | created_at | timestamp with time zone |  | false |  |  |  |
 | data_region | varchar(32) |  | false |  |  |  |
-| id | uuid | gen_random_uuid() | false | [public.patients](public.patients.md) [public.role_permissions](public.role_permissions.md) [public.roles](public.roles.md) [public.user](public.user.md) [public.user_roles](public.user_roles.md) |  |  |
+| id | uuid | gen_random_uuid() | false | [public.care_relationships](public.care_relationships.md) [public.clinics](public.clinics.md) [public.patients](public.patients.md) [public.role_permissions](public.role_permissions.md) [public.roles](public.roles.md) [public.user](public.user.md) [public.user_roles](public.user_roles.md) |  |  |
 | legal_name | varchar(255) |  | false |  |  |  |
 | retention_profile | varchar(64) |  | false |  |  |  |
 | slug | varchar(64) |  | false |  |  |  |
@@ -41,6 +41,8 @@
 ```mermaid
 erDiagram
 
+"public.care_relationships" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.clinics" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.patients" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.role_permissions" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.roles" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
@@ -55,6 +57,27 @@ erDiagram
   varchar_64_ retention_profile
   varchar_64_ slug
   varchar_16_ status
+  timestamp_with_time_zone updated_at
+}
+"public.care_relationships" {
+  timestamp_with_time_zone active_from
+  timestamp_with_time_zone active_to
+  uuid clinic_id FK
+  timestamp_with_time_zone created_at
+  uuid id
+  uuid patient_id FK
+  uuid practitioner_id FK
+  varchar_128_ source
+  uuid tenant_id FK
+  timestamp_with_time_zone updated_at
+}
+"public.clinics" {
+  varchar_255_ address
+  timestamp_with_time_zone created_at
+  uuid id
+  varchar_255_ name
+  varchar_64_ phone
+  uuid tenant_id FK
   timestamp_with_time_zone updated_at
 }
 "public.patients" {

@@ -2,7 +2,7 @@
 
 import { type Client, type Options as Options2, type TDataShape, urlSearchParamsBodySerializer } from './client';
 import { client } from './client.gen';
-import type { healthReadinessData, healthReadinessErrors, healthReadinessResponses, loginLoginAccessTokenData, loginLoginAccessTokenErrors, loginLoginAccessTokenResponses, loginRecoverPasswordData, loginRecoverPasswordErrors, loginRecoverPasswordResponses, loginResetPasswordData, loginResetPasswordErrors, loginResetPasswordResponses, loginTestTokenData, loginTestTokenResponses, patientsCreatePatientData, patientsCreatePatientErrors, patientsCreatePatientResponses, patientsListPatientsData, patientsListPatientsErrors, patientsListPatientsResponses, patientsReadPatientData, patientsReadPatientErrors, patientsReadPatientResponses, patientsUpdatePatientData, patientsUpdatePatientErrors, patientsUpdatePatientResponses, permissionsListPermissionsData, permissionsListPermissionsResponses, rolesListRolesData, rolesListRolesResponses, usersAssignRoleData, usersAssignRoleErrors, usersAssignRoleResponses, usersCreateUserData, usersCreateUserErrors, usersCreateUserResponses, usersDeleteUserData, usersDeleteUserErrors, usersDeleteUserMeData, usersDeleteUserMeResponses, usersDeleteUserResponses, usersReadUserByIdData, usersReadUserByIdErrors, usersReadUserByIdResponses, usersReadUserMeData, usersReadUserMeResponses, usersReadUserPermissionsData, usersReadUserPermissionsErrors, usersReadUserPermissionsResponses, usersReadUserRolesData, usersReadUserRolesErrors, usersReadUserRolesResponses, usersReadUsersData, usersReadUsersErrors, usersReadUsersResponses, usersRegisterUserData, usersRegisterUserErrors, usersRegisterUserResponses, usersRevokeRoleData, usersRevokeRoleErrors, usersRevokeRoleResponses, usersUpdatePasswordMeData, usersUpdatePasswordMeErrors, usersUpdatePasswordMeResponses, usersUpdateUserData, usersUpdateUserErrors, usersUpdateUserMeData, usersUpdateUserMeErrors, usersUpdateUserMeResponses, usersUpdateUserResponses, utilsHealthCheckData, utilsHealthCheckResponses, utilsTestEmailData, utilsTestEmailErrors, utilsTestEmailResponses } from './types.gen';
+import type { healthReadinessData, healthReadinessErrors, healthReadinessResponses, loginLoginAccessTokenData, loginLoginAccessTokenErrors, loginLoginAccessTokenResponses, loginRecoverPasswordData, loginRecoverPasswordErrors, loginRecoverPasswordResponses, loginResetPasswordData, loginResetPasswordErrors, loginResetPasswordResponses, loginTestTokenData, loginTestTokenResponses, patientsCreatePatientData, patientsCreatePatientErrors, patientsCreatePatientResponses, patientsListPatientsData, patientsListPatientsErrors, patientsListPatientsResponses, patientsReadPatientData, patientsReadPatientErrors, patientsReadPatientResponses, patientsUpdatePatientData, patientsUpdatePatientErrors, patientsUpdatePatientResponses, permissionsListPermissionsData, permissionsListPermissionsResponses, rolesListRolesData, rolesListRolesResponses, tenantsReadCurrentTenantData, tenantsReadCurrentTenantResponses, tenantsUpdateCurrentTenantData, tenantsUpdateCurrentTenantErrors, tenantsUpdateCurrentTenantResponses, usersAssignRoleData, usersAssignRoleErrors, usersAssignRoleResponses, usersCreateUserData, usersCreateUserErrors, usersCreateUserResponses, usersDeleteUserData, usersDeleteUserErrors, usersDeleteUserMeData, usersDeleteUserMeResponses, usersDeleteUserResponses, usersReadUserByIdData, usersReadUserByIdErrors, usersReadUserByIdResponses, usersReadUserMeData, usersReadUserMeResponses, usersReadUserPermissionsData, usersReadUserPermissionsErrors, usersReadUserPermissionsResponses, usersReadUserRolesData, usersReadUserRolesErrors, usersReadUserRolesResponses, usersReadUsersData, usersReadUsersErrors, usersReadUsersResponses, usersRegisterUserData, usersRegisterUserErrors, usersRegisterUserResponses, usersRevokeRoleData, usersRevokeRoleErrors, usersRevokeRoleResponses, usersUpdatePasswordMeData, usersUpdatePasswordMeErrors, usersUpdatePasswordMeResponses, usersUpdateUserData, usersUpdateUserErrors, usersUpdateUserMeData, usersUpdateUserMeErrors, usersUpdateUserMeResponses, usersUpdateUserResponses, utilsHealthCheckData, utilsHealthCheckResponses, utilsTestEmailData, utilsTestEmailErrors, utilsTestEmailResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -456,6 +456,46 @@ export class PermissionsService {
             security: [{ scheme: 'bearer', type: 'http' }],
             url: '/api/v1/permissions',
             ...options
+        });
+    }
+}
+
+export class TenantsService {
+    /**
+     * Read Current Tenant
+     *
+     * Return the caller's own tenant. `retention_profile` is never part of the answer (US-1).
+     */
+    public static readCurrentTenant<ThrowOnError extends boolean = true>(options?: Options<tenantsReadCurrentTenantData, ThrowOnError>) {
+        return (options?.client ?? client).get<tenantsReadCurrentTenantResponses, unknown, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/tenants/current',
+            ...options
+        });
+    }
+    
+    /**
+     * Update Current Tenant
+     *
+     * Refuse a tenant security-setting change: the required step-up control is not built (R12).
+     *
+     * The body has already been validated by the time this runs — `TenantSettingsUpdate` declares no
+     * field and forbids extras, so a body `tenant_id` or any other name is a `422` from the validation
+     * layer and never reaches this function. What remains is the authorisation decision and the refusal
+     * that the missing step-up forces; the declaration on this module records why no success path exists
+     * and what the writer must emit when it does.
+     */
+    public static updateCurrentTenant<ThrowOnError extends boolean = true>(options: Options<tenantsUpdateCurrentTenantData, ThrowOnError>) {
+        return (options.client ?? client).patch<tenantsUpdateCurrentTenantResponses, tenantsUpdateCurrentTenantErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/tenants/current',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
         });
     }
 }
