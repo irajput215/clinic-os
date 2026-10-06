@@ -63,6 +63,7 @@ from app.modules.users_roles.policy import (
     enforce,
 )
 from app.modules.users_roles.schemas import (
+    OwnPermissionsRead,
     PermissionRead,
     PermissionsPublic,
     RoleRead,
@@ -87,6 +88,7 @@ __all__ = [
     "enforce",
     "list_permissions",
     "list_roles",
+    "own_permissions",
     "provision_tenant",
     "provision_tenant_in_transaction",
     "provision_tenant_roles",
@@ -495,6 +497,17 @@ def effective_permissions(
             if row.code in held
         ]
         return UserPermissionsRead(user_id=user_id, permissions=data, count=len(data))
+
+
+def own_permissions(actor: Actor) -> OwnPermissionsRead:
+    """The caller's own effective permission codes, sorted (`GET /users/me/permissions`).
+
+    The set is the one `actor_for` resolved for this request, from the session's user and tenant only,
+    under `tenant_transaction` and forced RLS, recomputed per request (R2). Reusing it rather than
+    querying again means the list the caller sees is exactly the set that authorises the same request,
+    and costs no second transaction. Nothing from the request body, path or query is read (INV-1).
+    """
+    return OwnPermissionsRead(permissions=sorted(actor.permissions))
 
 
 def assign_role(

@@ -76,6 +76,28 @@ is `grant_delete_on_the_rbac_link_tables`; the append-only audit trail is the hi
 - Errors: `401` (unauthenticated), `403` (`PERMISSION_NOT_HELD`, or no organisation on the account), `404` (absent or another tenant's account), `422` (malformed UUID), `429`; fails closed = yes
 - Step-up: no
 
+#### `GET /api/v1/users/me/permissions`
+- Authentication: Yes
+- Permission: none beyond an authenticated, active account in an active organisation - it is the
+  design's `GET /api/v1/auth/capabilities` row ("valid session", "advisory UI data only; never a
+  control") under the path `docs2/sdlc/01-auth-and-shell/api.md` names; the caller reads only its own set
+- Tenant scope: session - the user and the tenant both come from the session row; the route takes no
+  parameter at all, so there is no identifier a client could supply
+- Ownership rule: the set is the caller's own, resolved by `get_actor` under `tenant_transaction` and
+  forced RLS; another tenant's grants are unreachable by construction
+- Input schema: none - no parameters
+- Output schema: `OwnPermissionsRead` - `{"permissions": [code, ...]}`, sorted
+- Audit: none - `04-audit-log/05-data-and-audit.md`'s action catalogue is closed and names no event for
+  a permission read, exactly as for the role-read routes above
+- Rate limit: none - like `GET /users/me`, it is a self-service read the shell makes on every load;
+  the administrative limit would throttle ordinary navigation
+- Errors: `401` (unauthenticated or deactivated account), `403` (`NO_ORGANISATION`,
+  `TENANT_NOT_ACTIVE`); fails closed = yes. An account holding no role gets `200` with an empty list
+- Step-up: no
+
+It is served by `current_user_router`, which `app/api/main.py` mounts **before** `user_roles_router`,
+so the literal `me` segment is never captured by `/users/{user_id}/permissions` (a UUID, so `422`).
+
 #### `POST /api/v1/users/{user_id}/roles`
 - Authentication: Yes
 - Permission: `users:manage`
@@ -105,7 +127,8 @@ is `grant_delete_on_the_rbac_link_tables`; the append-only audit trail is the hi
 Out of scope for this slice, and why: the user-lifecycle routes (`GET`/`POST /users`,
 `POST /users/{id}/deactivate`) belong to T1-03, blocked by D-003; `PUT /roles/{id}/permissions`
 changes the fixed permission matrix and needs the step-up mechanism, so it is deferred; `GET
-/auth/capabilities` belongs to feature 02. The grant and the revoke emit their audit events as of
+/auth/capabilities` belongs to feature 02 (its permission half is served here as
+`GET /users/me/permissions`, the path the frontend contract names). The grant and the revoke emit their audit events as of
 feature 04; the role-read routes emit none, because `04-audit-log/05-data-and-audit.md` names no
 action for a role read.
 
@@ -124,6 +147,7 @@ from app.core.rate_limit import admin_rate_limit
 from app.modules.users_roles import service
 from app.modules.users_roles.catalog import LAST_ADMINISTRATOR, USERS_ROLES_PERMISSIONS
 from app.modules.users_roles.schemas import (
+    OwnPermissionsRead,
     PermissionsPublic,
     RoleAssignmentCreate,
     RoleRead,
@@ -146,6 +170,9 @@ permissions_router = APIRouter(
 user_roles_router = APIRouter(
     prefix="/users", tags=["users"], dependencies=_ADMIN_DEPENDENCIES
 )
+# The caller's own surface. Not administrative, so it carries neither the `users:manage` check nor
+# the administrative rate limit. It must be mounted before `user_roles_router` (see the declaration).
+current_user_router = APIRouter(prefix="/users", tags=["users"])
 
 
 def _not_found(what: str) -> HTTPException:
@@ -167,6 +194,12 @@ def list_permissions(*, actor: ActorDep) -> PermissionsPublic:
     """List the global permission catalogue (read-only reference data; R7)."""
     service.authorize(actor, USERS_ROLES_PERMISSIONS["list_permissions"])
     return service.list_permissions(tenant_id=actor.tenant_id)
+
+
+@current_user_router.get("/me/permissions", response_model=OwnPermissionsRead)
+def read_own_permissions(*, actor: ActorDep) -> OwnPermissionsRead:
+    """The caller's own effective permission codes. Advisory UI data; never a control."""
+    return service.own_permissions(actor)
 
 
 @user_roles_router.get("/{user_id}/roles", response_model=UserRolesPublic)

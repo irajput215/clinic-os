@@ -382,6 +382,23 @@ export type NewPassword = {
 };
 
 /**
+ * OwnPermissionsRead
+ *
+ * The caller's own effective permission codes, sorted (`GET /api/v1/users/me/permissions`).
+ *
+ * Advisory UI data: the shell reads it to hide controls a role cannot use. It is the design's
+ * `GET /api/v1/auth/capabilities` row (`03-design.md`, "Endpoints": *"advisory UI data only; never a
+ * control"*) under the path the frontend contract names. Every route still re-authorises
+ * server-side (INV-3). No user or tenant identifier is echoed back: the caller is the session.
+ */
+export type OwnPermissionsRead = {
+    /**
+     * Permissions
+     */
+    permissions: Array<string>;
+};
+
+/**
  * PatientCreate
  *
  * The body of `POST /api/v1/patients`.
@@ -2022,6 +2039,22 @@ export type permissionsListPermissionsResponses = {
 };
 
 export type permissionsListPermissionsResponse = permissionsListPermissionsResponses[keyof permissionsListPermissionsResponses];
+
+export type usersReadOwnPermissionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/users/me/permissions';
+};
+
+export type usersReadOwnPermissionsResponses = {
+    /**
+     * Successful Response
+     */
+    200: OwnPermissionsRead;
+};
+
+export type usersReadOwnPermissionsResponse = usersReadOwnPermissionsResponses[keyof usersReadOwnPermissionsResponses];
 
 export type usersReadUserRolesData = {
     body?: never;
