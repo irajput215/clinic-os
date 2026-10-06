@@ -36,9 +36,10 @@ from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from hmac import compare_digest
-from typing import Any, Final, Protocol
+from typing import Any, Final, Protocol, cast
 
 from sqlalchemy import and_, or_
+from sqlalchemy.sql.elements import ColumnElement
 from sqlmodel import Session, col, select, text
 
 from app.core.config import settings
@@ -597,7 +598,7 @@ def decode_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
     """The `(timestamp, event_id)` a cursor points at, or a refusal.
 
     Fails closed on every malformed input: wrong shape, bad base64, bad JSON, missing keys,
-    unparseable values, and a signature that does not match. There is no partial trust here — the
+    malformed values, and a signature that does not match. There is no partial trust here — the
     cursor is either the one this application issued or it is refused.
     """
     try:
@@ -619,48 +620,80 @@ def decode_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
     return timestamp, event_id
 
 
-def _read_statement(
-    filters: AuditFilters, cursor: tuple[datetime, uuid.UUID] | None
-) -> Any:
-    """The keyset query for one page, newest first.
+def _clause(expression: object) -> ColumnElement[bool]:
+    """A SQLAlchemy comparison, typed as the expression it actually is.
+
+    `Column("x") == 1` returns a `BinaryExpression[bool]` at runtime, but SQLAlchemy's own type stubs
+    declare the comparison dunders as returning `bool` (they must, to interoperate with every other
+    `ColumnOperators` implementation). mypy strict and ty therefore reject
+    `conditions: list[ColumnElement[bool]]` fed by those comparisons — a type error about the
+    library's stubs, not about this query. The cast is one function wide and says so, which is why it
+    is here rather than scattered through the builder.
+    """
+    return cast("ColumnElement[bool]", expression)
+
+
+def _read_rows(
+    session: Session,
+    *,
+    tenant_id: uuid.UUID,
+    filters: AuditFilters,
+    cursor: tuple[datetime, uuid.UUID] | None,
+    limit: int,
+) -> Sequence[AuditLogEntry]:
+    """One page of keyset results, newest first.
+
+    It executes rather than returning a statement on purpose. `select(AuditLogEntry)` is a
+    `SelectOfScalar` at runtime, while `sqlalchemy.SelectOfScalar` is not importable from the
+    library's public namespace in SQLAlchemy 2.0.51 — so a function that *returns* the statement has
+    to annotate a type the type checker will accept, and `Select[tuple[...]]` is not the same type
+    `Session.exec` overloads against. Executing here keeps the return type honest (`Sequence` of the
+    model) and needs no annotation the stubs disagree with.
 
     Newest first because an audit reader almost always wants the most recent events, and the
     `(tenant_id, timestamp DESC)` index the migration creates serves exactly that order. The cursor
     predicate is the strict row comparison `(timestamp, event_id) < (cursor_timestamp,
-    cursor_event_id)`, expanded because SQLAlchemy has no tuple-comparison shorthand that is portable.
+    cursor_event_id)`, expanded because SQLAlchemy has no portable tuple-comparison shorthand.
     """
-    statement = select(AuditLogEntry)
-    conditions = []
+    conditions: list[ColumnElement[bool]] = [
+        _clause(AuditLogEntry.tenant_id == tenant_id)
+    ]
     if filters.action is not None:
-        conditions.append(AuditLogEntry.action == filters.action)
+        conditions.append(_clause(AuditLogEntry.action == filters.action))
     if filters.actor_id is not None:
-        conditions.append(AuditLogEntry.actor_id == filters.actor_id)
+        conditions.append(_clause(AuditLogEntry.actor_id == filters.actor_id))
     if filters.resource_type is not None:
-        conditions.append(AuditLogEntry.resource_type == filters.resource_type)
+        conditions.append(_clause(AuditLogEntry.resource_type == filters.resource_type))
     if filters.resource_id is not None:
-        conditions.append(AuditLogEntry.resource_id == filters.resource_id)
+        conditions.append(_clause(AuditLogEntry.resource_id == filters.resource_id))
     if filters.result is not None:
-        conditions.append(AuditLogEntry.result == filters.result)
+        conditions.append(_clause(AuditLogEntry.result == filters.result))
     if filters.from_timestamp is not None:
-        conditions.append(AuditLogEntry.timestamp >= filters.from_timestamp)
+        conditions.append(_clause(AuditLogEntry.timestamp >= filters.from_timestamp))
     if filters.to_timestamp is not None:
-        conditions.append(AuditLogEntry.timestamp < filters.to_timestamp)
+        conditions.append(_clause(AuditLogEntry.timestamp < filters.to_timestamp))
     if cursor is not None:
         cursor_timestamp, cursor_event_id = cursor
         conditions.append(
-            or_(
-                AuditLogEntry.timestamp < cursor_timestamp,
-                and_(
-                    AuditLogEntry.timestamp == cursor_timestamp,
-                    AuditLogEntry.event_id < cursor_event_id,
-                ),
+            _clause(
+                or_(
+                    _clause(AuditLogEntry.timestamp < cursor_timestamp),
+                    and_(
+                        _clause(AuditLogEntry.timestamp == cursor_timestamp),
+                        _clause(AuditLogEntry.event_id < cursor_event_id),
+                    ),
+                )
             )
         )
-    if conditions:
-        statement = statement.where(*conditions)
-    return statement.order_by(
-        col(AuditLogEntry.timestamp).desc(), col(AuditLogEntry.event_id).desc()
+    statement = (
+        select(AuditLogEntry)
+        .where(*conditions)
+        .order_by(
+            col(AuditLogEntry.timestamp).desc(), col(AuditLogEntry.event_id).desc()
+        )
+        .limit(limit)
     )
+    return session.exec(statement).all()
 
 
 def read_page(
@@ -682,12 +715,13 @@ def read_page(
     """
     tenant_id = tenant_of(session)
     decoded = None if cursor is None else decode_cursor(cursor)
-    statement = (
-        _read_statement(filters, decoded)
-        .where(AuditLogEntry.tenant_id == tenant_id)
-        .limit(limit + 1)
+    rows = _read_rows(
+        session,
+        tenant_id=tenant_id,
+        filters=filters,
+        cursor=decoded,
+        limit=limit + 1,
     )
-    rows: Sequence[AuditLogEntry] = session.exec(statement).all()
     page, overflow = rows[:limit], rows[limit:]
     next_cursor = None if not overflow else encode_cursor(page[-1])
     return AuditPage(entries=page, next_cursor=next_cursor)

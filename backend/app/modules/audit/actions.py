@@ -18,7 +18,7 @@ Neither is resolved silently. Both are engineering decisions on an open item, re
 
 1. **`patient.create` / `patient.update` vs `patient.created` / `patient.updated`.** `05-patients/05-data-and-audit.md`
    lists `patient.created` and `patient.updated`, and then says, in the same section, *"Action names use
-   doc 07's **lowercase dotted** form"* — under which its own two rows are mis-spelled. Doc 07 §1, the
+   doc 07's **lowercase dotted** form"* — under which its own two rows are misspelled. Doc 07 §1, the
    document that owns the closed catalogue, names `patient.create` and `patient.update`. The catalogue
    is the authority, so those are the two names this module emits; the feature document's own header
    line is the instruction being followed, and its table is the typo.

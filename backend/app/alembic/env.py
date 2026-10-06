@@ -48,8 +48,9 @@ def include_object(object_, name, type_, reflected, compare_to):
 
 
 # Populated by `run_migrations_online` before the context is configured. Offline mode leaves it empty,
-# which is correct: offline autogenerate cannot create a partition either.
-_partitions = set()
+# which is correct: offline autogenerate cannot create a partition either. Annotated for the
+# type checkers: an empty literal infers as `set[Any]`, and the hook is `strict`.
+_partitions: set[str] = set()
 
 
 def _load_partitions():

@@ -72,7 +72,7 @@ from app.modules.patients.schemas import (
 # The two actions this module emits, named as doc 07 §1 names them — the closed catalogue
 # `docs/features/04-audit-log/05-data-and-audit.md` makes normative. `05-patients/05-data-and-audit.md`
 # writes `patient.created`/`patient.updated` in its own table and then says, in the same section,
-# *"Action names use doc 07's lowercase dotted form"* — under which its two rows are the mis-spelling.
+# *"Action names use doc 07's lowercase dotted form"* — under which its two rows are the misspelling.
 # The catalogue wins; the divergence is recorded in the PR.
 PATIENT_CREATE: str = "patient.create"
 PATIENT_UPDATE: str = "patient.update"
