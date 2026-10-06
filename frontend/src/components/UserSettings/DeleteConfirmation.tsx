@@ -27,7 +27,7 @@ const DeleteConfirmation = () => {
   const mutation = useMutation({
     mutationFn: () => UsersService.deleteUserMe(),
     onSuccess: () => {
-      showSuccessToast("Your account has been successfully deleted")
+      showSuccessToast("Your account has been deactivated")
       logout()
     },
     onError: handleError.bind(showErrorToast),
@@ -44,7 +44,7 @@ const DeleteConfirmation = () => {
     <Dialog>
       <DialogTrigger asChild>
         <Button variant="destructive" className="mt-3">
-          Delete Account
+          Deactivate Account
         </Button>
       </DialogTrigger>
       <DialogContent>
@@ -52,10 +52,9 @@ const DeleteConfirmation = () => {
           <DialogHeader>
             <DialogTitle>Confirmation Required</DialogTitle>
             <DialogDescription>
-              All your account data will be{" "}
-              <strong>permanently deleted.</strong> If you are sure, please
-              click <strong>"Confirm"</strong> to proceed. This action cannot be
-              undone.
+              Your account will be <strong>deactivated</strong>: you will be
+              signed out and can no longer sign in. Your records are kept. If
+              you are sure, please click <strong>"Confirm"</strong> to proceed.
             </DialogDescription>
           </DialogHeader>
 
@@ -70,7 +69,7 @@ const DeleteConfirmation = () => {
               type="submit"
               loading={mutation.isPending}
             >
-              Delete
+              Deactivate
             </LoadingButton>
           </DialogFooter>
         </form>
