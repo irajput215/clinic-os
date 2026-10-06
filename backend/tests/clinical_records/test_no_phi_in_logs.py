@@ -73,10 +73,17 @@ def test_narrative_never_reaches_logs_or_audit(
     assert "clinical_record.write" in actions
     assert "clinical_record.read" in actions
     # The reason the amendment event carries is a controlled code, never the clinician's text.
+    #
+    # Only the writes that *succeeded*: the refusal path records `clinical_record.write` too, and it
+    # legitimately carries the machine-readable code the refusal returned (`NOTE_ALREADY_SIGNED`) as
+    # its reason. Both are controlled codes. The event this assertion is about is the amendment — the
+    # one write that is handed a clinician's free-text reason and must not store it.
     amendment_events = [
         row
         for row in rows
-        if row["action"] == "clinical_record.write" and row["reason"] is not None
+        if row["action"] == "clinical_record.write"
+        and row["result"] == "SUCCESS"
+        and row["reason"] is not None
     ]
     assert amendment_events, "the amendment event was not written"
     for row in amendment_events:

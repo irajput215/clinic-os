@@ -8,7 +8,7 @@
 | email | varchar(255) |  | false |  |  |  |
 | full_name | varchar(255) |  | true |  |  |  |
 | hashed_password | varchar |  | false |  |  |  |
-| id | uuid |  | false | [public.user_roles](public.user_roles.md) |  |  |
+| id | uuid |  | false | [public.clinical_record_versions](public.clinical_record_versions.md) [public.clinical_records](public.clinical_records.md) [public.user_roles](public.user_roles.md) |  |  |
 | is_active | boolean |  | false |  |  |  |
 | is_superuser | boolean |  | false |  |  |  |
 | tenant_id | uuid |  | true |  | [public.tenants](public.tenants.md) |  |
@@ -38,6 +38,8 @@
 ```mermaid
 erDiagram
 
+"public.clinical_record_versions" }o--|| "public.user" : "FOREIGN KEY (author_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
+"public.clinical_records" }o--|| "public.user" : "FOREIGN KEY (author_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
 "public.user_roles" }o--|| "public.user" : "FOREIGN KEY (granted_by) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
 "public.user_roles" }o--|| "public.user" : "FOREIGN KEY (user_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
 "public.user" }o--o| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL"
@@ -50,6 +52,31 @@ erDiagram
   uuid id
   boolean is_active
   boolean is_superuser
+  uuid tenant_id FK
+}
+"public.clinical_record_versions" {
+  uuid author_id FK
+  varchar body
+  varchar body_format
+  uuid clinical_record_id FK
+  timestamp_with_time_zone created_at
+  uuid id
+  varchar reason
+  varchar signature_digest
+  timestamp_with_time_zone signed_at
+  integer supersedes_version
+  uuid tenant_id FK
+  integer version
+}
+"public.clinical_records" {
+  uuid author_id FK
+  timestamp_with_time_zone created_at
+  integer current_version
+  timestamp_with_time_zone deleted_at
+  uuid id
+  uuid patient_id FK
+  varchar record_type
+  timestamp_with_time_zone signed_at
   uuid tenant_id FK
 }
 "public.user_roles" {

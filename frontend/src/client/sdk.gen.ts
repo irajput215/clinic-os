@@ -2,7 +2,7 @@
 
 import { type Client, type Options as Options2, type TDataShape, urlSearchParamsBodySerializer } from './client';
 import { client } from './client.gen';
-import type { auditListAuditEventsData, auditListAuditEventsErrors, auditListAuditEventsResponses, auditReadAuditEventData, auditReadAuditEventErrors, auditReadAuditEventResponses, healthReadinessData, healthReadinessErrors, healthReadinessResponses, loginLoginAccessTokenData, loginLoginAccessTokenErrors, loginLoginAccessTokenResponses, loginRecoverPasswordData, loginRecoverPasswordErrors, loginRecoverPasswordResponses, loginResetPasswordData, loginResetPasswordErrors, loginResetPasswordResponses, loginTestTokenData, loginTestTokenResponses, patientsCreatePatientData, patientsCreatePatientErrors, patientsCreatePatientResponses, patientsListPatientsData, patientsListPatientsErrors, patientsListPatientsResponses, patientsReadPatientData, patientsReadPatientErrors, patientsReadPatientResponses, patientsUpdatePatientData, patientsUpdatePatientErrors, patientsUpdatePatientResponses, permissionsListPermissionsData, permissionsListPermissionsResponses, rolesListRolesData, rolesListRolesResponses, usersAssignRoleData, usersAssignRoleErrors, usersAssignRoleResponses, usersCreateUserData, usersCreateUserErrors, usersCreateUserResponses, usersDeleteUserData, usersDeleteUserErrors, usersDeleteUserMeData, usersDeleteUserMeResponses, usersDeleteUserResponses, usersReadUserByIdData, usersReadUserByIdErrors, usersReadUserByIdResponses, usersReadUserMeData, usersReadUserMeResponses, usersReadUserPermissionsData, usersReadUserPermissionsErrors, usersReadUserPermissionsResponses, usersReadUserRolesData, usersReadUserRolesErrors, usersReadUserRolesResponses, usersReadUsersData, usersReadUsersErrors, usersReadUsersResponses, usersRegisterUserData, usersRegisterUserErrors, usersRegisterUserResponses, usersRevokeRoleData, usersRevokeRoleErrors, usersRevokeRoleResponses, usersUpdatePasswordMeData, usersUpdatePasswordMeErrors, usersUpdatePasswordMeResponses, usersUpdateUserData, usersUpdateUserErrors, usersUpdateUserMeData, usersUpdateUserMeErrors, usersUpdateUserMeResponses, usersUpdateUserResponses, utilsHealthCheckData, utilsHealthCheckResponses, utilsTestEmailData, utilsTestEmailErrors, utilsTestEmailResponses } from './types.gen';
+import type { auditListAuditEventsData, auditListAuditEventsErrors, auditListAuditEventsResponses, auditReadAuditEventData, auditReadAuditEventErrors, auditReadAuditEventResponses, clinicalRecordsAmendClinicalRecordData, clinicalRecordsAmendClinicalRecordErrors, clinicalRecordsAmendClinicalRecordResponses, clinicalRecordsAppendClinicalRecordVersionData, clinicalRecordsAppendClinicalRecordVersionErrors, clinicalRecordsAppendClinicalRecordVersionResponses, clinicalRecordsCreateClinicalRecordData, clinicalRecordsCreateClinicalRecordErrors, clinicalRecordsCreateClinicalRecordResponses, clinicalRecordsListPatientClinicalRecordsData, clinicalRecordsListPatientClinicalRecordsErrors, clinicalRecordsListPatientClinicalRecordsResponses, clinicalRecordsReadClinicalRecordData, clinicalRecordsReadClinicalRecordErrors, clinicalRecordsReadClinicalRecordResponses, clinicalRecordsReadClinicalRecordVersionData, clinicalRecordsReadClinicalRecordVersionErrors, clinicalRecordsReadClinicalRecordVersionResponses, clinicalRecordsSignClinicalRecordData, clinicalRecordsSignClinicalRecordErrors, clinicalRecordsSignClinicalRecordResponses, healthReadinessData, healthReadinessErrors, healthReadinessResponses, loginLoginAccessTokenData, loginLoginAccessTokenErrors, loginLoginAccessTokenResponses, loginRecoverPasswordData, loginRecoverPasswordErrors, loginRecoverPasswordResponses, loginResetPasswordData, loginResetPasswordErrors, loginResetPasswordResponses, loginTestTokenData, loginTestTokenResponses, patientsCreatePatientData, patientsCreatePatientErrors, patientsCreatePatientResponses, patientsListPatientsData, patientsListPatientsErrors, patientsListPatientsResponses, patientsReadPatientData, patientsReadPatientErrors, patientsReadPatientResponses, patientsUpdatePatientData, patientsUpdatePatientErrors, patientsUpdatePatientResponses, permissionsListPermissionsData, permissionsListPermissionsResponses, rolesListRolesData, rolesListRolesResponses, usersAssignRoleData, usersAssignRoleErrors, usersAssignRoleResponses, usersCreateUserData, usersCreateUserErrors, usersCreateUserResponses, usersDeleteUserData, usersDeleteUserErrors, usersDeleteUserMeData, usersDeleteUserMeResponses, usersDeleteUserResponses, usersReadUserByIdData, usersReadUserByIdErrors, usersReadUserByIdResponses, usersReadUserMeData, usersReadUserMeResponses, usersReadUserPermissionsData, usersReadUserPermissionsErrors, usersReadUserPermissionsResponses, usersReadUserRolesData, usersReadUserRolesErrors, usersReadUserRolesResponses, usersReadUsersData, usersReadUsersErrors, usersReadUsersResponses, usersRegisterUserData, usersRegisterUserErrors, usersRegisterUserResponses, usersRevokeRoleData, usersRevokeRoleErrors, usersRevokeRoleResponses, usersUpdatePasswordMeData, usersUpdatePasswordMeErrors, usersUpdatePasswordMeResponses, usersUpdateUserData, usersUpdateUserErrors, usersUpdateUserMeData, usersUpdateUserMeErrors, usersUpdateUserMeResponses, usersUpdateUserResponses, utilsHealthCheckData, utilsHealthCheckResponses, utilsTestEmailData, utilsTestEmailErrors, utilsTestEmailResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -508,6 +508,118 @@ export class AuditService {
             responseType: 'json',
             security: [{ scheme: 'bearer', type: 'http' }],
             url: '/api/v1/audit/events/{event_id}',
+            ...options
+        });
+    }
+}
+
+export class ClinicalRecordsService {
+    /**
+     * Create Clinical Record
+     *
+     * Create a record and its version 1. Tenant and author come from the session (R1).
+     */
+    public static recordsCreateClinicalRecord<ThrowOnError extends boolean = true>(options: Options<clinicalRecordsCreateClinicalRecordData, ThrowOnError>) {
+        return (options.client ?? client).post<clinicalRecordsCreateClinicalRecordResponses, clinicalRecordsCreateClinicalRecordErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/clinical-records',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * Read Clinical Record
+     *
+     * One record plus its versions, ascending. Another tenant's record is `404`, never `403`.
+     */
+    public static recordsReadClinicalRecord<ThrowOnError extends boolean = true>(options: Options<clinicalRecordsReadClinicalRecordData, ThrowOnError>) {
+        return (options.client ?? client).get<clinicalRecordsReadClinicalRecordResponses, clinicalRecordsReadClinicalRecordErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/clinical-records/{record_id}',
+            ...options
+        });
+    }
+    
+    /**
+     * Append Clinical Record Version
+     *
+     * Append a version while the record is unsigned; once signed, `403 NOTE_ALREADY_SIGNED`.
+     */
+    public static recordsAppendClinicalRecordVersion<ThrowOnError extends boolean = true>(options: Options<clinicalRecordsAppendClinicalRecordVersionData, ThrowOnError>) {
+        return (options.client ?? client).patch<clinicalRecordsAppendClinicalRecordVersionResponses, clinicalRecordsAppendClinicalRecordVersionErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/clinical-records/{record_id}',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * Read Clinical Record Version
+     *
+     * One version of one record. A missing version is `404` with no partial record.
+     */
+    public static recordsReadClinicalRecordVersion<ThrowOnError extends boolean = true>(options: Options<clinicalRecordsReadClinicalRecordVersionData, ThrowOnError>) {
+        return (options.client ?? client).get<clinicalRecordsReadClinicalRecordVersionResponses, clinicalRecordsReadClinicalRecordVersionErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/clinical-records/{record_id}/versions/{version}',
+            ...options
+        });
+    }
+    
+    /**
+     * List Patient Clinical Records
+     *
+     * One keyset page of a patient's timeline, newest first. The read is audited.
+     */
+    public static recordsListPatientClinicalRecords<ThrowOnError extends boolean = true>(options: Options<clinicalRecordsListPatientClinicalRecordsData, ThrowOnError>) {
+        return (options.client ?? client).get<clinicalRecordsListPatientClinicalRecordsResponses, clinicalRecordsListPatientClinicalRecordsErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/patients/{patient_id}/clinical-records',
+            ...options
+        });
+    }
+    
+    /**
+     * Amend Clinical Record
+     *
+     * Append an amendment: a new version naming the version it supersedes, with a reason (R6).
+     */
+    public static recordsAmendClinicalRecord<ThrowOnError extends boolean = true>(options: Options<clinicalRecordsAmendClinicalRecordData, ThrowOnError>) {
+        return (options.client ?? client).post<clinicalRecordsAmendClinicalRecordResponses, clinicalRecordsAmendClinicalRecordErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/clinical-records/{record_id}/amendments',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * Sign Clinical Record
+     *
+     * Sign the current version. Identity-bound: only its author may sign it (R4).
+     */
+    public static recordsSignClinicalRecord<ThrowOnError extends boolean = true>(options: Options<clinicalRecordsSignClinicalRecordData, ThrowOnError>) {
+        return (options.client ?? client).post<clinicalRecordsSignClinicalRecordResponses, clinicalRecordsSignClinicalRecordErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/clinical-records/{record_id}/sign',
             ...options
         });
     }

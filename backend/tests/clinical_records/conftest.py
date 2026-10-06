@@ -32,6 +32,7 @@ from sqlmodel import Session
 
 from app.core.config import settings
 from app.core.db import engine
+from app.main import app
 from tests.utils.rbac import ActorSession, RbacApi
 
 CLINICAL_URL = f"{settings.API_V1_STR}/clinical-records"
@@ -251,6 +252,25 @@ class ClinicalApi:
         with engine.begin() as conn:
             conn.execute(text("TRUNCATE clinical_records, clinical_record_versions"))
         self.rbac.cleanup()
+
+
+@pytest.fixture(scope="module")
+def client() -> Iterator[TestClient]:
+    """The suite's client, without `raise_server_exceptions`.
+
+    Overrides the root `tests/conftest.py` fixture for this package only. The application registers a
+    catch-all `Exception` handler (`app/core/errors.py`), so Starlette sends the `500` envelope and
+    *then* re-raises — which means a client that re-raises too never lets a test observe the response.
+    INV-4 has to be proved from the outside: a write whose audit row cannot be written must fail, and
+    the failure must carry neither the narrative nor a traceback. That assertion is only reachable with
+    the client a browser is equivalent to, which is the same reasoning (and the same argument) as
+    `tests/security/test_errors_never_leak_internal_detail.py::_raising_client`.
+
+    The 4xx assertions every other case makes are unaffected: this only changes what happens when a
+    handler raises, and no case here expects an exception to escape the API.
+    """
+    with TestClient(app, raise_server_exceptions=False) as c:
+        yield c
 
 
 @pytest.fixture
