@@ -33,7 +33,18 @@ image="ghcr.io/k1low/tbls:v1.96.1"
 
 # `alembic_version` is infrastructure rather than domain schema, and its contents change with every
 # migration, so including it would make the committed diagrams churn for no reason.
-exclude_table="alembic_version"
+#
+# `audit_log_*` excludes the **partition children** of `audit_log`, which is partitioned monthly by
+# range on `timestamp` (`docs/features/04-audit-log/03-design.md`, "Table: audit_log"). A partition
+# carries the same columns as its parent by construction, so a diagram per month would be fifteen
+# copies of one table — and the set of months changes every month, which would commit a new file for
+# a schema that did not change. The parent, which is the table the design describes and the object
+# the policies and grants are attached to, is still documented. The pattern also keeps the drift
+# check (`--check`) stable across month boundaries.
+#
+# The match is a **glob**, not a regular expression: tbls filters with `wildcard.Match` over the
+# table name, so `audit_log_*` matches the partitions and not `audit_log` itself.
+exclude_tables=("alembic_version" "audit_log_*")
 
 # `host.docker.internal` is a Docker Desktop convenience. On Linux — which is what CI runs — the
 # container has to share the host's network namespace for `localhost` to mean the runner. The array is
@@ -80,9 +91,14 @@ fi
 mkdir -p "$repo_root/$target_relative"
 
 echo "Generating schema diagrams from ${dsn##*@} into $target_relative"
+exclude_args=()
+for table in "${exclude_tables[@]}"; do
+  exclude_args+=(--exclude "$table")
+done
+
 docker run --rm "${network_args[@]+"${network_args[@]}"}" -v "$repo_root:/work" "$image" doc \
   "$dsn" "/work/$target_relative" \
-  --er-format mermaid --sort --rm-dist --exclude "$exclude_table"
+  --er-format mermaid --sort --rm-dist "${exclude_args[@]}"
 
 # tbls also writes schema.json, which embeds the server's full `version()` string — including the
 # compiler and architecture it was built with. That differs between a laptop and a CI runner, so it

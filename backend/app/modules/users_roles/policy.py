@@ -71,12 +71,32 @@ class Actor:
     context. A request with no verified identity or no resolvable tenant is represented as `None`,
     which denies: the boundary (`app.api.deps.get_actor`) refuses an authenticated account that has no
     organisation before this layer runs, so an `Actor` that exists always carries a tenant.
+
+    `role_codes` is the account's own role codes, resolved from the same rows as `permissions`. It
+    exists so an audit event can record `actor_role` — *"the role held **at decision time**, not the
+    role held later"* (`docs/features/04-audit-log/03-design.md`, envelope table). It is a record for
+    the trail, never an input to a decision: `can()` reads `permissions` and nothing else, so a role
+    name can never become a second, weaker authorisation path.
     """
 
     user_id: uuid.UUID
     tenant_id: uuid.UUID
     is_active: bool
     permissions: frozenset[str]
+    role_codes: frozenset[str] = frozenset()
+
+    @property
+    def actor_role(self) -> str | None:
+        """The role codes as one stable string for the audit envelope.
+
+        Sorted and comma-joined so two requests with the same role set produce the same value, and the
+        column's 64-character limit is respected by truncation rather than by an insert failure.
+        `None` (rather than an empty string) when the account holds no role, because the envelope's
+        `actor_role` is nullable and "no role" is not "the empty role".
+        """
+        if not self.role_codes:
+            return None
+        return ",".join(sorted(self.role_codes))[:64]
 
 
 @dataclass(frozen=True)

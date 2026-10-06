@@ -4,6 +4,7 @@
 
 | Name | Columns | Comment | Type |
 | ---- | ------- | ------- | ---- |
+| [public.audit_log](public.audit_log.md) | 16 |  | BASE TABLE |
 | [public.patients](public.patients.md) | 23 |  | BASE TABLE |
 | [public.permissions](public.permissions.md) | 3 |  | BASE TABLE |
 | [public.role_permissions](public.role_permissions.md) | 3 |  | BASE TABLE |
@@ -44,6 +45,24 @@ erDiagram
 "public.user_roles" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.user_roles" }o--|| "public.roles" : "FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE RESTRICT"
 
+"public.audit_log" {
+  varchar_128_ action
+  uuid actor_id
+  varchar_64_ actor_role
+  varchar_128_ correlation_id
+  uuid event_id
+  varchar_64_ hash
+  jsonb metadata
+  varchar_64_ prev_hash
+  varchar_255_ reason
+  varchar_128_ request_id
+  uuid resource_id
+  varchar_32_ resource_type
+  varchar_16_ result
+  varchar_64_ source_ip
+  uuid tenant_id
+  timestamp_with_time_zone timestamp
+}
 "public.patients" {
   varchar address_line
   timestamp_with_time_zone created_at

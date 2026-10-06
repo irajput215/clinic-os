@@ -83,7 +83,8 @@ is `grant_delete_on_the_rbac_link_tables`; the append-only audit trail is the hi
 - Ownership rule: the account and the role both belong to the session's tenant, and every permission in the role's bundle is held by the caller (R3) — otherwise `404`, or `403 GRANT_EXCEEDS_ACTOR`
 - Input schema: `RoleAssignmentCreate` — unknown fields rejected, so `tenant_id`, `granted_by` and `user_id` in the body are `422`
 - Output schema: `RoleRead` — `201` when the grant is created, `200` when the account already holds the role (the operation is idempotent rather than a `409`)
-- Audit: deferred — feature 04 (audit log) is not built; the design names `ROLE_ASSIGNED`
+- Audit: `user.permission_change` — written in the same transaction as the grant (INV-4), with the
+  target user id, the role code and the change (`GRANT`, or `NONE` when the account already held it)
 - Rate limit: 20/min per client address — the design (T-03.11) says per session; the in-process limiter keys on the connection address, reported
 - Errors: `401` (unauthenticated), `403` (`PERMISSION_NOT_HELD`, `GRANT_EXCEEDS_ACTOR`, or no organisation on the account), `404` (absent or another tenant's account or role), `422`, `429`; fails closed = yes
 - Step-up: deferred — feature 02's step-up is not built and is blocked by D-003; the design requires a fresh, single-use, 5-minute passkey/hardware-key step-up for this route
@@ -95,7 +96,8 @@ is `grant_delete_on_the_rbac_link_tables`; the append-only audit trail is the hi
 - Ownership rule: the account, the role and the assignment all belong to the session's tenant, and the removal must leave somebody who can manage users (R8) — otherwise `404`, or `409 LAST_ADMINISTRATOR`
 - Input schema: none — `user_id` and `role_id` are UUID path parameters
 - Output schema: none — `204 No Content` on success
-- Audit: deferred — feature 04 (audit log) is not built; the design names `ROLE_REVOKED`
+- Audit: `user.permission_change` — written in the same transaction as the delete (INV-4), with the
+  target user id, the role code and `change = REVOKE`; a `404` or `409` changes nothing and writes nothing
 - Rate limit: 20/min per client address — the design (T-03.11) says per session; the in-process limiter keys on the connection address, reported
 - Errors: `401` (unauthenticated), `403` (`PERMISSION_NOT_HELD`, or no organisation on the account), `404` (absent account, role or assignment, or another tenant's), `409` (`LAST_ADMINISTRATOR` — R8: removing it would leave the organisation with nobody holding `users:manage`), `422` (malformed UUID), `429`; fails closed = yes
 - Step-up: deferred — feature 02's step-up is not built and is blocked by D-003; the design requires a fresh, single-use, 5-minute passkey/hardware-key step-up for this route
@@ -103,7 +105,9 @@ is `grant_delete_on_the_rbac_link_tables`; the append-only audit trail is the hi
 Out of scope for this slice, and why: the user-lifecycle routes (`GET`/`POST /users`,
 `POST /users/{id}/deactivate`) belong to T1-03, blocked by D-003; `PUT /roles/{id}/permissions`
 changes the fixed permission matrix and needs the step-up mechanism, so it is deferred; `GET
-/auth/capabilities` belongs to feature 02; and every audit event is deferred to feature 04.
+/auth/capabilities` belongs to feature 02. The grant and the revoke emit their audit events as of
+feature 04; the role-read routes emit none, because `04-audit-log/05-data-and-audit.md` names no
+action for a role read.
 
 R8's other half — system roles are not deletable — has no route to enforce it on: there is no
 `DELETE /roles/{id}` in the design's endpoint table. Its "last Administrator permission cannot be
