@@ -29,12 +29,17 @@ test("a wrong password is refused without saying which half was wrong", async ({
   await expect(page).toHaveURL(/\/login/)
 })
 
-test("an off-site redirect target is ignored", async ({ page, clinic }) => {
+test("an off-site redirect target is ignored", async ({
+  page,
+  clinic,
+  baseURL,
+}) => {
   await page.goto("/login?redirect=//evil.example/phish")
   await page.getByLabel("Email").fill(clinic.email)
   await page.getByLabel("Password").fill(clinic.password)
   await page.getByRole("button", { name: "Sign in" }).click()
-  await expect(page).toHaveURL(/127\.0\.0\.1:5174\/$/)
+  // Lands on the app's own root, wherever the app is served (PLAYWRIGHT_BASE_URL).
+  await expect(page).toHaveURL(new URL("/", baseURL).href)
 })
 
 // Signs in through the UI: the `signedIn` fixture re-seeds its token on every navigation.
