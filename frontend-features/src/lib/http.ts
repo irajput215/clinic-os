@@ -1,8 +1,9 @@
 import { AxiosError } from "axios"
 
 /**
- * A refusal raised in the browser by the preview store (src/data/preview), carrying the same
- * machine-readable `code` the API puts in `detail.code`, so screens handle both identically.
+ * A refusal decided in the browser, carrying a machine-readable `code` like the API's `detail.code`,
+ * so screens handle both identically. Raised by the preview store (src/data/preview) and by an API
+ * adapter that knows a route does not exist yet (`NOT_AVAILABLE`).
  */
 export class Refusal extends Error {
   constructor(
@@ -42,6 +43,8 @@ export const retryTransient = (
   failureCount: number,
   error: unknown,
 ): boolean => {
+  // A refusal is decided, not transient: retrying it only delays the answer.
+  if (error instanceof Refusal) return false
   const status = httpStatus(error)
   if (status !== undefined && status >= 400 && status < 500) return false
   return failureCount < 3
@@ -67,6 +70,56 @@ export const apiErrorMessage = (error: unknown): string | undefined => {
   return typeof body?.title === "string" ? body.title : undefined
 }
 
+/**
+ * The machine-readable code of an API refusal: `detail.code` for a decided refusal, or the custom
+ * `type` of the first validation error (the API names its own validators, e.g.
+ * `ERR_WINDOW_EXCEEDS_MAX_DURATION`; Pydantic's built-in types are lower case and are not codes).
+ */
+export const refusalCode = (error: unknown): string | undefined => {
+  if (error instanceof Refusal) return error.code
+  const detail = problemBody(error)?.detail
+  if (Array.isArray(detail)) {
+    const type = (detail[0] as { type?: unknown } | undefined)?.type
+    return typeof type === "string" && /^[A-Z][A-Z0-9_]+$/.test(type)
+      ? type
+      : undefined
+  }
+  if (typeof detail === "object" && detail !== null) {
+    const code = (detail as { code?: unknown }).code
+    if (typeof code === "string") return code
+  }
+  return undefined
+}
+
+/**
+ * Plain sentences for the refusal codes the API documents, so a clinician reads what to do next
+ * rather than the server's internal phrasing. A code not listed here falls back to the API's own
+ * `detail.message`.
+ */
+const REFUSAL_SENTENCES: Record<string, string> = {
+  // tga_approvals (docs2/sdlc/05-approvals)
+  VERIFIER_CANNOT_BE_CREATOR:
+    "You entered this approval, so a second clinician must verify it.",
+  TGA_APPLICATION_NUMBER_MISMATCH:
+    "That reference doesn't match the approval. Re-enter it from the TGA letter.",
+  TGA_OVERLAPPING_ACTIVE_APPROVAL:
+    "An active approval already covers these dates for this category and form. Supersede it instead.",
+  DUPLICATE_APPROVAL_GRAIN:
+    "This approval is already on file for this patient, category, dosage form and dates.",
+  ILLEGAL_STATE_TRANSITION:
+    "This approval can't be changed that way any more. Refresh to see its current state.",
+  ERR_WINDOW_NOT_FORWARD: "The end date must be after the start date.",
+  ERR_WINDOW_EXCEEDS_MAX_DURATION:
+    "An approval can't be valid for more than two years.",
+  // clinical_records (docs2/sdlc/03-consult-notes)
+  NOTE_ALREADY_SIGNED: "This note is already signed. Add an amendment instead.",
+  SIGN_NOT_VERSION_AUTHOR:
+    "Only the clinician who wrote this version can sign it.",
+  AMENDMENT_REASON_REQUIRED: "Say why the note is being amended.",
+  VERSION_CONFLICT:
+    "Someone else amended this note at the same time. Refresh and try again.",
+}
+
 /** The correlation handle the API puts on every problem body, for a support conversation. */
 export const apiRequestId = (error: unknown): string | undefined => {
   const id = problemBody(error)?.request_id
@@ -76,6 +129,8 @@ export const apiRequestId = (error: unknown): string | undefined => {
 /** One sentence a person can act on, for any failure. Never echoes request data. */
 export const describeError = (error: unknown): string => {
   if (error instanceof Refusal) return error.message
+  const code = refusalCode(error)
+  if (code && code in REFUSAL_SENTENCES) return REFUSAL_SENTENCES[code]
   const status = httpStatus(error)
   if (status === undefined)
     return "Can't reach Clinic OS right now. Check your connection and try again."

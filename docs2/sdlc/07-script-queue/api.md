@@ -4,7 +4,7 @@
 
 | Method | Path | Source | Notes |
 |---|---|---|---|
-| `POST` | `/api/v1/tga-approvals/match` | `feat/tga-approvals-engine` | `{patient_id, tga_category, dosage_form, date_of_service}` gives `TgaMatchResponse` (`matched`, `reason_code`, window, timezone). POST so PHI stays out of URLs. |
+| `POST` | `/api/v1/tga-approvals/match` | `backend/app/modules/tga_approvals/router.py` (#46) | `{patient_id, tga_category, dosage_form, date_of_service}` gives `TgaMatchResponse` (`matched`, `reason_code`, window, timezone). POST so PHI stays out of URLs. |
 
 ## Proposed endpoints (contract for the backend owner)
 

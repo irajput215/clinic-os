@@ -13,6 +13,12 @@ import { Refusal } from "@/lib/http"
  * The preview reproduces the gate's fail-closed behaviour so the UI is designed around refusals: a
  * script whose approval does not cover the date of service is BLOCKED, with the reason code, and
  * cannot be sent.
+ *
+ * The gate here reads the preview's own sample approvals, not the patient's real ones. The real
+ * `POST /tga-approvals/match` exists, but a preview script is not a real script, and a clinic can't
+ * make a real approval ACTIVE until a second clinician exists to verify it; mixing the two would let
+ * one screen say "covered" while signing said "blocked". When the prescriptions module lands, the
+ * server evaluates the gate inside the signing transaction and this goes away.
  */
 const PHARMACIES = [
   "Leaf & Stone Pharmacy",
@@ -36,6 +42,10 @@ export const scriptsRepo = {
       )
       .sort((a, b) => b.created_at.localeCompare(a.created_at))
   },
+
+  /** The gate's answer for this script now, as the review dialog shows it before signing. */
+  gate: async (script: Script) =>
+    previewMatch((await readPreview()).approvals, script),
 
   stage: (draft: ScriptDraft) =>
     writePreview((s) => {

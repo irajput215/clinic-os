@@ -1,9 +1,10 @@
 import { expect, test } from "./fixtures"
 
 /**
- * The prescription safety gate, as the clinician meets it. In preview mode the gate decision comes
- * from the preview store (which mirrors the backend's match rules); in API mode the same screens
- * show the server's answer, so these tests carry over unchanged.
+ * The prescription safety gate, as the clinician meets it. Scripts are still preview (no
+ * prescriptions module), so the script tests' gate decision comes from the preview store, which
+ * mirrors the backend's match rules over sample approvals. The approval tests run against the real
+ * tga_approvals API.
  */
 test("a script with no covering approval cannot be signed", async ({
   signedIn: page,
@@ -37,21 +38,25 @@ test("a script with no covering approval cannot be signed", async ({
   ).toBeDisabled()
 })
 
+// The approvals are the real API's (`tgaApprovals: "api"`), so they are read on the patient's own
+// tab: the practice-wide register needs GET /tga-approvals, which does not exist yet.
 test("the person who records an approval cannot verify it", async ({
   signedIn: page,
 }) => {
-  await page.goto("/approvals")
+  await page.goto("/patients")
+  await page.getByRole("cell", { name: "Marcus Webb" }).click()
+  await page.getByRole("tab", { name: "TGA approvals" }).click()
   await page.getByRole("button", { name: "Record approval" }).click()
   const dialog = page.getByRole("dialog")
-  await dialog.getByLabel("Patient").selectOption({ label: "Marcus Webb" })
   await dialog.getByLabel("TGA category").selectOption("CATEGORY_2")
   await dialog.getByLabel("Dosage form").selectOption("OROMUCOSAL_SPRAY")
   await dialog.getByLabel("TGA reference").fill("SAS-B 2026-777001")
   await dialog.getByLabel("Valid to (as on the letter)").fill("2027-12-31")
   await dialog.getByRole("button", { name: "Record approval" }).click()
+  await expect(dialog).toBeHidden()
 
-  await page.getByRole("tab", { name: /Pending/ }).click()
   const row = page.getByRole("row", { name: /SAS-B 2026-777001/ })
+  await expect(row).toContainText("Pending verification")
   await row.getByRole("button", { name: "Verify" }).click()
   const verify = page.getByRole("dialog")
   await verify
@@ -102,11 +107,12 @@ test("a covered script is signed with a password re-entry and sent", async ({
 test("the letter's end date is sent unchanged and is itself not covered", async ({
   signedIn: page,
 }) => {
-  const requests: unknown[] = []
+  const sent: Array<{ valid_to?: string }> = []
   page.on("request", (r) => {
     if (r.method() === "POST" && r.url().endsWith("/api/v1/tga-approvals"))
-      requests.push(r.postDataJSON())
+      sent.push(r.postDataJSON())
   })
+  // Recorded from the register, whose Record approval works while its list is unavailable.
   await page.goto("/approvals")
   await page.getByRole("button", { name: "Record approval" }).click()
   const dialog = page.getByRole("dialog")
@@ -116,20 +122,16 @@ test("the letter's end date is sent unchanged and is itself not covered", async 
   await dialog.getByLabel("Valid to (as on the letter)").fill("2027-06-30")
   await expect(dialog.getByText("the end date itself is")).toBeVisible()
   await dialog.getByRole("button", { name: "Record approval" }).click()
-  await page.getByRole("tab", { name: /All/ }).click()
+  await expect(dialog).toBeHidden()
 
+  // The body on the wire carries the letter's date, not a "corrected" one.
+  expect(sent).toHaveLength(1)
+  expect(sent[0].valid_to).toBe("2027-06-30")
+
+  // And the API's record shows it exactly as printed on the letter.
+  await page.goto("/patients")
+  await page.getByRole("cell", { name: "Priya Sharma" }).click()
+  await page.getByRole("tab", { name: "TGA approvals" }).click()
   const row = page.getByRole("row", { name: /SAS-B 2026-555010/ })
-  // The register shows the date exactly as printed on the letter.
   await expect(row).toContainText("30 June 2027")
-  // In API mode the body is on the wire; in preview mode the store holds what would have been sent.
-  const stored = await page.evaluate(() => {
-    const raw = sessionStorage.getItem("clinic-os.preview.v2")
-    const state = raw ? JSON.parse(raw) : { approvals: [] }
-    return state.approvals.find(
-      (a: { approval_reference: string }) =>
-        a.approval_reference === "SAS-B 2026-555010",
-    )
-  })
-  const sent = (requests[0] as { valid_to?: string } | undefined) ?? stored
-  expect(sent?.valid_to).toBe("2027-06-30")
 })

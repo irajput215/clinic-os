@@ -8,14 +8,26 @@ The reasoning is in [ADR-F004](adr/ADR-F004-preview-store.md).
 |---|---|---|---|
 | `patients` | api | merged | already |
 | `audit` | api | merged (#42) | already |
-| `clinicalRecords` | preview | `feat/clinical-records`, in progress | Merge it, regenerate the client, set `clinicalRecords: "api"`. The adapter in `data/records.ts` already targets its routes |
-| `tgaApprovals` | preview | `feat/tga-approvals-engine`, in progress | As above, plus the tenant-wide register needs `GET /tga-approvals` ([sdlc/05 api](sdlc/05-approvals/api.md)). Until then the register is preview-only and the patient tab can be `api` |
+| `clinicalRecords` | api | merged (#47) | already. Preview implementation deleted |
+| `tgaApprovals` | api, register refused | merged (#46); `GET /tga-approvals` missing | Patient tab, Overview card and every write are `api`; preview implementation deleted. The practice-wide register shows a designed refusal naming `GET /api/v1/tga-approvals` until that endpoint lands ([sdlc/05 api](sdlc/05-approvals/api.md)). The preview store still seeds sample approvals, used **only** by the `prescriptions` safety-gate stand-in and the `dashboard`; they go with those previews |
 | `appointments` | preview | none | Build to [sdlc/04 api](sdlc/04-calendar-and-booking/api.md) |
 | `publicBooking` | preview | none | Build to [sdlc/04 api](sdlc/04-calendar-and-booking/api.md) |
 | `prescriptions` | preview | none | Build to [sdlc/07 api](sdlc/07-script-queue/api.md) |
 | `dashboard` | preview | none | Build to [sdlc/08 api](sdlc/08-today/api.md) |
 
-You can also switch at build time without editing code: `VITE_API_FEATURES=clinicalRecords,tgaApprovals`.
+You can also switch at build time without editing code: `VITE_API_FEATURES=appointments,dashboard`.
+
+## Switching a feature to `api`
+
+1. Set it to `"api"` in `capabilities.ts`.
+2. Prove the adapter against the real module, not against its `api.md`: request and response shapes,
+   every keyset page (`{count, data, next_cursor}`), and each RFC 7807 `detail.code` the screen
+   can meet (worded in `lib/http.ts`).
+3. Delete the feature's preview implementation and anything only it used (D-B). Keep only what a
+   feature still on preview needs, and say so in the table above.
+4. Remove the screen's **Preview data** banner, and add an e2e test in `tests/` against the real
+   backend.
+5. Update this table, the feature map in [README.md](README.md) and the feature's `dod.md`.
 
 ## What "preview" means and does not mean
 

@@ -1,153 +1,76 @@
 import { queryOptions } from "@tanstack/react-query"
 import { apiCall } from "@/data/api"
-import { sourceOf } from "@/data/capabilities"
-import { uuid } from "@/data/preview/seed"
-import { readPreview, writePreview } from "@/data/preview/store"
 import type { ClinicalRecordSummary, SoapNote } from "@/data/types"
-import { Refusal } from "@/lib/http"
 
 /**
- * Clinical records (consult notes). API routes (feat/clinical-records,
- * backend/app/modules/clinical_records/router.py):
+ * Clinical records (consult notes), served by backend/app/modules/clinical_records/router.py:
  *   GET  /patients/{id}/clinical-records      POST /clinical-records
  *   POST /clinical-records/{id}/sign          POST /clinical-records/{id}/amendments
- * A signed version is immutable; a correction is a new version with a mandatory reason.
+ * A signed record is immutable; a correction is a new version with a mandatory reason. Refusals come
+ * back as RFC 7807 with `detail.code` (NOTE_ALREADY_SIGNED, SIGN_NOT_VERSION_AUTHOR,
+ * AMENDMENT_REASON_REQUIRED, VERSION_CONFLICT) and are worded in lib/http.ts.
  */
-interface RecordsRepo {
-  listForPatient(patientId: string): Promise<ClinicalRecordSummary[]>
-  create(patientId: string, soap: SoapNote): Promise<{ id: string }>
-  sign(recordId: string): Promise<void>
-  amend(recordId: string, soap: SoapNote, reason: string): Promise<void>
+
+/** The API's largest timeline page (`MAX_TIMELINE_PAGE_SIZE`). */
+const PAGE_SIZE = 100
+
+interface RecordsPage {
+  data: ClinicalRecordSummary[]
+  count: number
+  next_cursor: string | null
 }
 
-const api: RecordsRepo = {
-  listForPatient: async (patientId) =>
-    (
-      await apiCall<{ data: ClinicalRecordSummary[] }>(
+/**
+ * Only the sections the clinician actually wrote, trimmed. The API renders every section it is sent
+ * into the stored narrative, including an empty one, so a blank textarea must not be sent at all:
+ * it would put an empty heading into a permanent clinical record.
+ */
+const writtenSections = (soap: SoapNote): SoapNote =>
+  Object.fromEntries(
+    Object.entries(soap)
+      .map(([k, v]) => [k, typeof v === "string" ? v.trim() : v])
+      .filter(([, v]) => typeof v === "string" && v !== ""),
+  )
+
+export const recordsRepo = {
+  /** The whole timeline, newest first: every keyset page, so nothing older is silently dropped. */
+  listForPatient: async (patientId: string) => {
+    const records: ClinicalRecordSummary[] = []
+    let cursor: string | undefined
+    do {
+      const page = await apiCall<RecordsPage>(
         "GET",
         "/api/v1/patients/{patient_id}/clinical-records",
-        { path: { patient_id: patientId } },
+        {
+          path: { patient_id: patientId },
+          query: { limit: PAGE_SIZE, cursor },
+        },
       )
-    ).data,
-  create: (patientId, soap) =>
-    apiCall("POST", "/api/v1/clinical-records", {
-      body: { patient_id: patientId, record_type: "NOTE", soap },
+      records.push(...page.data)
+      cursor = page.next_cursor ?? undefined
+    } while (cursor)
+    return records
+  },
+  create: (patientId: string, soap: SoapNote) =>
+    apiCall<{ id: string }>("POST", "/api/v1/clinical-records", {
+      body: {
+        patient_id: patientId,
+        record_type: "NOTE",
+        soap: writtenSections(soap),
+      },
     }),
-  sign: async (recordId) => {
+  sign: async (recordId: string) => {
     await apiCall("POST", "/api/v1/clinical-records/{record_id}/sign", {
       path: { record_id: recordId },
     })
   },
-  amend: async (recordId, soap, reason) => {
+  amend: async (recordId: string, soap: SoapNote, reason: string) => {
     await apiCall("POST", "/api/v1/clinical-records/{record_id}/amendments", {
       path: { record_id: recordId },
-      body: { soap, amendment_reason: reason },
+      body: { soap: writtenSections(soap), amendment_reason: reason.trim() },
     })
   },
 }
-
-/** The backend renders SOAP into the single narrative column; the preview does the same. */
-export const renderSoap = (soap: SoapNote) =>
-  (
-    [
-      ["S", soap.subjective],
-      ["O", soap.objective],
-      ["A", soap.assessment],
-      ["P", soap.plan],
-    ] as const
-  )
-    .filter(([, v]) => v?.trim())
-    .map(([k, v]) => `${k}: ${v?.trim()}`)
-    .join("\n")
-
-const preview: RecordsRepo = {
-  listForPatient: async (patientId) =>
-    (await readPreview()).records
-      .filter((r) => r.patient_id === patientId)
-      .sort((a, b) => b.created_at.localeCompare(a.created_at)),
-  create: (patientId, soap) =>
-    writePreview((s) => {
-      const body = renderSoap(soap)
-      if (!body)
-        throw new Refusal(
-          "EMPTY_NOTE",
-          "Write at least one section of the note.",
-        )
-      const id = uuid()
-      const now = new Date().toISOString()
-      s.records.unshift({
-        id,
-        patient_id: patientId,
-        record_type: "NOTE",
-        author_id: s.me,
-        current_version: 1,
-        signed_at: null,
-        deleted_at: null,
-        created_at: now,
-        latest_version: {
-          id: uuid(),
-          clinical_record_id: id,
-          version: 1,
-          body,
-          body_format: "PLAIN",
-          author_id: s.me,
-          signed_at: null,
-          supersedes_version: null,
-          amendment_reason: null,
-          created_at: now,
-        },
-      })
-      return { id }
-    }),
-  sign: (recordId) =>
-    writePreview((s) => {
-      const r = s.records.find((x) => x.id === recordId)
-      if (!r) throw new Refusal("NOT_FOUND", "That note isn't available.")
-      if (r.signed_at)
-        throw new Refusal(
-          "RECORD_ALREADY_SIGNED",
-          "This note is already signed.",
-        )
-      if (r.author_id !== s.me)
-        throw new Refusal("NOT_AUTHOR", "Only the author can sign this note.")
-      const now = new Date().toISOString()
-      r.signed_at = now
-      r.latest_version.signed_at = now
-    }),
-  amend: (recordId, soap, reason) =>
-    writePreview((s) => {
-      const r = s.records.find((x) => x.id === recordId)
-      if (!r) throw new Refusal("NOT_FOUND", "That note isn't available.")
-      if (!reason.trim())
-        throw new Refusal(
-          "AMENDMENT_REASON_REQUIRED",
-          "Say why the note is being amended.",
-        )
-      const body = renderSoap(soap)
-      if (!body)
-        throw new Refusal(
-          "EMPTY_NOTE",
-          "Write at least one section of the note.",
-        )
-      const now = new Date().toISOString()
-      r.current_version += 1
-      r.latest_version = {
-        id: uuid(),
-        clinical_record_id: r.id,
-        version: r.current_version,
-        body,
-        body_format: "PLAIN",
-        author_id: s.me,
-        signed_at: now,
-        supersedes_version: r.current_version - 1,
-        amendment_reason: reason.trim(),
-        created_at: now,
-      }
-    }),
-}
-
-export const recordsRepo: RecordsRepo =
-  sourceOf("clinicalRecords") === "api" ? api : preview
 
 export const patientRecordsQuery = (patientId: string) =>
   queryOptions({
@@ -156,20 +79,25 @@ export const patientRecordsQuery = (patientId: string) =>
     staleTime: 15_000,
   })
 
-/** Split a stored `S: … / O: … / A: … / P: …` narrative back into sections for display. */
+const HEADINGS = ["Subjective", "Objective", "Assessment", "Plan"] as const
+
+/**
+ * Split a stored narrative back into its SOAP sections for display.
+ *
+ * The API stores a SOAP note as one Markdown narrative, `## Subjective\n\n…\n\n## Plan\n\n…`
+ * (clinical_records/service.py `_render_soap`), with only the sections that were written. A body
+ * that was not written as SOAP (for example a plain `body`) is shown whole, as "Note".
+ */
 export const parseSoap = (body: string): Array<[string, string]> => {
-  const labels: Record<string, string> = {
-    S: "Subjective",
-    O: "Objective",
-    A: "Assessment",
-    P: "Plan",
-  }
   const out: Array<[string, string]> = []
   for (const line of body.split("\n")) {
-    const m = /^([SOAP]):\s?(.*)$/.exec(line)
-    if (m) out.push([labels[m[1]], m[2]])
+    const heading = /^## (.+)$/.exec(line)?.[1]
+    if (heading && (HEADINGS as readonly string[]).includes(heading))
+      out.push([heading, ""])
     else if (out.length) out[out.length - 1][1] += `\n${line}`
     else out.push(["Note", line])
   }
   return out
+    .map(([label, text]): [string, string] => [label, text.trim()])
+    .filter(([, text]) => text !== "")
 }

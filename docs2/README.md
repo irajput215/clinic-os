@@ -45,9 +45,9 @@ with a `clinic_name` (open registration is on in development). The public bookin
 |---|---|---|---|
 | 01 | [Auth and app shell](sdlc/01-auth-and-shell/) | Sign in, sidebar, top bar, patient quick-find | API |
 | 02 | [Patients](sdlc/02-patients/) | Patients list, add/edit, patient record | API |
-| 03 | [Consult notes](sdlc/03-consult-notes/) | Patient record → Consult notes | Preview (API adapter ready, `feat/clinical-records`) |
+| 03 | [Consult notes](sdlc/03-consult-notes/) | Patient record → Consult notes | API (clinical records, #47) |
 | 04 | [Calendar and booking](sdlc/04-calendar-and-booking/) | Calendar day/week, public booking page | Preview (contract proposed) |
-| 05 | [TGA approvals](sdlc/05-approvals/) | Approvals register, patient approvals tab | Preview (API adapter ready, `feat/tga-approvals-engine`) |
+| 05 | [TGA approvals](sdlc/05-approvals/) | Approvals register, patient approvals tab | Patient tab: API (#46). Register: refusal until `GET /tga-approvals` exists |
 | 06 | [Patient activity](sdlc/06-patient-activity/) | Patient record → Activity | API (audit log, #42) |
 | 07 | [Script queue](sdlc/07-script-queue/) | Script queue, review and sign, patient scripts tab | Preview (contract proposed) |
 | 08 | [Today](sdlc/08-today/) | Today's clinic dashboard | Preview (contract proposed) |

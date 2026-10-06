@@ -12,7 +12,7 @@ import { type PreviewState, seedPreview } from "./seed"
  * async and goes through `read`/`write`, so the repositories that use it have the same shape as the
  * API-backed ones they will be swapped for.
  */
-const KEY = "clinic-os.preview.v2"
+const KEY = "clinic-os.preview.v3"
 let cache: PreviewState | null = null
 let loading: Promise<PreviewState> | null = null
 
@@ -30,7 +30,7 @@ const restore = (userId: string): PreviewState | null => {
     if (!raw) return null
     const state = JSON.parse(raw) as PreviewState
     if (
-      state.version !== 2 ||
+      state.version !== 3 ||
       state.seededFor !== userId ||
       state.seededOn !== clinicToday()
     )
