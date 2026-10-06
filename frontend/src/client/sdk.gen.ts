@@ -429,7 +429,7 @@ export class RolesService {
     /**
      * List Roles
      *
-     * List the caller's roles with each role's permission bundle.
+     * List the organisation's roles with each role's permission bundle.
      */
     public static listRoles<ThrowOnError extends boolean = true>(options?: Options<rolesListRolesData, ThrowOnError>) {
         return (options?.client ?? client).get<rolesListRolesResponses, unknown, ThrowOnError>({
