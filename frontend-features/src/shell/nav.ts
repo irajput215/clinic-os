@@ -16,6 +16,7 @@ import {
   RefreshCcw,
   Settings,
   Store,
+  UserCog,
   Users,
 } from "lucide-react"
 
@@ -25,10 +26,19 @@ export interface NavItem {
   label: string
   icon: LucideIcon
   /** Absent: not built in this phase; shown disabled with a "coming" hint. */
-  to?: "/" | "/calendar" | "/patients" | "/scripts" | "/approvals"
+  to?:
+    | "/"
+    | "/calendar"
+    | "/patients"
+    | "/scripts"
+    | "/approvals"
+    | "/admin"
+    | "/settings"
   /** Opens outside the app shell (the public booking page). */
   href?: string
   count?: CountKey
+  /** Shown only to someone who may administer (see `useCanAdminister`); the server still decides. */
+  requiresAdmin?: boolean
 }
 
 export const NAV: Array<{ group: string; items: NavItem[] }> = [
@@ -75,7 +85,13 @@ export const NAV: Array<{ group: string; items: NavItem[] }> = [
       { label: "Patient mail", icon: Mail },
       { label: "Inbox", icon: Inbox },
       { label: "SOPs & policies", icon: BookOpen },
-      { label: "Admin & settings", icon: Settings },
+      {
+        label: "Administration",
+        icon: UserCog,
+        to: "/admin",
+        requiresAdmin: true,
+      },
+      { label: "Settings", icon: Settings, to: "/settings" },
       {
         label: "Booking page",
         icon: ExternalLink,

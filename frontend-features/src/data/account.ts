@@ -1,8 +1,10 @@
 import { LoginService, UsersService } from "@/client"
+import type { UpdatePassword, UserUpdateMe } from "@/client/types.gen"
 
 /**
- * The signed-out account flows: registering an organisation and recovering a password. Each is one
- * API call; the server decides everything (open registration, rate limits, token validity).
+ * A person's own account: the signed-out flows (registering an organisation, recovering a password)
+ * and the signed-in settings. Each is one API call; the server decides everything (open
+ * registration, rate limits, token validity, who the caller is).
  */
 
 export interface OrganisationSignup {
@@ -34,3 +36,13 @@ export const resetPassword = async (token: string, newPassword: string) => {
     body: { token, new_password: newPassword },
   })
 }
+
+/** The signed-in account's own settings (`/users/me`). Each acts on the caller only. */
+export const updateMe = async (body: UserUpdateMe) =>
+  (await UsersService.updateUserMe({ body })).data
+
+export const changePassword = async (body: UpdatePassword) =>
+  (await UsersService.updatePasswordMe({ body })).data
+
+/** Deactivates, never deletes: the account and its history are kept; it can't sign in again. */
+export const deactivateMe = async () => (await UsersService.deleteUserMe()).data
