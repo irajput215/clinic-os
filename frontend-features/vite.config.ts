@@ -53,15 +53,17 @@ export default defineConfig(({ mode }) => {
       port: 5174,
       strictPort: true,
       // Dev only: with VITE_API_URL unset, `/api` is same-origin and proxied to the backend, so
-      // local development needs no CORS allowance. Production serves the SPA and API together or
-      // sets VITE_API_URL at build time.
+      // local development needs no CORS allowance. Production serves the SPA and the API from one
+      // origin (the backend serves this build), so VITE_API_URL stays empty there too.
       proxy: apiProxy,
     },
     // `vite preview` serves the production build (with its CSP) behind the same proxy.
     preview: { port: 5175, strictPort: true, proxy: apiProxy },
     build: {
       target: "es2022",
-      outDir: "dist",
+      // The backend image serves this directory at `/` (backend/app/main.py, FRONTEND_DIR). It is
+      // gitignored build output; `emptyOutDir` is needed because it sits outside this project.
+      outDir: "../backend/app/frontend",
       emptyOutDir: true,
       sourcemap: false,
     },
