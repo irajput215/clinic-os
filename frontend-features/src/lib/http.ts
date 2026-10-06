@@ -67,6 +67,17 @@ export const apiErrorMessage = (error: unknown): string | undefined => {
   return typeof body?.title === "string" ? body.title : undefined
 }
 
+/** The API's machine-readable refusal code (`detail.code`), or a preview `Refusal`'s code. */
+export const apiErrorCode = (error: unknown): string | undefined => {
+  if (error instanceof Refusal) return error.code
+  const detail = problemBody(error)?.detail
+  if (typeof detail === "object" && detail !== null) {
+    const code = (detail as { code?: unknown }).code
+    if (typeof code === "string") return code
+  }
+  return undefined
+}
+
 /** The correlation handle the API puts on every problem body, for a support conversation. */
 export const apiRequestId = (error: unknown): string | undefined => {
   const id = problemBody(error)?.request_id

@@ -1,0 +1,160 @@
+import { randomBytes } from "node:crypto"
+import { signInThroughUi, signUp, superuser } from "./accounts"
+import { expect, test } from "./fixtures"
+
+/**
+ * Administration, against the real API. The roles and access endpoints share one 20-a-minute budget
+ * per client address (`backend/app/core/rate_limit.py`), and every test in a parallel run comes from
+ * the same address. The screen waits out a `429` and retries (5 s, 20 s, 40 s), so the steps that
+ * spend that budget allow for the full wait instead of assuming a quiet server.
+ */
+test.describe.configure({ timeout: 240_000 })
+const slow = { timeout: 90_000 }
+
+test("a practice owner sees every role against the 21-permission catalogue", async ({
+  signedIn: page,
+}) => {
+  await page.goto("/")
+  const nav = page.getByRole("navigation", { name: "Main" })
+  await nav.getByRole("link", { name: "Administration" }).click()
+
+  await expect(
+    page.getByRole("heading", { name: "Administration", level: 1 }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("tab", { name: "Roles and permissions" }),
+  ).toHaveAttribute("aria-selected", "true")
+  // Accounts is the platform superuser's surface; an organisation's owner is not offered it.
+  await expect(page.getByRole("tab", { name: "Accounts" })).toHaveCount(0)
+
+  const matrix = page.getByTestId("permission-matrix")
+  await expect(matrix).toBeVisible(slow)
+  await expect(matrix.locator("tbody tr[data-testid^='perm-']")).toHaveCount(21)
+  await expect(matrix.getByRole("columnheader")).toContainText([
+    "Permission",
+    "Administrator",
+    "Authorised Prescriber",
+    "Compliance / Auditor",
+    "Doctor",
+    "Nurse",
+    "Pharmacy",
+    "Practice Owner",
+  ])
+  // A cell is a statement a screen reader can read, not a bare tick.
+  const sign = matrix.getByTestId("perm-prescription:sign")
+  await expect(
+    sign.getByText("Doctor includes prescription:sign"),
+  ).toBeAttached()
+  await expect(
+    sign.getByText("Pharmacy does not include prescription:sign"),
+  ).toBeAttached()
+  // The owner holds everything, so every role is grantable.
+  await expect(matrix.getByTestId("grant-DOCTOR")).toHaveText("Yes")
+  await expect(page.getByTestId("ungrantable-roles")).toHaveCount(0)
+})
+
+test("an owner grants and revokes a role, and cannot remove the last administrator", async ({
+  page,
+  request,
+}) => {
+  const owner = await signUp(request, { clinic: true })
+  await signInThroughUi(page, owner, "/admin")
+  await page.getByRole("tab", { name: "User access" }).click()
+
+  const assigned = page.getByTestId("assigned-roles")
+  await expect(assigned.getByText("Practice Owner")).toBeVisible(slow)
+  await expect(page.getByTestId("assigned-DOCTOR")).toHaveCount(0)
+
+  await page
+    .getByLabel("Role", { exact: true })
+    .selectOption({ label: "Doctor" })
+  await page.getByRole("button", { name: "Grant role" }).click()
+  await expect(page.getByText("Doctor granted")).toBeVisible(slow)
+  await expect(page.getByTestId("assigned-DOCTOR")).toBeVisible(slow)
+
+  await page.getByRole("button", { name: "Revoke Doctor" }).click()
+  const dialog = page.getByRole("dialog", { name: "Revoke Doctor?" })
+  await dialog.getByRole("button", { name: "Revoke role" }).click()
+  await expect(page.getByText("Doctor revoked")).toBeVisible(slow)
+  await expect(dialog).toBeHidden()
+  await expect(page.getByTestId("assigned-DOCTOR")).toHaveCount(0, slow)
+
+  // R8: the server refuses to leave the organisation with nobody who can manage users.
+  await page.getByRole("button", { name: "Revoke Practice Owner" }).click()
+  const last = page.getByRole("dialog", { name: "Revoke Practice Owner?" })
+  await last.getByRole("button", { name: "Revoke role" }).click()
+  await expect(last.getByRole("alert")).toContainText(
+    "last account that can manage users",
+    slow,
+  )
+  await last.getByRole("button", { name: "Keep role" }).click()
+  await expect(assigned.getByText("Practice Owner")).toBeVisible()
+})
+
+test("an account without the permission gets no Administration entry, and a refusal if it goes there", async ({
+  page,
+  request,
+}) => {
+  const staff = await signUp(request, { clinic: false })
+  await signInThroughUi(page, staff)
+
+  const nav = page.getByRole("navigation", { name: "Main" })
+  await expect(nav.getByRole("link", { name: "Settings" })).toBeVisible()
+  await expect(nav.getByRole("link", { name: "Administration" })).toHaveCount(0)
+
+  await page.goto("/admin")
+  await expect(
+    page.getByRole("heading", { name: "Administration", level: 1 }),
+  ).toBeVisible()
+  await expect(page.getByText("Not available to your role.")).toBeVisible(slow)
+  await expect(page.getByTestId("permission-matrix")).toHaveCount(0)
+
+  await page.goto("/admin?tab=access")
+  await expect(page.getByText("Not available to your role.")).toBeVisible(slow)
+  await expect(page.getByRole("button", { name: "Grant role" })).toHaveCount(0)
+})
+
+test("the platform superuser lists, adds, edits and deactivates accounts", async ({
+  page,
+}) => {
+  await signInThroughUi(page, superuser(), "/admin")
+  await expect(page.getByRole("tab", { name: "Accounts" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  )
+  const table = page.getByTestId("accounts-table")
+  await expect(table).toBeVisible()
+  await expect(table.getByText("You", { exact: true })).toBeVisible()
+
+  const email = `added-${randomBytes(4).toString("hex")}@e2e.example.com`
+  await page.getByRole("button", { name: "Add account" }).click()
+  const add = page.getByRole("dialog", { name: "Add an account" })
+  // Validation runs before anything is sent.
+  await add.getByRole("button", { name: "Add account" }).click()
+  await expect(add.getByText("Enter a valid email.")).toBeVisible()
+  await add.getByLabel("Email").fill(email)
+  await add.getByLabel("Full name").fill("Jordan Blake")
+  await add.getByLabel("Password", { exact: true }).fill("Wattle-bark-42")
+  await add.getByLabel("Confirm password").fill("Wattle-bark-42")
+  await add.getByRole("button", { name: "Add account" }).click()
+  await expect(page.getByText(`${email} added`)).toBeVisible()
+  await expect(add).toBeHidden()
+
+  // Newest first, so the new account is on the first page.
+  const row = page.getByTestId(`account-${email}`)
+  await expect(row).toContainText("Jordan Blake")
+  await expect(row).toContainText("Active")
+
+  await row.getByRole("button", { name: `Edit ${email}` }).click()
+  const edit = page.getByRole("dialog", { name: "Edit account" })
+  await edit.getByLabel("Full name").fill("Jordan Blake-Ng")
+  await edit.getByRole("button", { name: "Save changes" }).click()
+  await expect(page.getByText("Account saved")).toBeVisible()
+  await expect(row).toContainText("Jordan Blake-Ng")
+
+  await row.getByRole("button", { name: `Deactivate ${email}` }).click()
+  const confirm = page.getByRole("dialog", { name: "Deactivate this account?" })
+  await confirm.getByRole("button", { name: "Deactivate" }).click()
+  await expect(page.getByText(`${email} deactivated`)).toBeVisible()
+  await expect(row).toContainText("Inactive")
+})

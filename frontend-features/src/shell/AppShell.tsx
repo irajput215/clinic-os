@@ -9,6 +9,7 @@ import {
 import { ArrowLeft, ArrowRight, Menu, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import { approvalsQuery } from "@/data/approvals"
+import { useCanAdminister } from "@/data/permissions"
 import { resetPreview } from "@/data/preview/store"
 import { isActionable, scriptsQuery } from "@/data/scripts"
 import { formatLongDay } from "@/lib/format"
@@ -29,6 +30,7 @@ function useNavCounts(): Record<CountKey, number | undefined> {
 
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const counts = useNavCounts()
+  const canAdminister = useCanAdminister()
   const { data: me } = useQuery(currentUserQuery)
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -66,6 +68,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             </div>
             <ul className="space-y-px">
               {items.map((item) => {
+                if (item.requiresAdmin && !canAdminister) return null
                 const Icon = item.icon
                 const count = item.count ? counts[item.count] : undefined
                 const inner = (
@@ -135,10 +138,15 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
       <div className="border-line border-t px-[18px] pt-3.5 pb-4 text-sm">
         {me ? (
-          <>
+          <Link
+            to="/settings"
+            onClick={onNavigate}
+            title="Your settings"
+            className="-mx-2 -my-1 block rounded-btn px-2 py-1 hover:bg-fill"
+          >
             <div className="truncate font-semibold">{displayName(me)}</div>
             <div className="truncate text-xs text-stone">{me.email}</div>
-          </>
+          </Link>
         ) : (
           <div className="h-9 animate-pulse rounded bg-fill" />
         )}
