@@ -120,6 +120,26 @@ const REFUSAL_SENTENCES: Record<string, string> = {
     "Someone else amended this note at the same time. Refresh and try again.",
 }
 
+/**
+ * A `422`'s field-level messages, keyed by the body or path field the API named. The API's
+ * validation envelope carries only `type`, `loc` and `msg` (never the submitted value), so these are
+ * safe to show next to the field.
+ */
+export const validationMessages = (error: unknown): Record<string, string> => {
+  if (httpStatus(error) !== 422) return {}
+  const detail = problemBody(error)?.detail
+  if (!Array.isArray(detail)) return {}
+  const messages: Record<string, string> = {}
+  for (const issue of detail) {
+    const loc: unknown = issue?.loc
+    const msg: unknown = issue?.msg
+    if (!Array.isArray(loc) || typeof msg !== "string") continue
+    const field = loc[1]
+    if (typeof field === "string" && !(field in messages)) messages[field] = msg
+  }
+  return messages
+}
+
 /** The correlation handle the API puts on every problem body, for a support conversation. */
 export const apiRequestId = (error: unknown): string | undefined => {
   const id = problemBody(error)?.request_id

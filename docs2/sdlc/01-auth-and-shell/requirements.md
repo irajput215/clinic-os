@@ -20,6 +20,10 @@
 - R7 Patient quick-find filters the loaded patients in memory. Nothing typed is sent or put in a URL.
 - R8 Sign-out clears the token, the query cache and the preview store.
 - R9 Below 1024 px the sidebar is a drawer. No page scrolls horizontally at any width.
+- R10 Organisation signup (`/signup`) posts `POST /users/signup` with a `clinic_name`, which creates the tenant and makes the signer its Practice Owner, then signs them in. Field rules mirror the API (`UserRegister`: password 8 to 128 characters, names and email at most 255).
+- R11 Password recovery (`/recover-password`) posts `POST /password-recovery/{email}` and confirms in words that never say whether the address has an account.
+- R12 Password reset (`/reset-password?token=`) is where the emailed link lands (`{FRONTEND_HOST}/reset-password?token=...`, `backend/app/utils.py`). It posts `POST /reset-password/`; an invalid or expired token offers a new link. The token is sent only in the request body.
+- R13 A signed-in visitor to sign in, signup or recovery goes to the app instead.
 
 ## Non-functional
 
@@ -29,4 +33,3 @@
 ## Out of scope (this phase)
 
 - MFA, refresh tokens and SSO (blocked on D-003).
-- Password recovery screens (exist in `frontend/`; to be ported).
