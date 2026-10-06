@@ -247,12 +247,18 @@ function retryAfterHeaderMs(error: unknown): number | undefined {
  * header and the API does not expose this one, so the header is usually invisible here.
  * The fallback is an escalating wait long enough for the 20-per-minute window to move;
  * 5 + 20 + 40 seconds comfortably clears it.
+ *
+ * TanStack Query calls this with the failure count *before* it increments it (query-core
+ * `retryer.js`: `retryDelay(failureCount, error)`, then `failureCount++`), so the first
+ * retry arrives as `0`. Clamp rather than subtract one: `Math.min(0, 2) - 1` is `-1`, and
+ * the indexed read is then `undefined`, which silently handed the first retry the 40s step
+ * and never reached the 5s one.
  */
 export function retryDelayMs(failureCount: number, error: unknown): number {
   const fromHeader = retryAfterHeaderMs(error)
   if (fromHeader !== undefined) return fromHeader
   const backoff = [5_000, 20_000, 40_000]
-  return backoff[Math.min(failureCount, backoff.length) - 1] ?? 40_000
+  return backoff[Math.min(failureCount, backoff.length - 1)]
 }
 
 /** Retry only a `429`, and only three times. Every other refusal is final. */
@@ -263,10 +269,15 @@ export function retryOnRateLimit(
   return isRateLimited(error) && failureCount < 3
 }
 
-/** The sentence an administration failure shows, told apart from a rate limit. */
+/**
+ * The sentence an administration failure shows, told apart from a rate limit.
+ *
+ * This state is only reached once the retries above are exhausted, so a `429` here must
+ * ask for a manual retry rather than promise one the screen will not make.
+ */
 export function describeAdminError(error: unknown): string {
   if (isRateLimited(error)) {
-    return "The administration API is rate limiting this screen (20 requests a minute). It will try again shortly."
+    return "The administration API is rate limiting this screen (20 requests a minute). Wait a moment, then try again."
   }
   return "The API could not answer. Check your connection and try again."
 }

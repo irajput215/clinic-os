@@ -13,7 +13,9 @@ import { logInUser } from "./utils/user"
  * the session: an account with no organisation is refused `403` before the screen can show
  * anything. The `setup` project logs in as `FIRST_SUPERUSER` and is a pre-existing local
  * failure (its `.env` credentials do not match the running database), so these tests carry
- * their own storage state and run with `--no-deps`.
+ * their own storage state rather than borrowing `setup`'s: they do not need its session, but
+ * the `chromium` project still depends on it (`playwright.config.ts`), so `setup` has to
+ * succeed for the suite to run at all.
  *
  * The tests are deliberately call-frugal. The administrative API is rate limited at 20
  * requests a minute per client address (`backend/app/core/rate_limit.py`), and one load of
