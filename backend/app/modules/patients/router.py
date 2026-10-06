@@ -31,7 +31,8 @@ indistinguishable to the caller.
 - Ownership rule: none — creation has no prior resource; the new row's `tenant_id` is the session's tenant
 - Input schema: `PatientCreate`
 - Output schema: `PatientRead`
-- Audit: deferred — feature 04 (audit log) is not built and the required action names are not registered
+- Audit: `patient.create` — written in the same transaction as the insert (INV-4), with `field_set`
+  (field names only)
 - Rate limit: deferred — no rate-limit layer is applied to authenticated routes yet
 - Errors: `401` (unauthenticated), `403` (`PERMISSION_NOT_HELD` or no organisation on the account), `422`; fails closed = yes
 - Step-up: no
@@ -43,7 +44,8 @@ indistinguishable to the caller.
 - Ownership rule: every returned row's `tenant_id` equals the session's tenant; another tenant's rows are absent, not denied
 - Input schema: none — `limit` is bounded `1..25`
 - Output schema: `PatientsPublic`
-- Audit: deferred — every read is an audited clinical action (`01-requirements.md`, clinical invariant 3) but feature 04 is not built
+- Audit: deferred — `patient.read` needs `care_relationship_id` and `purpose`, and the
+  treating-relationship rule that supplies them is blocked on the `care_relationships` table (T1-34)
 - Rate limit: deferred — no rate-limit layer is applied to authenticated routes yet
 - Errors: `401` (unauthenticated), `403` (`PERMISSION_NOT_HELD` or no organisation on the account), `422`; fails closed = yes
 - Step-up: no
@@ -55,7 +57,7 @@ indistinguishable to the caller.
 - Ownership rule: the record is returned only when its `tenant_id` equals the session's tenant; otherwise `404` with no body fields
 - Input schema: none — `patient_id` is a UUID path parameter
 - Output schema: `PatientRead`
-- Audit: deferred — the read and every refusal are audited by requirement R13, but feature 04 is not built
+- Audit: deferred — `patient.read`, for the reason the list route gives (T1-34)
 - Rate limit: deferred — no rate-limit layer is applied to authenticated routes yet
 - Errors: `401` (unauthenticated), `403` (`PERMISSION_NOT_HELD` or no organisation on the account), `404` (absent or another tenant's), `422`; fails closed = yes
 - Step-up: no
@@ -67,14 +69,15 @@ indistinguishable to the caller.
 - Ownership rule: the record is updated only when its `tenant_id` equals the session's tenant; otherwise `404` and the row is untouched
 - Input schema: `PatientUpdate` — unknown fields rejected
 - Output schema: `PatientRead`
-- Audit: deferred — feature 04 (audit log) is not built and the required action names are not registered
+- Audit: `patient.update` — written in the same transaction as the change (INV-4), with
+  `changed_fields` (names only)
 - Rate limit: deferred — no rate-limit layer is applied to authenticated routes yet
 - Errors: `401` (unauthenticated), `403` (`PERMISSION_NOT_HELD` or no organisation on the account), `404` (absent or another tenant's), `422`; fails closed = yes
 - Step-up: no
 
 Out of scope for this slice — merge, search, duplicates, export, the treating-relationship rule,
-audit events, identifier validation, and encryption/blind-index key handling — is listed with a
-reason in the `service` module docstring. The treating-relationship resource rule (task T1-34) is a
+`patient.read` events, identifier validation, and encryption/blind-index key handling — is listed
+with a reason in the `service` module docstring. The treating-relationship resource rule (task T1-34) is a
 blocked dependency with no `care_relationships` table; `can()` therefore has no resource rule to run
 yet, which can only remove access, never grant it.
 """
@@ -117,6 +120,7 @@ def create_patient(*, actor: ActorDep, patient_in: PatientCreate) -> PatientRead
         tenant_id=actor.tenant_id,
         patient_in=patient_in,
         actor_id=actor.user_id,
+        actor_role=actor.actor_role,
     )
 
 
@@ -164,6 +168,7 @@ def update_patient(
         patient_id=patient_id,
         patient_in=patient_in,
         actor_id=actor.user_id,
+        actor_role=actor.actor_role,
     )
     if updated is None:
         raise _patient_not_found()

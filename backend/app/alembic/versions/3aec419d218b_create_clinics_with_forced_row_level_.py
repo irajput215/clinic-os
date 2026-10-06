@@ -1,11 +1,16 @@
 """create clinics with forced row-level security and least-privilege grants
 
 Revision ID: 3aec419d218b
-Revises: a1f2b3c4d5e6
+Revises: b7c1d9e4f2a3
 Create Date: 2026-10-06 10:09:43.548372
 
 Task T1-01 Part B. `clinics` is the tenant-scoped child of `tenants`: one organisation, several practice
 sites (`docs/features/01-tenancy-and-clinics/03-design.md`, "Table: `clinics` (tenant-scoped)").
+
+**Single migration head.** This revision originally descended from `a1f2b3c4d5e6`; the audit-log migration
+`b7c1d9e4f2a3` was merged from `main` and descends from the same parent, which left two heads. Alembic
+refuses to upgrade a database with more than one head, so this chain is re-pointed at the audit head:
+`a1f2b3c4d5e6` → `b7c1d9e4f2a3` → `3aec419d218b` → `1a1af875311b` → `fbcebceb0686`.
 
 The policy is the design's, and the reason it is created here rather than in the model is the same as
 for `patients`: a model cannot express `CREATE POLICY`, and a database built from
@@ -59,7 +64,7 @@ import sqlmodel.sql.sqltypes
 
 # revision identifiers, used by Alembic.
 revision = '3aec419d218b'
-down_revision = 'a1f2b3c4d5e6'
+down_revision = 'b7c1d9e4f2a3'
 branch_labels = None
 depends_on = None
 

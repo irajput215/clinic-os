@@ -96,7 +96,7 @@ test.describe("Admin user management", () => {
     await expect(page.getByText(updatedName)).toBeVisible()
   })
 
-  test("Delete a user successfully", async ({ page }) => {
+  test("Deactivate a user successfully", async ({ page }) => {
     await page.goto("/admin")
 
     const email = randomEmail()
@@ -115,17 +115,19 @@ test.describe("Admin user management", () => {
     const userRow = page.getByRole("row").filter({ hasText: email })
     await userRow.getByRole("button").click()
 
-    await page.getByRole("menuitem", { name: "Delete User" }).click()
+    await page.getByRole("menuitem", { name: "Deactivate User" }).click()
 
-    await page.getByRole("button", { name: "Delete" }).click()
+    await page.getByRole("button", { name: "Deactivate" }).click()
 
     await expect(
-      page.getByText("The user was deleted successfully"),
+      page.getByText("The user has been deactivated successfully"),
     ).toBeVisible()
 
-    await expect(
-      page.getByRole("row").filter({ hasText: email }),
-    ).not.toBeVisible()
+    // R14: the account is deactivated, not removed — the row and its history stay, and the
+    // directory shows it as inactive.
+    const deactivatedRow = page.getByRole("row").filter({ hasText: email })
+    await expect(deactivatedRow).toBeVisible()
+    await expect(deactivatedRow.getByText("Inactive")).toBeVisible()
   })
 
   test("Cancel user creation", async ({ page }) => {

@@ -13,13 +13,24 @@ tenant identifier from a request — the caller passes the tenant the session re
 The permission set is recomputed from `user_roles -> role_permissions` on every call. There is no
 cache, so a tightened grant cannot keep authorising a previous request (R2, T-03.5).
 
+## Audit
+
+A role grant and a role revoke emit `user.permission_change` on the **same transaction** as the write
+(`app/modules/audit/service.py`, INV-4): a grant that cannot be audited does not happen, and a rollback
+leaves neither the `user_roles` row nor the audit row. The action is doc 07 §1's name — see
+`catalog.py` for why it is not `ROLE_ASSIGNED`/`ROLE_REVOKED` — and which of the two happened is in the
+payload's `change` key (`GRANT`, `REVOKE`, `NONE`). `actor_role` is the role the actor held at the
+moment of the decision.
+
 ## Provisioning a tenant
 
 The seven system roles are **per tenant** (`roles.tenant_id NOT NULL`, unique `(tenant_id, code)`), so
 they cannot be seeded once globally. They are created for a tenant when the tenant is created:
-`provision_tenant(...)` does it for self-service signup and assigns the bootstrap role, and
-`provision_tenant_roles(...)` does it without an owner (the demo tenant). The seed migration does the
-same for tenants that already existed when it ran.
+`provision_tenant_in_transaction(...)` does it — and assigns the bootstrap role — on a transaction the
+caller owns, which is what signup uses so the tenant, the account and the grant commit together;
+`provision_tenant(...)` is the same work with its own transaction, and `provision_tenant_roles(...)`
+does it without an owner (the demo tenant). The seed migration does the same for tenants that already
+existed when it ran.
 """
 
 import uuid
@@ -30,11 +41,17 @@ from sqlmodel import Session, select
 
 from app.core.db import tenant_transaction
 from app.models import User
+
+# The audit module is reached through its service facade, like every other module
+# (`docs/reference/build-contract.md` §7). The import is one-way — `audit` knows nothing about
+# `users_roles` — so there is no cycle.
+from app.modules.audit import service as audit
 from app.modules.users_roles.catalog import (
     ADMINISTRATION_PERMISSION,
     BOOTSTRAP_ROLE_CODE,
     PERMISSION_CATALOGUE,
     SYSTEM_ROLE_CATALOGUE,
+    USER_PERMISSION_CHANGE,
 )
 from app.modules.users_roles.models import Permission, Role, RolePermission, UserRole
 from app.modules.users_roles.policy import (
@@ -71,6 +88,7 @@ __all__ = [
     "list_permissions",
     "list_roles",
     "provision_tenant",
+    "provision_tenant_in_transaction",
     "provision_tenant_roles",
     "read_user_roles",
     "resolve_permissions",
@@ -164,32 +182,70 @@ def provision_tenant_roles(*, tenant_id: uuid.UUID) -> None:
         seed_tenant_roles(session, tenant_id=tenant_id)
 
 
-def provision_tenant(*, tenant_id: uuid.UUID, owner_user_id: uuid.UUID) -> None:
-    """Create a tenant's system roles and grant the signer the bootstrap role.
+def provision_tenant_in_transaction(
+    session: Session, *, tenant_id: uuid.UUID, owner_user_id: uuid.UUID
+) -> None:
+    """Seed a tenant's system roles and grant the signer the bootstrap role, on the caller's session.
+
+    The work of `provision_tenant`, minus the transaction: organisation signup creates the tenant,
+    the account and this grant as **one** unit, so the grant cannot open a transaction of its own —
+    a failure after the account exists would otherwise leave an organisation with no administrator,
+    or an account whose roles were never written.
+
+    The caller must already be inside `tenant_transaction` for this tenant (the `roles`, `user_roles`
+    and `role_permissions` inserts carry a `tenant_id` that the forced RLS `WITH CHECK` verifies
+    against `app.tenant_id`), and owns the commit.
 
     This is the organisation-signup bootstrap, not the grant endpoint: there is no prior actor whose
     permission set a grantability rule could check, so the *tenant's own* first account is made
     `PRACTICE_OWNER`. Every later grant goes through the policy layer and the R3 grantability rule:
     `assign_role` below calls `authorize_grant` on the incoming bundle before it writes anything.
     """
+    seed_tenant_roles(session, tenant_id=tenant_id)
+    owner_role = _roles_for_tenant(session, tenant_id)[BOOTSTRAP_ROLE_CODE]
+    already = session.exec(
+        select(UserRole).where(
+            UserRole.user_id == owner_user_id,
+            UserRole.role_id == owner_role.id,
+        )
+    ).first()
+    if already is None:
+        session.add(
+            UserRole(
+                user_id=owner_user_id,
+                role_id=owner_role.id,
+                tenant_id=tenant_id,
+                granted_by=owner_user_id,
+            )
+        )
+
+
+def provision_tenant(*, tenant_id: uuid.UUID, owner_user_id: uuid.UUID) -> None:
+    """Create a tenant's system roles and grant the signer the bootstrap role, in one transaction.
+
+    A standalone caller (a provisioning script, `initial_data.py`) gets the transaction here;
+    signup, which must commit this work together with the tenant and the account, calls
+    `provision_tenant_in_transaction` on the transaction it already owns.
+    """
     with tenant_transaction(tenant_id=tenant_id, actor_id=owner_user_id) as session:
-        seed_tenant_roles(session, tenant_id=tenant_id)
-        owner_role = _roles_for_tenant(session, tenant_id)[BOOTSTRAP_ROLE_CODE]
-        already = session.exec(
+        provision_tenant_in_transaction(
+            session, tenant_id=tenant_id, owner_user_id=owner_user_id
+        )
+
+
+def _held_role_ids(
+    session: Session, *, user_id: uuid.UUID, tenant_id: uuid.UUID
+) -> set[uuid.UUID]:
+    """The role ids this account holds in this tenant, under the caller's RLS context."""
+    return {
+        granted.role_id
+        for granted in session.exec(
             select(UserRole).where(
-                UserRole.user_id == owner_user_id,
-                UserRole.role_id == owner_role.id,
+                UserRole.user_id == user_id,
+                UserRole.tenant_id == tenant_id,
             )
-        ).first()
-        if already is None:
-            session.add(
-                UserRole(
-                    user_id=owner_user_id,
-                    role_id=owner_role.id,
-                    tenant_id=tenant_id,
-                    granted_by=owner_user_id,
-                )
-            )
+        ).all()
+    }
 
 
 def resolve_permissions(
@@ -202,15 +258,7 @@ def resolve_permissions(
     """
     permissions: Sequence[Permission] = session.exec(select(Permission)).all()
     code_by_id = {permission.id: permission.code for permission in permissions}
-    held_role_ids = {
-        granted.role_id
-        for granted in session.exec(
-            select(UserRole).where(
-                UserRole.user_id == user_id,
-                UserRole.tenant_id == tenant_id,
-            )
-        ).all()
-    }
+    held_role_ids = _held_role_ids(session, user_id=user_id, tenant_id=tenant_id)
     if not held_role_ids:
         return frozenset()
     grants: Sequence[RolePermission] = session.exec(
@@ -223,6 +271,24 @@ def resolve_permissions(
     )
 
 
+def resolve_role_codes(
+    session: Session, *, user_id: uuid.UUID, tenant_id: uuid.UUID
+) -> frozenset[str]:
+    """The codes of the roles this account holds — the audit envelope's `actor_role` at this moment.
+
+    Separate from `resolve_permissions` because it answers a different question: permissions are what
+    a decision reads, role codes are what the trail records. Reading both in one transaction is what
+    makes `actor_role` "the role held at decision time" rather than the role held a moment later.
+    """
+    held = _held_role_ids(session, user_id=user_id, tenant_id=tenant_id)
+    if not held:
+        return frozenset()
+    roles: Sequence[Role] = session.exec(
+        select(Role).where(Role.tenant_id == tenant_id)
+    ).all()
+    return frozenset(role.code for role in roles if role.id in held)
+
+
 def actor_for(
     *,
     user_id: uuid.UUID,
@@ -233,14 +299,20 @@ def actor_for(
 
     The tenant is the one the session resolved. A boundary that has no tenant refuses before calling
     here, so this always resolves under RLS rather than an unscoped query.
+
+    The account's role codes are resolved in the same transaction as its permissions, so the
+    `actor_role` an audit event will carry is the role held at the moment of the decision rather than
+    a value re-read afterwards.
     """
     with tenant_transaction(tenant_id=tenant_id, actor_id=user_id) as session:
         permissions = resolve_permissions(session, user_id=user_id, tenant_id=tenant_id)
+        role_codes = resolve_role_codes(session, user_id=user_id, tenant_id=tenant_id)
     return Actor(
         user_id=user_id,
         tenant_id=tenant_id,
         is_active=is_active,
         permissions=permissions,
+        role_codes=role_codes,
     )
 
 
@@ -439,9 +511,18 @@ def assign_role(
 
     The grantability rule (R3) runs **before** the row is written: a bundle containing a permission the
     actor does not hold is refused `403 GRANT_EXCEEDS_ACTOR` and nothing is inserted.
+
+    **The audit event is written on this transaction (INV-4).** A grant that cannot be audited does
+    not happen: [`record`][app.modules.audit.service.record] runs before this block commits, and a
+    refusal or a database error propagates out of the `with`, rolling the grant back with it. The
+    idempotent path writes an event too, with `change = NONE` — an authorised grant call that changed
+    nothing is still access-administration activity, and US-6 says failure and refusal are audited with
+    the same fidelity as success.
     """
     with tenant_transaction(
-        tenant_id=actor.tenant_id, actor_id=actor.user_id
+        tenant_id=actor.tenant_id,
+        actor_id=actor.user_id,
+        actor_role=actor.actor_role,
     ) as session:
         if _tenant_user(session, tenant_id=actor.tenant_id, user_id=user_id) is None:
             return None
@@ -482,6 +563,24 @@ def assign_role(
                 )
             )
             session.flush()
+
+        granted = sorted(permission.code for permission in bundle)
+        audit.record(
+            session,
+            audit.AuditEvent(
+                action=USER_PERMISSION_CHANGE,
+                result="SUCCESS",
+                resource_id=user_id,
+                payload={
+                    "target_user_id": str(user_id),
+                    "role_code": role.code,
+                    "change": "GRANT" if created else "NONE",
+                    "added": granted if created else [],
+                    "removed": [],
+                    "step_up": False,
+                },
+            ),
+        )
 
         return (
             RoleRead(
@@ -557,9 +656,17 @@ def revoke_role(
     This is the hard delete the design grants: `03-design.md` gives `clinos_app` `DELETE` on
     `user_roles` and `role_permissions` — *"grant/revoke is real"* — and the append-only audit trail,
     not the row, is the history. There is no soft-delete column on `user_roles`.
+
+    **The audit event is written on this transaction (INV-4), and only when something was removed.**
+    `NOT_FOUND` and `LAST_ADMINISTRATOR` change nothing, so they emit nothing here: a refusal is the
+    policy layer's business to record, and this function has no evidence to add about a row it did not
+    touch. The event that matters is the one for a removal that happened, and it carries the role code
+    and the permissions the removal took away.
     """
     with tenant_transaction(
-        tenant_id=actor.tenant_id, actor_id=actor.user_id
+        tenant_id=actor.tenant_id,
+        actor_id=actor.user_id,
+        actor_role=actor.actor_role,
     ) as session:
         if _tenant_user(session, tenant_id=actor.tenant_id, user_id=user_id) is None:
             return RevokeOutcome.NOT_FOUND
@@ -584,5 +691,35 @@ def revoke_role(
             session, tenant_id=actor.tenant_id, user_id=user_id, role_id=role.id
         ):
             return RevokeOutcome.LAST_ADMINISTRATOR
+
+        by_id, order = _permission_reads(session)
+        removed = sorted(
+            permission.code
+            for permission in _role_bundle(
+                session,
+                tenant_id=actor.tenant_id,
+                role_id=role.id,
+                by_id=by_id,
+                order=order,
+            )
+        )
         session.delete(assignment)
+        session.flush()
+
+        audit.record(
+            session,
+            audit.AuditEvent(
+                action=USER_PERMISSION_CHANGE,
+                result="SUCCESS",
+                resource_id=user_id,
+                payload={
+                    "target_user_id": str(user_id),
+                    "role_code": role.code,
+                    "change": "REVOKE",
+                    "added": [],
+                    "removed": removed,
+                    "step_up": False,
+                },
+            ),
+        )
         return RevokeOutcome.REVOKED

@@ -32,6 +32,59 @@ import app.db_models  # noqa: E402, F401
 
 target_metadata = SQLModel.metadata
 
+# The monthly partitions of `audit_log` are created by the migration that creates the table
+# (`b7c1d9e4f2a3`), and PostgreSQL lists each one in `pg_class` as an ordinary table. Autogenerate
+# reads them that way too, so without this filter every `alembic check` would propose dropping
+# `audit_log_2026_10` and `audit_log_default` — objects the models must not describe, because the
+# partition strategy is DDL and a model cannot express `PARTITION BY`.
+#
+# The filter is deliberately narrow: it ignores relations PostgreSQL records as a **partition**
+# (`pg_inherits`), never every table whose name happens to start with `audit_log_`. A real table named
+# `audit_log_notes` is still compared, so nothing hides behind a name pattern.
+def include_object(object_, name, type_, reflected, compare_to):
+    if type_ == "table" and reflected and name in _partitions:
+        return False
+    return True
+
+
+# Populated by `run_migrations_online` before the context is configured. Offline mode leaves it empty,
+# which is correct: offline autogenerate cannot create a partition either. Annotated for the
+# type checkers: an empty literal infers as `set[Any]`, and the hook is `strict`.
+_partitions: set[str] = set()
+
+
+def _load_partitions():
+    """The partition children in the current schema.
+
+    **This uses a connection of its own, and that is load-bearing.** SQLAlchemy begins a transaction
+    implicitly on the first statement executed against a connection. Running this query on the
+    *migration* connection before `context.begin_transaction()` therefore leaves that connection
+    already inside a transaction, and Alembic's context manager — which does not begin a second one —
+    commits nothing: every migration reports success and every one of them is rolled back at process
+    exit. That is what happened on the first run of this change, and it is recorded here so the next
+    person does not have to rediscover it.
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy import text as _text
+
+    probe = create_engine(get_url(), poolclass=pool.NullPool)
+    try:
+        with probe.connect() as connection:
+            rows = connection.execute(
+                _text(
+                    "SELECT c.relname FROM pg_inherits i "
+                    "JOIN pg_class c ON c.oid = i.inhrelid "
+                    "JOIN pg_namespace n ON n.oid = c.relnamespace "
+                    "WHERE n.nspname = current_schema()"
+                )
+            ).all()
+            _partitions.update(row[0] for row in rows)
+    except Exception:  # noqa: BLE001 - a fresh database has no `pg_inherits` rows at all
+        pass
+    finally:
+        probe.dispose()
+
+
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
@@ -58,7 +111,11 @@ def run_migrations_offline():
     """
     url = get_url()
     context.configure(
-        url=url, target_metadata=target_metadata, literal_binds=True, compare_type=True
+        url=url,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        compare_type=True,
+        include_object=include_object,
     )
 
     with context.begin_transaction():
@@ -81,9 +138,14 @@ def run_migrations_online():
         poolclass=pool.NullPool,
     )
 
+    _load_partitions()
+
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata, compare_type=True
+            connection=connection,
+            target_metadata=target_metadata,
+            compare_type=True,
+            include_object=include_object,
         )
 
         with context.begin_transaction():

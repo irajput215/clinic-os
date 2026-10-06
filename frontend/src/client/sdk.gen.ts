@@ -2,7 +2,7 @@
 
 import { type Client, type Options as Options2, type TDataShape, urlSearchParamsBodySerializer } from './client';
 import { client } from './client.gen';
-import type { healthReadinessData, healthReadinessErrors, healthReadinessResponses, loginLoginAccessTokenData, loginLoginAccessTokenErrors, loginLoginAccessTokenResponses, loginRecoverPasswordData, loginRecoverPasswordErrors, loginRecoverPasswordResponses, loginResetPasswordData, loginResetPasswordErrors, loginResetPasswordResponses, loginTestTokenData, loginTestTokenResponses, patientsCreatePatientData, patientsCreatePatientErrors, patientsCreatePatientResponses, patientsListPatientsData, patientsListPatientsErrors, patientsListPatientsResponses, patientsReadPatientData, patientsReadPatientErrors, patientsReadPatientResponses, patientsUpdatePatientData, patientsUpdatePatientErrors, patientsUpdatePatientResponses, permissionsListPermissionsData, permissionsListPermissionsResponses, rolesListRolesData, rolesListRolesResponses, tenantsReadCurrentTenantData, tenantsReadCurrentTenantResponses, tenantsUpdateCurrentTenantData, tenantsUpdateCurrentTenantErrors, tenantsUpdateCurrentTenantResponses, usersAssignRoleData, usersAssignRoleErrors, usersAssignRoleResponses, usersCreateUserData, usersCreateUserErrors, usersCreateUserResponses, usersDeleteUserData, usersDeleteUserErrors, usersDeleteUserMeData, usersDeleteUserMeResponses, usersDeleteUserResponses, usersReadUserByIdData, usersReadUserByIdErrors, usersReadUserByIdResponses, usersReadUserMeData, usersReadUserMeResponses, usersReadUserPermissionsData, usersReadUserPermissionsErrors, usersReadUserPermissionsResponses, usersReadUserRolesData, usersReadUserRolesErrors, usersReadUserRolesResponses, usersReadUsersData, usersReadUsersErrors, usersReadUsersResponses, usersRegisterUserData, usersRegisterUserErrors, usersRegisterUserResponses, usersRevokeRoleData, usersRevokeRoleErrors, usersRevokeRoleResponses, usersUpdatePasswordMeData, usersUpdatePasswordMeErrors, usersUpdatePasswordMeResponses, usersUpdateUserData, usersUpdateUserErrors, usersUpdateUserMeData, usersUpdateUserMeErrors, usersUpdateUserMeResponses, usersUpdateUserResponses, utilsHealthCheckData, utilsHealthCheckResponses, utilsTestEmailData, utilsTestEmailErrors, utilsTestEmailResponses } from './types.gen';
+import type { auditListAuditEventsData, auditListAuditEventsErrors, auditListAuditEventsResponses, auditReadAuditEventData, auditReadAuditEventErrors, auditReadAuditEventResponses, healthReadinessData, healthReadinessErrors, healthReadinessResponses, loginLoginAccessTokenData, loginLoginAccessTokenErrors, loginLoginAccessTokenResponses, loginRecoverPasswordData, loginRecoverPasswordErrors, loginRecoverPasswordResponses, loginResetPasswordData, loginResetPasswordErrors, loginResetPasswordResponses, loginTestTokenData, loginTestTokenResponses, patientsCreatePatientData, patientsCreatePatientErrors, patientsCreatePatientResponses, patientsListPatientsData, patientsListPatientsErrors, patientsListPatientsResponses, patientsReadPatientData, patientsReadPatientErrors, patientsReadPatientResponses, patientsUpdatePatientData, patientsUpdatePatientErrors, patientsUpdatePatientResponses, permissionsListPermissionsData, permissionsListPermissionsResponses, rolesListRolesData, rolesListRolesResponses, usersAssignRoleData, usersAssignRoleErrors, usersAssignRoleResponses, usersCreateUserData, usersCreateUserErrors, usersCreateUserResponses, usersDeleteUserData, usersDeleteUserErrors, usersDeleteUserMeData, usersDeleteUserMeResponses, usersDeleteUserResponses, usersReadUserByIdData, usersReadUserByIdErrors, usersReadUserByIdResponses, usersReadUserMeData, usersReadUserMeResponses, usersReadUserPermissionsData, usersReadUserPermissionsErrors, usersReadUserPermissionsResponses, usersReadUserRolesData, usersReadUserRolesErrors, usersReadUserRolesResponses, usersReadUsersData, usersReadUsersErrors, usersReadUsersResponses, usersRegisterUserData, usersRegisterUserErrors, usersRegisterUserResponses, usersRevokeRoleData, usersRevokeRoleErrors, usersRevokeRoleResponses, usersUpdatePasswordMeData, usersUpdatePasswordMeErrors, usersUpdatePasswordMeResponses, usersUpdateUserData, usersUpdateUserErrors, usersUpdateUserMeData, usersUpdateUserMeErrors, usersUpdateUserMeResponses, usersUpdateUserResponses, utilsHealthCheckData, utilsHealthCheckResponses, utilsTestEmailData, utilsTestEmailErrors, utilsTestEmailResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -61,6 +61,9 @@ export class LoginService {
      * Test Token
      *
      * Test access token
+     *
+     * Carries the tenant-status refusal (R10) like the other self-service routes: a suspended
+     * organisation's session is refused here too, not only where tenant data is read.
      */
     public static testToken<ThrowOnError extends boolean = true>(options?: Options<loginTestTokenData, ThrowOnError>) {
         return (options?.client ?? client).post<loginTestTokenResponses, unknown, ThrowOnError>({
@@ -88,6 +91,11 @@ export class LoginService {
      * Reset Password
      *
      * Reset password
+     *
+     * Carries the same 5/min recovery limit as the request route
+     * (`docs/reference/build-contract.md` control 10): the reset token is a bearer credential that
+     * grants a session, so guessing one must be at least as expensive as asking for one. Both routes
+     * share the `password-recovery` window, which caps recovery work from one address in total.
      */
     public static resetPassword<ThrowOnError extends boolean = true>(options: Options<loginResetPasswordData, ThrowOnError>) {
         return (options.client ?? client).post<loginResetPasswordResponses, loginResetPasswordErrors, ThrowOnError>({
@@ -138,7 +146,10 @@ export class UsersService {
     /**
      * Delete User Me
      *
-     * Delete own user.
+     * Deactivate own user.
+     *
+     * Kept as `DELETE /users/me` for the clients that call it, but it deactivates: the account and its
+     * attribution survive, and its next request is `401`.
      */
     public static deleteUserMe<ThrowOnError extends boolean = true>(options?: Options<usersDeleteUserMeData, ThrowOnError>) {
         return (options?.client ?? client).delete<usersDeleteUserMeResponses, unknown, ThrowOnError>({
@@ -210,6 +221,14 @@ export class UsersService {
      *
      * Gated by `USERS_OPEN_REGISTRATION`. That is what makes self-registration safe:
      * a signup can only ever reach the tenant it just created.
+     *
+     * **Organisation registration is one transaction.** The tenant, the account and the
+     * Practice Owner grant commit together or not at all, so a failure anywhere leaves no
+     * half-provisioned account: no organisation without an administrator, and no account
+     * pointing at an organisation whose roles were never written. Every write runs on the
+     * one `tenant_transaction` session, which is also what makes the role provisioning's
+     * forced-RLS inserts legal (`app.tenant_id` is set inside that transaction). The tenant
+     * id is drawn before the transaction opens so the context can name it.
      */
     public static registerUser<ThrowOnError extends boolean = true>(options: Options<usersRegisterUserData, ThrowOnError>) {
         return (options.client ?? client).post<usersRegisterUserResponses, usersRegisterUserErrors, ThrowOnError>({
@@ -226,7 +245,11 @@ export class UsersService {
     /**
      * Delete User
      *
-     * Delete a user.
+     * Deactivate a user.
+     *
+     * Administered offboarding, answered with the route's existing `DELETE` verb: R14, and the reason
+     * the foreign keys on `user_roles` are `ON DELETE RESTRICT`. Nothing is removed from the database —
+     * the account, its grants and its audit attribution stay — and the account's next request is `401`.
      */
     public static deleteUser<ThrowOnError extends boolean = true>(options: Options<usersDeleteUserData, ThrowOnError>) {
         return (options.client ?? client).delete<usersDeleteUserResponses, usersDeleteUserErrors, ThrowOnError>({
@@ -460,42 +483,32 @@ export class PermissionsService {
     }
 }
 
-export class TenantsService {
+export class AuditService {
     /**
-     * Read Current Tenant
+     * List Audit Events
      *
-     * Return the caller's own tenant. `retention_profile` is never part of the answer (US-1).
+     * One keyset page of the caller's audit trail, newest first, and the read is itself audited.
      */
-    public static readCurrentTenant<ThrowOnError extends boolean = true>(options?: Options<tenantsReadCurrentTenantData, ThrowOnError>) {
-        return (options?.client ?? client).get<tenantsReadCurrentTenantResponses, unknown, ThrowOnError>({
+    public static listAuditEvents<ThrowOnError extends boolean = true>(options?: Options<auditListAuditEventsData, ThrowOnError>) {
+        return (options?.client ?? client).get<auditListAuditEventsResponses, auditListAuditEventsErrors, ThrowOnError>({
             responseType: 'json',
             security: [{ scheme: 'bearer', type: 'http' }],
-            url: '/api/v1/tenants/current',
+            url: '/api/v1/audit/events',
             ...options
         });
     }
     
     /**
-     * Update Current Tenant
+     * Read Audit Event
      *
-     * Refuse a tenant security-setting change: the required step-up control is not built (R12).
-     *
-     * The body has already been validated by the time this runs — `TenantSettingsUpdate` declares no
-     * field and forbids extras, so a body `tenant_id` or any other name is a `422` from the validation
-     * layer and never reaches this function. What remains is the authorisation decision and the refusal
-     * that the missing step-up forces; the declaration on this module records why no success path exists
-     * and what the writer must emit when it does.
+     * One event of the caller's trail. Another tenant's event is `404`, and the attempt is audited.
      */
-    public static updateCurrentTenant<ThrowOnError extends boolean = true>(options: Options<tenantsUpdateCurrentTenantData, ThrowOnError>) {
-        return (options.client ?? client).patch<tenantsUpdateCurrentTenantResponses, tenantsUpdateCurrentTenantErrors, ThrowOnError>({
+    public static readAuditEvent<ThrowOnError extends boolean = true>(options: Options<auditReadAuditEventData, ThrowOnError>) {
+        return (options.client ?? client).get<auditReadAuditEventResponses, auditReadAuditEventErrors, ThrowOnError>({
             responseType: 'json',
             security: [{ scheme: 'bearer', type: 'http' }],
-            url: '/api/v1/tenants/current',
-            ...options,
-            headers: {
-                'Content-Type': 'application/json',
-                ...options.headers
-            }
+            url: '/api/v1/audit/events/{event_id}',
+            ...options
         });
     }
 }

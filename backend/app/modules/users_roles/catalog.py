@@ -244,3 +244,18 @@ USERS_ROLES_AUDIT_ACTIONS: Final[dict[str, str]] = {
     "assign_role": "ROLE_ASSIGNED",
     "revoke_role": "ROLE_REVOKED",
 }
+
+# The permission the audit read API requires. It is in the catalogue above as `audit:read` — seeded by
+# `4d092676eafa` and granted by the `PRACTICE_OWNER`, `ADMINISTRATOR` and `COMPLIANCE_AUDITOR` bundles
+# — and named here so the route declaration and the policy call cannot drift apart, exactly as
+# `PATIENT_PERMISSIONS` and `USERS_ROLES_PERMISSIONS` do for their routes.
+AUDIT_READ_PERMISSION: Final[str] = "audit:read"
+
+# The audit action a role grant **and** a role revoke emit. This is doc 07 §1's name — the closed
+# catalogue `docs/features/04-audit-log/05-data-and-audit.md` makes normative — and not the
+# `ROLE_ASSIGNED`/`ROLE_REVOKED` pair `05-data-and-audit.md` lists, because `03-users-and-roles/05`
+# records that conflict as OPEN-1 (*"one naming authority must be chosen before the writer is built"*)
+# and only doc 07 §1 is the closed vocabulary: *"No new action name may be invented."* Which of the two
+# happened is in the payload's `change` key (`GRANT`, `REVOKE`, `NONE`), and this is recorded as a
+# decision in the PR rather than left implicit.
+USER_PERMISSION_CHANGE: Final[str] = "user.permission_change"

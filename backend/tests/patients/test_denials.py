@@ -123,7 +123,10 @@ def test_cross_tenant_read_is_404_with_no_patient_data(
 
     assert response.status_code == 404
     body = response.json()
-    assert set(body) == {"detail"}
+    # The RFC 7807 envelope is additive (`app/core/errors.py`): the only payload member is still
+    # `detail`, and it still says exactly this. The check is a subset so a later extension member
+    # does not fail this test, while an unexpected payload member still does.
+    assert set(body) <= {"type", "title", "status", "detail", "instance", "request_id"}
     assert body["detail"] == "Patient not found"
     for leaked in ("Beta", "Bob", patient_b["id"]):
         assert leaked not in response.text
@@ -144,7 +147,7 @@ def test_cross_tenant_patch_is_404_and_leaves_the_row_unchanged(
     )
 
     assert response.status_code == 404
-    assert response.json() == {"detail": "Patient not found"}
+    assert response.json()["detail"] == "Patient not found"
     assert api.row(patient_b["id"]) == before
 
 

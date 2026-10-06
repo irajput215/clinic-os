@@ -21,6 +21,10 @@ Rules this module holds to:
 - **Nothing returns a raw ORM entity.** Rows are converted to `PatientRead` *inside* the
   transaction, before the session closes and expires its attributes, so a later attribute
   access cannot lazily re-query outside the tenant-scoped transaction.
+- **A create and an update are audited on the same transaction (INV-4).** The event is written by
+  `app.modules.audit.service` before the transaction commits, so a change that cannot be audited does
+  not happen, and a rollback leaves neither the patient row nor the audit row. The payload carries
+  field **names**, never values.
 
 Treating `deleted_at` as "not readable": a soft-deleted record is excluded from read, list
 and update. Nothing in this slice can set `deleted_at`, so the filter is currently
@@ -37,7 +41,9 @@ is open (feature 14, `docs/reference/open-questions.md`).
 | Export | Requires step-up, a typed reason and a permission the app cannot yet check |
 | Treating-relationship rule | `care_relationships` has no ERD table definition and no named owner — a blocked dependency (`03-design.md`, open items; `01-requirements.md` OPEN-4) |
 | Permission / RBAC layer | Feature 03 (authentication and RBAC) is not started; the app has `is_superuser` and ordinary authenticated users only, so there is no central policy layer to call |
-| Audit events | Feature 04 is not built and the required action names are not registered anywhere — writing one would mean inventing an action name |
+| Read and list audit events (`patient.read`) | Feature 04 is built and emits `patient.create` and
+  `patient.update`; a read event needs `care_relationship_id` and `purpose`, and the treating
+  relationship rule that supplies them is blocked on the `care_relationships` table |
 | Identifier validation algorithms | The Medicare check digit, IRN rule and IHI format are unspecified in the source (`01-requirements.md` OPEN-1, requires legal/regulatory validation) |
 | Field-level encryption and blind-index key handling | Key custody and rotation are OPEN (`03-design.md`, open items), so no identifier is accepted or stored by this slice |
 | Soft-delete and retention scheduling | A privacy decision, not an engineering one (feature 14; `database-conventions.md`, "Reconciled with the rest of this document set") |
@@ -51,6 +57,10 @@ from collections.abc import Sequence
 from sqlmodel import Session, col, func, select
 
 from app.core.db import tenant_transaction
+
+# The audit module is reached through its service facade (`docs/reference/build-contract.md` §7).
+# The import is one-way — `audit` knows nothing about `patients` — so there is no cycle.
+from app.modules.audit import service as audit
 from app.modules.patients.models import Patient
 from app.modules.patients.schemas import (
     PatientCreate,
@@ -58,6 +68,25 @@ from app.modules.patients.schemas import (
     PatientsPublic,
     PatientUpdate,
 )
+
+# The two actions this module emits, named as doc 07 §1 names them — the closed catalogue
+# `docs/features/04-audit-log/05-data-and-audit.md` makes normative. `05-patients/05-data-and-audit.md`
+# writes `patient.created`/`patient.updated` in its own table and then says, in the same section,
+# *"Action names use doc 07's lowercase dotted form"* — under which its two rows are the misspelling.
+# The catalogue wins; the divergence is recorded in the PR.
+PATIENT_CREATE: str = "patient.create"
+PATIENT_UPDATE: str = "patient.update"
+
+
+def _field_names(patient_in: PatientCreate | PatientUpdate) -> list[str]:
+    """The names of the fields the client sent — never their values.
+
+    `05-patients/05-data-and-audit.md` asks for `field_set` on create and `changed_fields` on update,
+    both *"names only"*: the trail records **that** a name changed, which is what an access-accounting
+    question needs, and never the name itself (INV-5, R11). Sorting makes the value stable, so two
+    requests that set the same fields produce the same payload.
+    """
+    return sorted(set(patient_in.model_fields_set))
 
 
 def _live_patient(
@@ -83,17 +112,33 @@ def create_patient(
     tenant_id: uuid.UUID,
     patient_in: PatientCreate,
     actor_id: uuid.UUID | None = None,
+    actor_role: str | None = None,
 ) -> PatientRead:
-    """Insert one patient for the resolved tenant.
+    """Insert one patient for the resolved tenant, and audit the create on the same transaction.
 
     The tenant is bound from the argument, never from the request body, so a caller cannot
     place a row in another tenant even if a future schema error let a `tenant_id` through.
     The RLS `WITH CHECK` clause refuses the insert independently.
+
+    **The audit event is written on this transaction (INV-4).** A create that cannot be audited does
+    not happen: `record` runs before the `with` block commits, and a refusal propagates out of it,
+    rolling the patient row back with the audit row.
     """
-    with tenant_transaction(tenant_id=tenant_id, actor_id=actor_id) as session:
+    with tenant_transaction(
+        tenant_id=tenant_id, actor_id=actor_id, actor_role=actor_role
+    ) as session:
         patient = Patient(tenant_id=tenant_id, **patient_in.model_dump())
         session.add(patient)
         session.flush()
+        audit.record(
+            session,
+            audit.AuditEvent(
+                action=PATIENT_CREATE,
+                result="SUCCESS",
+                resource_id=patient.id,
+                payload={"field_set": _field_names(patient_in)},
+            ),
+        )
         session.refresh(patient)
         return PatientRead.model_validate(patient)
 
@@ -139,18 +184,35 @@ def update_patient(
     patient_id: uuid.UUID,
     patient_in: PatientUpdate,
     actor_id: uuid.UUID | None = None,
+    actor_role: str | None = None,
 ) -> PatientRead | None:
     """Apply a partial update to one live patient for this tenant, or `None`.
 
     Only the fields the client sent are touched (`exclude_unset`), so an omitted field is
     never overwritten with a default and a `PATCH` cannot clear a NOT NULL column.
+
+    **The audit event is written on this transaction (INV-4)**, and it carries the *names* of the
+    fields the client sent — never their values. A `None` answer (absent, or another tenant's record)
+    writes nothing: no row was touched, so there is no change to account for, and the router's `404`
+    discloses nothing.
     """
-    with tenant_transaction(tenant_id=tenant_id, actor_id=actor_id) as session:
+    with tenant_transaction(
+        tenant_id=tenant_id, actor_id=actor_id, actor_role=actor_role
+    ) as session:
         patient = _live_patient(session, tenant_id=tenant_id, patient_id=patient_id)
         if patient is None:
             return None
         patient.sqlmodel_update(patient_in.model_dump(exclude_unset=True))
         session.add(patient)
         session.flush()
+        audit.record(
+            session,
+            audit.AuditEvent(
+                action=PATIENT_UPDATE,
+                result="SUCCESS",
+                resource_id=patient.id,
+                payload={"changed_fields": _field_names(patient_in)},
+            ),
+        )
         session.refresh(patient)
         return PatientRead.model_validate(patient)
