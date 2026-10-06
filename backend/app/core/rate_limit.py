@@ -108,3 +108,8 @@ def rate_limit(
 # password recovery more so because every attempt can send mail.
 login_rate_limit = rate_limit(scope="login", limit=20, window_seconds=60)
 password_recovery_rate_limit = rate_limit(scope="password-recovery", limit=5)
+# The administrative class: users, roles and permission grants. 20/min is the value in
+# `docs/features/03-users-and-roles/04-threat-model.md` T-03.11. The design says "per session"; this
+# limiter keys on the connection address, which is the only key the in-process implementation has
+# (see the module docstring). Declared, not hidden.
+admin_rate_limit = rate_limit(scope="admin", limit=20, window_seconds=60)

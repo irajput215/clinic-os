@@ -139,6 +139,36 @@ class RbacApi:
                 {"tenant_id": tenant_id, "user_id": user_id},
             )
 
+    def assignment_codes(
+        self, *, tenant_id: uuid.UUID, user_id: uuid.UUID
+    ) -> list[str]:
+        """The role codes this account holds, read as the owner for a "changed nothing" assertion."""
+        with engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    "SELECT r.code FROM user_roles ur JOIN roles r ON r.id = ur.role_id"
+                    " WHERE ur.tenant_id = :tenant_id AND ur.user_id = :user_id"
+                    " ORDER BY r.code"
+                ),
+                {"tenant_id": tenant_id, "user_id": user_id},
+            ).all()
+            return [row[0] for row in rows]
+
+    def role_id_for(self, *, tenant_id: uuid.UUID, code: str) -> uuid.UUID:
+        """A role's id, read as the owner. Used to name another tenant's role in an isolation case."""
+        with engine.connect() as conn:
+            return uuid.UUID(
+                str(
+                    conn.execute(
+                        text(
+                            "SELECT id FROM roles WHERE tenant_id = :tenant_id"
+                            " AND code = :code"
+                        ),
+                        {"tenant_id": tenant_id, "code": code},
+                    ).scalar_one()
+                )
+            )
+
     def patient_count(self, tenant_id: uuid.UUID) -> int:
         """Count rows as the owner, which bypasses RLS: the assertion is about rows that exist."""
         with engine.connect() as conn:

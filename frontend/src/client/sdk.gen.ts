@@ -2,7 +2,7 @@
 
 import { type Client, type Options as Options2, type TDataShape, urlSearchParamsBodySerializer } from './client';
 import { client } from './client.gen';
-import type { healthReadinessData, healthReadinessErrors, healthReadinessResponses, loginLoginAccessTokenData, loginLoginAccessTokenErrors, loginLoginAccessTokenResponses, loginRecoverPasswordData, loginRecoverPasswordErrors, loginRecoverPasswordResponses, loginResetPasswordData, loginResetPasswordErrors, loginResetPasswordResponses, loginTestTokenData, loginTestTokenResponses, patientsCreatePatientData, patientsCreatePatientErrors, patientsCreatePatientResponses, patientsListPatientsData, patientsListPatientsErrors, patientsListPatientsResponses, patientsReadPatientData, patientsReadPatientErrors, patientsReadPatientResponses, patientsUpdatePatientData, patientsUpdatePatientErrors, patientsUpdatePatientResponses, usersCreateUserData, usersCreateUserErrors, usersCreateUserResponses, usersDeleteUserData, usersDeleteUserErrors, usersDeleteUserMeData, usersDeleteUserMeResponses, usersDeleteUserResponses, usersReadUserByIdData, usersReadUserByIdErrors, usersReadUserByIdResponses, usersReadUserMeData, usersReadUserMeResponses, usersReadUsersData, usersReadUsersErrors, usersReadUsersResponses, usersRegisterUserData, usersRegisterUserErrors, usersRegisterUserResponses, usersUpdatePasswordMeData, usersUpdatePasswordMeErrors, usersUpdatePasswordMeResponses, usersUpdateUserData, usersUpdateUserErrors, usersUpdateUserMeData, usersUpdateUserMeErrors, usersUpdateUserMeResponses, usersUpdateUserResponses, utilsHealthCheckData, utilsHealthCheckResponses, utilsTestEmailData, utilsTestEmailErrors, utilsTestEmailResponses } from './types.gen';
+import type { healthReadinessData, healthReadinessErrors, healthReadinessResponses, loginLoginAccessTokenData, loginLoginAccessTokenErrors, loginLoginAccessTokenResponses, loginRecoverPasswordData, loginRecoverPasswordErrors, loginRecoverPasswordResponses, loginResetPasswordData, loginResetPasswordErrors, loginResetPasswordResponses, loginTestTokenData, loginTestTokenResponses, patientsCreatePatientData, patientsCreatePatientErrors, patientsCreatePatientResponses, patientsListPatientsData, patientsListPatientsErrors, patientsListPatientsResponses, patientsReadPatientData, patientsReadPatientErrors, patientsReadPatientResponses, patientsUpdatePatientData, patientsUpdatePatientErrors, patientsUpdatePatientResponses, permissionsListPermissionsData, permissionsListPermissionsResponses, rolesListRolesData, rolesListRolesResponses, usersAssignRoleData, usersAssignRoleErrors, usersAssignRoleResponses, usersCreateUserData, usersCreateUserErrors, usersCreateUserResponses, usersDeleteUserData, usersDeleteUserErrors, usersDeleteUserMeData, usersDeleteUserMeResponses, usersDeleteUserResponses, usersReadUserByIdData, usersReadUserByIdErrors, usersReadUserByIdResponses, usersReadUserMeData, usersReadUserMeResponses, usersReadUserPermissionsData, usersReadUserPermissionsErrors, usersReadUserPermissionsResponses, usersReadUserRolesData, usersReadUserRolesErrors, usersReadUserRolesResponses, usersReadUsersData, usersReadUsersErrors, usersReadUsersResponses, usersRegisterUserData, usersRegisterUserErrors, usersRegisterUserResponses, usersRevokeRoleData, usersRevokeRoleErrors, usersRevokeRoleResponses, usersUpdatePasswordMeData, usersUpdatePasswordMeErrors, usersUpdatePasswordMeResponses, usersUpdateUserData, usersUpdateUserErrors, usersUpdateUserMeData, usersUpdateUserMeErrors, usersUpdateUserMeResponses, usersUpdateUserResponses, utilsHealthCheckData, utilsHealthCheckResponses, utilsTestEmailData, utilsTestEmailErrors, utilsTestEmailResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -268,6 +268,68 @@ export class UsersService {
             }
         });
     }
+    
+    /**
+     * Read User Roles
+     *
+     * List the roles one account of the caller's tenant holds. Another tenant's account is `404`.
+     */
+    public static readUserRoles<ThrowOnError extends boolean = true>(options: Options<usersReadUserRolesData, ThrowOnError>) {
+        return (options.client ?? client).get<usersReadUserRolesResponses, usersReadUserRolesErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/users/{user_id}/roles',
+            ...options
+        });
+    }
+    
+    /**
+     * Assign Role
+     *
+     * Grant a role to an account. `201` when created, `200` when the account already holds it.
+     *
+     * The grantability rule (R3) is applied in the service before the row is written: a bundle
+     * containing a permission the caller does not hold is refused `403 GRANT_EXCEEDS_ACTOR`.
+     */
+    public static assignRole<ThrowOnError extends boolean = true>(options: Options<usersAssignRoleData, ThrowOnError>) {
+        return (options.client ?? client).post<usersAssignRoleResponses, usersAssignRoleErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/users/{user_id}/roles',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * Read User Permissions
+     *
+     * The effective permission set of one account, computed server-side. Cross-tenant is `404`.
+     */
+    public static readUserPermissions<ThrowOnError extends boolean = true>(options: Options<usersReadUserPermissionsData, ThrowOnError>) {
+        return (options.client ?? client).get<usersReadUserPermissionsResponses, usersReadUserPermissionsErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/users/{user_id}/permissions',
+            ...options
+        });
+    }
+    
+    /**
+     * Revoke Role
+     *
+     * Revoke a role from an account. The delete is real; the audit trail is the history.
+     */
+    public static revokeRole<ThrowOnError extends boolean = true>(options: Options<usersRevokeRoleData, ThrowOnError>) {
+        return (options.client ?? client).delete<usersRevokeRoleResponses, usersRevokeRoleErrors, ThrowOnError>({
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/users/{user_id}/roles/{role_id}',
+            ...options
+        });
+    }
 }
 
 export class UtilsService {
@@ -359,6 +421,38 @@ export class PatientsService {
                 'Content-Type': 'application/json',
                 ...options.headers
             }
+        });
+    }
+}
+
+export class RolesService {
+    /**
+     * List Roles
+     *
+     * List the organisation's roles with each role's permission bundle.
+     */
+    public static listRoles<ThrowOnError extends boolean = true>(options?: Options<rolesListRolesData, ThrowOnError>) {
+        return (options?.client ?? client).get<rolesListRolesResponses, unknown, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/roles',
+            ...options
+        });
+    }
+}
+
+export class PermissionsService {
+    /**
+     * List Permissions
+     *
+     * List the global permission catalogue (read-only reference data; R7).
+     */
+    public static listPermissions<ThrowOnError extends boolean = true>(options?: Options<permissionsListPermissionsData, ThrowOnError>) {
+        return (options?.client ?? client).get<permissionsListPermissionsResponses, unknown, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/permissions',
+            ...options
         });
     }
 }

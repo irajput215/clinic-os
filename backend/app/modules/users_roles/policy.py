@@ -26,9 +26,19 @@ routing) — has no implementation here because none of the tables those rules r
 `care-relationships`), and the prescribing tables are later phases. `can()` allows only after the four
 checks above, so a resource rule can only ever remove access; its absence is a deferral, not a
 fail-open.
+
+## The grantability rule (R3)
+
+`can()` answers "may this actor exercise this permission?". Granting is a second question, and it lives
+here too so there is still exactly one decision authority: `can_grant(actor, permission_codes)` refuses
+a bundle that contains a permission the actor does not hold, with the design's reason code
+`GRANT_EXCEEDS_ACTOR` (`03-design.md`, "The grantability rule (R3)"; `01-requirements.md` R3). Without
+it, `users:manage` would be a vertical-escalation primitive: an Administrator holds `users:manage` but
+not `tenant:configure`, and the `PRACTICE_OWNER` bundle contains `tenant:configure`.
 """
 
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -43,6 +53,7 @@ class DecisionCode(StrEnum):
     IDENTITY_NOT_ACTIVE = "IDENTITY_NOT_ACTIVE"
     CROSS_TENANT = "CROSS_TENANT"
     PERMISSION_NOT_HELD = "PERMISSION_NOT_HELD"
+    GRANT_EXCEEDS_ACTOR = "GRANT_EXCEEDS_ACTOR"
 
 
 @dataclass(frozen=True)
@@ -111,6 +122,36 @@ def can(
             403,
             DecisionCode.PERMISSION_NOT_HELD,
             "The required permission is not held",
+        )
+
+    return Decision(
+        allowed=True, status_code=200, code=DecisionCode.ALLOWED, message="Allowed"
+    )
+
+
+def can_grant(actor: Actor | None, *, permission_codes: Iterable[str]) -> Decision:
+    """Decide whether `actor` may grant every permission in `permission_codes` (R3).
+
+    `permission_codes` is the incoming bundle — the permission set of a role about to be assigned, or
+    of a role_permissions change. Deny-by-default, and the same first two checks as `can()`: no
+    identity is `401`, a non-`ACTIVE` actor is `403`. A single permission the actor does not hold
+    refuses the whole bundle with `403 GRANT_EXCEEDS_ACTOR` (`03-design.md`, "The grantability rule
+    (R3)"). An empty bundle carries nothing to escalate and is allowed for an active actor.
+    """
+    if actor is None:
+        return _deny(401, DecisionCode.NO_IDENTITY, "Authentication is required")
+
+    if not actor.is_active:
+        return _deny(
+            403, DecisionCode.IDENTITY_NOT_ACTIVE, "This account is not active"
+        )
+
+    missing = frozenset(permission_codes) - actor.permissions
+    if missing:
+        return _deny(
+            403,
+            DecisionCode.GRANT_EXCEEDS_ACTOR,
+            "The grant would confer a permission the actor does not hold",
         )
 
     return Decision(
