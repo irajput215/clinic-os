@@ -85,7 +85,8 @@ def test_get_non_existing_user_as_superuser(
         headers=superuser_token_headers,
     )
     assert r.status_code == 404
-    assert r.json() == {"detail": "User not found"}
+    # The error envelope is RFC 7807 and additive (`app/core/errors.py`); `detail` is unchanged.
+    assert r.json()["detail"] == "User not found"
 
 
 def test_get_existing_user_current_user(client: TestClient, db: Session) -> None:
@@ -127,7 +128,7 @@ def test_get_existing_user_permissions_error(
         headers=normal_user_token_headers,
     )
     assert r.status_code == 403
-    assert r.json() == {"detail": "The user doesn't have enough privileges"}
+    assert r.json()["detail"] == "The user doesn't have enough privileges"
 
 
 def test_get_non_existing_user_permissions_error(
@@ -141,7 +142,7 @@ def test_get_non_existing_user_permissions_error(
         headers=normal_user_token_headers,
     )
     assert r.status_code == 403
-    assert r.json() == {"detail": "The user doesn't have enough privileges"}
+    assert r.json()["detail"] == "The user doesn't have enough privileges"
 
 
 def test_create_user_existing_username(

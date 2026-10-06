@@ -14,6 +14,7 @@ from sqlmodel import Session, create_engine, select, text
 
 from app import crud
 from app.core.config import settings
+from app.core.logging import current_request_id, record_identity
 from app.models import User, UserCreate
 
 
@@ -47,6 +48,12 @@ def tenant_transaction(
     Fails closed: without a tenant no transaction opens, so there is no path to an
     unscoped query. The settings are transaction-scoped, so they revert at COMMIT
     or ROLLBACK and cannot leak across pooled requests.
+
+    `request_id` is resolved, not supplied: an explicit argument wins, and otherwise the ambient
+    handle set by `app.core.correlation.CorrelationIdMiddleware` is used, so every database
+    session opened while serving a request carries `app.request_id` without each caller having to
+    thread it through (`16-operations-and-observability/03-design.md` step 1). Outside a request
+    nothing is set, exactly as before.
     """
     if tenant_id is None:
         raise TenantContextRequired(
@@ -57,8 +64,12 @@ def tenant_transaction(
         _set_context(session, "app.tenant_id", str(tenant_id))
         if actor_id is not None:
             _set_context(session, "app.actor_id", str(actor_id))
-        if request_id is not None:
-            _set_context(session, "app.request_id", request_id)
+        effective_request_id = request_id or current_request_id()
+        if effective_request_id is not None:
+            _set_context(session, "app.request_id", effective_request_id)
+        # Keyed pseudonyms for the request log line: a raw identifier never enters a log field
+        # (`16-operations-and-observability/05-data-and-audit.md`).
+        record_identity(tenant_id=tenant_id, actor_id=actor_id)
         yield session
 
 
