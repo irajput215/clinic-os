@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 
 from app import crud
-from app.api.deps import CurrentUser, SessionDep
+from app.api.deps import ActiveTenantUser, SessionDep
 from app.core import security
 from app.core.config import settings
 from app.core.rate_limit import login_rate_limit, password_recovery_rate_limit
@@ -46,9 +46,12 @@ def login_access_token(
 
 
 @router.post("/login/test-token", response_model=UserPublic)
-def test_token(current_user: CurrentUser) -> Any:
+def test_token(current_user: ActiveTenantUser) -> Any:
     """
     Test access token
+
+    Carries the tenant-status refusal (R10) like the other self-service routes: a suspended
+    organisation's session is refused here too, not only where tenant data is read.
     """
     return current_user
 

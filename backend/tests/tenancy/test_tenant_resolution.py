@@ -5,22 +5,22 @@ every request even with a valid unexpired session"* — and the design's deny-by
 *"Resolve tenant from the verified token claim and the addressed resource; enforce `status = ACTIVE`
 at resolution — deny if unresolvable or suspended."*
 
-The refusal belongs where the actor is built (`app.api.deps.get_actor`), because that is the only place
-a request resolves a tenant at all: every route that reads or writes tenant data depends on `ActorDep`.
-The refusal is `403` with the same machine-readable detail shape as `NO_ORGANISATION`, and it is one
-code for every non-`ACTIVE` status — including "no such tenant row" — so a caller cannot learn from the
-response whether their organisation exists, still exists, or is merely suspended.
-
-Two pre-tenancy routes build no actor: `GET /api/v1/users/me` and `POST /api/v1/login/test-token` take
-`CurrentUser` alone. They resolve no tenant and read no tenant data; they return the caller's own
-account record. Extending the refusal to them is a one-line move of the check into
-`get_current_user`, recorded as a gap in the pull request rather than taken silently.
+The refusal has two entry points, one implementation: `app.api.deps.get_actor` for every route that
+resolves tenant-scoped data, and `app.api.deps.get_active_tenant_user` (`ActiveTenantUser`) for the
+self-service routes that act on the caller's **own** account and build no actor. Both call the same
+`_refuse_inactive_tenant`, so which statuses pass cannot drift between them. The superuser-only
+administration routes (`/users/`, `/users/{user_id}`) are deliberately excluded: the platform
+administrator legitimately holds no organisation. The refusal is `403` with the same machine-readable
+detail shape as `NO_ORGANISATION`, and it is one code for every non-`ACTIVE` status — including "no
+such tenant row" — so a caller cannot learn from the response whether their organisation exists, still
+exists, or is merely suspended.
 
 Status is re-read on every request, so a reactivated organisation is served again without a new login
 (R2: no cached authorisation across requests).
 """
 
 import uuid
+from typing import Any
 
 import pytest
 from sqlmodel import Session
@@ -30,13 +30,31 @@ from app.core.config import settings
 from app.core.db import engine
 from app.modules.identity_tenancy.models import Tenant
 from app.modules.identity_tenancy.service import is_active_status, tenant_is_active
-from tests.utils.rbac import RbacApi
+from tests.utils.rbac import PASSWORD, RbacApi
 
 API = settings.API_V1_STR
 
 # One route from each actor-scoped family: the clinical read path and the RBAC read path. Both depend
 # on `ActorDep`, which is where the refusal lives.
 ACTOR_SCOPED_ROUTES = (f"{API}/patients", f"{API}/roles")
+
+# Every self-service route the caller reaches as their own account. `GET /users/{user_id}` is absent
+# on purpose: it shares the handler shape of the superuser-only administration surface, which a
+# platform administrator with no organisation must still reach.
+SELF_SERVICE_ROUTES: tuple[tuple[str, str, dict[str, Any] | None], ...] = (
+    ("GET", f"{API}/users/me", None),
+    ("POST", f"{API}/login/test-token", None),
+    ("PATCH", f"{API}/users/me", {"full_name": "Renamed Owner"}),
+    (
+        "PATCH",
+        f"{API}/users/me/password",
+        {
+            "current_password": PASSWORD,
+            "new_password": "another-correct-horse-battery",
+        },
+    ),
+    ("DELETE", f"{API}/users/me", None),
+)
 
 
 def _set_tenant_status(tenant_id: uuid.UUID, status: str) -> None:
@@ -72,6 +90,15 @@ def test_suspended_tenant_refused_on_every_request(rbac: RbacApi) -> None:
         assert response.status_code == 403, route
         assert response.json()["detail"]["code"] == TENANT_NOT_ACTIVE
 
+    # Every self-service route too: those build no actor, and before `ActiveTenantUser` they were the
+    # last authenticated surface a suspended organisation could still reach.
+    for method, route, payload in SELF_SERVICE_ROUTES:
+        response = rbac.client.request(
+            method, route, headers=owner.headers, json=payload
+        )
+        assert response.status_code == 403, (method, route)
+        assert response.json()["detail"]["code"] == TENANT_NOT_ACTIVE
+
     # No disclosure beyond what the caller already knows: the refusal names the condition, never the
     # organisation, its slug, or which non-ACTIVE status it is in.
     body = response.text.lower()
@@ -79,6 +106,24 @@ def test_suspended_tenant_refused_on_every_request(rbac: RbacApi) -> None:
     assert "suspended" not in body
     assert "slug" not in body
     assert response.json()["detail"]["message"] == "This organisation is not active"
+
+
+def test_an_active_tenant_is_served_on_the_self_service_routes(rbac: RbacApi) -> None:
+    """The control case for the routes above: an ACTIVE organisation's account is untouched.
+
+    A fresh account per route, because two of these routes change the account's own state
+    (`PATCH /users/me/password`, `DELETE /users/me`) and one shared session would mask a failure
+    behind the previous route's effect.
+    """
+    owner = rbac.register_tenant(clinic_name="Self Service Clinic")
+    assert owner.tenant_id is not None
+
+    for method, route, payload in SELF_SERVICE_ROUTES:
+        actor = rbac.add_actor(tenant_id=owner.tenant_id, granted_by=owner.user_id)
+        response = rbac.client.request(
+            method, route, headers=actor.headers, json=payload
+        )
+        assert response.status_code == 200, (method, route, response.text)
 
 
 @pytest.mark.parametrize("status", ["SUSPENDED", "CLOSING", "CLOSED"])

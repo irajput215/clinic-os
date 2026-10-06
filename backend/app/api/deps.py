@@ -84,6 +84,49 @@ def get_current_user(session: SessionDep, token: TokenDep) -> User:
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
+def _refuse_inactive_tenant(current_user: User, session: Session) -> None:
+    """Raise `403 TENANT_NOT_ACTIVE` when the account's organisation may not transact (R10).
+
+    One implementation for both boundaries below, so "which statuses pass" cannot drift between them.
+    An account with no organisation has no tenant status to enforce and is not this check's business:
+    the platform administrator is exactly that account, and `GET /users/me` is how a session
+    bootstraps. Tenant-scoped data remains unreachable for it — `get_actor` refuses `NO_ORGANISATION`
+    before any tenant query runs.
+    """
+    if current_user.tenant_id is None:
+        return
+    if not identity_tenancy_service.tenant_is_active(
+        session, tenant_id=current_user.tenant_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": TENANT_NOT_ACTIVE,
+                "message": "This organisation is not active",
+            },
+        )
+
+
+def get_active_tenant_user(current_user: CurrentUser, session: SessionDep) -> User:
+    """An authenticated account whose organisation, if it has one, may transact (R10).
+
+    The session counterpart of `get_actor`: it resolves no permission set, so it is for the
+    self-service routes that act on the caller's **own** account (`/users/me`, `/login/test-token`)
+    and need no tenant scope. Without it those routes were the last authenticated surface a suspended
+    organisation could still reach, which is what R10 — *"refused on every request even with a valid
+    unexpired session"* — rules out.
+
+    It is deliberately **not** applied to the superuser-only administration routes (`/users/`,
+    `/users/{user_id}`): those are the platform surface, and the platform administrator legitimately
+    holds no organisation.
+    """
+    _refuse_inactive_tenant(current_user, session)
+    return current_user
+
+
+ActiveTenantUser = Annotated[User, Depends(get_active_tenant_user)]
+
+
 def get_actor(current_user: CurrentUser, session: SessionDep) -> Actor:
     """Build the request's authorisation actor from the verified session.
 
@@ -98,7 +141,8 @@ def get_actor(current_user: CurrentUser, session: SessionDep) -> Actor:
     allow-list (`identity_tenancy.service.is_active_status`), so an unknown status fails closed, and a
     tenant row that cannot be read is refused with the same code as a suspended one rather than
     defaulted to active. One code for every non-`ACTIVE` case means the response cannot be used to
-    probe whether an organisation exists.
+    probe whether an organisation exists. `get_active_tenant_user` applies the same check to the
+    self-service routes that build no actor.
 
     The policy layer's own verdict for a missing tenant is `401 NO_IDENTITY`
     (`03-users-and-roles/03-design.md`, "The central policy layer"). `403` is used at this boundary
@@ -113,16 +157,7 @@ def get_actor(current_user: CurrentUser, session: SessionDep) -> Actor:
                 "message": "This account has no organisation",
             },
         )
-    if not identity_tenancy_service.tenant_is_active(
-        session, tenant_id=current_user.tenant_id
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "code": TENANT_NOT_ACTIVE,
-                "message": "This organisation is not active",
-            },
-        )
+    _refuse_inactive_tenant(current_user, session)
     return users_roles_service.actor_for(
         user_id=current_user.id,
         tenant_id=current_user.tenant_id,

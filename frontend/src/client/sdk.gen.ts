@@ -61,6 +61,9 @@ export class LoginService {
      * Test Token
      *
      * Test access token
+     *
+     * Carries the tenant-status refusal (R10) like the other self-service routes: a suspended
+     * organisation's session is refused here too, not only where tenant data is read.
      */
     public static testToken<ThrowOnError extends boolean = true>(options?: Options<loginTestTokenData, ThrowOnError>) {
         return (options?.client ?? client).post<loginTestTokenResponses, unknown, ThrowOnError>({
