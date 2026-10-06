@@ -143,6 +143,7 @@ PAYLOAD_KEYS: Final[frozenset[str]] = frozenset(
         "change",
         "changed_fields",
         "field_set",
+        "patient_id",
         "purpose",
         "query_filters",
         "reason",
@@ -151,7 +152,9 @@ PAYLOAD_KEYS: Final[frozenset[str]] = frozenset(
         "result_count",
         "role_code",
         "step_up",
+        "supersedes_version",
         "target_user_id",
+        "version",
     }
 )
 
@@ -170,6 +173,18 @@ PAYLOAD_ALLOW_LIST: Final[MappingProxyType[str, frozenset[str]]] = MappingProxyT
         "patient.read": frozenset({"care_relationship_id", "purpose"}),
         # `04-audit-log/05-data-and-audit.md`: `audit.read` carries `query_filters` and `result_count`.
         "audit.read": frozenset({"query_filters", "result_count"}),
+        # `06-clinical-records/05-data-and-audit.md` maps its four story labels onto the two
+        # `CLINICAL_RECORD` actions doc 07 §1 already carries, and fixes the key fields they may
+        # record — identifiers and version numbers, never the narrative, never the typed amendment
+        # reason. `patient_id`/`version`/`supersedes_version` are registered here for it.
+        "clinical_record.write": frozenset(
+            {"patient_id", "version", "supersedes_version"}
+        ),
+        # The same table's `CLINICAL_RECORD_VIEWED` row: the patient, the relationship and purpose
+        # that authorised the read when those exist, and how many versions were returned.
+        "clinical_record.read": frozenset(
+            {"patient_id", "care_relationship_id", "purpose", "result_count"}
+        ),
         # Doc 07 §1's `user.permission_change`, carrying what `03-users-and-roles/05-data-and-audit.md`
         # asks `ROLE_ASSIGNED`/`ROLE_REVOKED` to carry: the target, the role code, and the change.
         "user.permission_change": frozenset(
