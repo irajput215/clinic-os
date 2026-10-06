@@ -25,9 +25,10 @@ type Source = "api" | "preview"
 const DEFAULTS: Record<Capability, Source> = {
   patients: "api",
   audit: "api",
-  // In flight on feat/clinical-records and feat/tga-approvals-engine; API adapters are ready.
-  clinicalRecords: "preview",
-  tgaApprovals: "preview",
+  clinicalRecords: "api",
+  // The per-patient tab and every write are live. The practice-wide register needs
+  // GET /tga-approvals, which does not exist yet, so it shows a designed refusal (not preview data).
+  tgaApprovals: "api",
   // No backend module yet; contracts proposed in docs2/sdlc.
   appointments: "preview",
   prescriptions: "preview",

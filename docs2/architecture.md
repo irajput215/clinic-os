@@ -44,9 +44,11 @@ The UI hides, disables and explains. It never decides. In particular:
 
 - **Tenant** is never sent. Every body is built from form fields that don't include it, and the
   API's `extra="forbid"` schemas would refuse it anyway.
-- **The safety gate** result shown on a script is the server's answer in API mode
-  (`POST /tga-approvals/match`). In preview mode it comes from a stand-in that runs in place of the
-  server and mirrors its rules ([`data/preview/gate.ts`](../frontend-features/src/data/preview/gate.ts)).
+- **The safety gate** result shown on a script will be the server's answer once `prescriptions` is
+  `api` (the gate runs inside the signing transaction). While scripts are preview it comes from a
+  stand-in that mirrors the server's rules over the preview's sample approvals
+  ([`data/preview/gate.ts`](../frontend-features/src/data/preview/gate.ts)), never over the
+  patient's real approvals, so one screen can't say "covered" while signing says "blocked".
   Either way, the UI disables signing when the answer is a refusal, and the server must refuse again
   at sign and at dispatch (proposed contract in [sdlc/07](sdlc/07-script-queue/api.md)).
 - **Four-eyes**, double-booking, state transitions: the preview enforces them the way the backend
