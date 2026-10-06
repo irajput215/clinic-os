@@ -88,11 +88,21 @@ jobs:
     - run: docker compose build
     - run: docker compose down -v --remove-orphans
     - run: docker compose run --rm backend bash scripts/prestart.sh
+    # `--global-timeout` bounds the whole shard inside this job's 15 minutes, so a hung
+    # shard ends the run itself and the reporters are finalised: the blob report is
+    # written, and `--add-reporter=line` keeps the configured `blob` reporter while adding
+    # live progress to the job log, which names the test that is hanging. A per-test
+    # `--timeout` does neither: it only moves the default, the specs that can outlive this
+    # budget set their own (`test.setTimeout`, `test.describe.configure`), and raising the
+    # default from 30s to 120s only makes a slow shard slower.
     - name: Run Playwright tests
-      run: docker compose run --rm playwright bunx playwright test --fail-on-flaky-tests --trace=retain-on-failure --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
+      run: docker compose run --rm playwright bunx playwright test --fail-on-flaky-tests --trace=retain-on-failure --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }} --global-timeout=780000 --add-reporter=line
     - run: docker compose down -v --remove-orphans
+    # `always()`, not `!cancelled()`: a job killed by its own `timeout-minutes` is
+    # *cancelled*, and `!cancelled()` skipped this upload, so the only record of which test
+    # hung was thrown away and the merged HTML report silently omitted the shard.
     - name: Upload blob report to GitHub Actions Artifacts
-      if: ${{ !cancelled() }}
+      if: ${{ always() }}
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: blob-report-${{ matrix.shardIndex }}
