@@ -1,12 +1,10 @@
 /**
  * The query and mutation options the administration screen uses.
  *
- * Every request here carries `meta: { skipAuthRedirect: true }`. `main.tsx` redirects a
- * `403` to the sign-in screen because most routes treat it as "the session is no longer
- * usable". The administration API is different: it answers `403` for a caller who is
- * signed in but does not hold `users:manage`, and for an account with no organisation. The
- * requirement is that the screen *shows* that state, so these requests opt out of the
- * redirect; a `401` still redirects, because an expired session is a different problem.
+ * A `403` from this API — a caller who is signed in but does not hold `users:manage`, or an
+ * account with no organisation — stays in the page and renders as the screen's own
+ * permission-denied state. That is now the rule for every request (`main.tsx` signs out on
+ * `401` only), so nothing here opts out of anything: the screen shows what the API answered.
  *
  * Retrying is limited to `429`. The administrative class is rate limited at 20 requests a
  * minute per client address, and this screen issues several requests per view, so a few
@@ -16,8 +14,6 @@
 
 import { PermissionsService, RolesService, UsersService } from "@/client"
 import { retryDelayMs, retryOnRateLimit } from "@/lib/admin"
-
-const ADMIN_QUERY_META = { skipAuthRedirect: true }
 
 /**
  * The screen issues several requests per view and the administrative class is limited to
@@ -36,7 +32,6 @@ const RETRY_ON_RATE_LIMIT = {
 export const rolesQueryOptions = {
   queryKey: ["admin", "roles"],
   queryFn: async () => (await RolesService.listRoles()).data,
-  meta: ADMIN_QUERY_META,
   ...ADMIN_QUERY_CACHE,
   ...RETRY_ON_RATE_LIMIT,
 }
@@ -45,7 +40,6 @@ export const rolesQueryOptions = {
 export const permissionsQueryOptions = {
   queryKey: ["admin", "permissions"],
   queryFn: async () => (await PermissionsService.listPermissions()).data,
-  meta: ADMIN_QUERY_META,
   ...ADMIN_QUERY_CACHE,
   ...RETRY_ON_RATE_LIMIT,
 }
@@ -56,7 +50,6 @@ export const userRolesQueryOptions = (userId: string) => ({
   queryFn: async () =>
     (await UsersService.readUserRoles({ path: { user_id: userId } })).data,
   enabled: userId.length > 0,
-  meta: ADMIN_QUERY_META,
   ...ADMIN_QUERY_CACHE,
   ...RETRY_ON_RATE_LIMIT,
 })
@@ -68,7 +61,6 @@ export const userPermissionsQueryOptions = (userId: string) => ({
     (await UsersService.readUserPermissions({ path: { user_id: userId } }))
       .data,
   enabled: userId.length > 0,
-  meta: ADMIN_QUERY_META,
   ...ADMIN_QUERY_CACHE,
   ...RETRY_ON_RATE_LIMIT,
 })

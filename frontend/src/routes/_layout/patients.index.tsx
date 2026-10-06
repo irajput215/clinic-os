@@ -6,10 +6,11 @@ import { PatientsService } from "@/client"
 import { DataTable } from "@/components/Common/DataTable"
 import AddPatient from "@/components/Patients/AddPatient"
 import { columns } from "@/components/Patients/columns"
+import PatientsNoAccess from "@/components/Patients/NoAccess"
 import PendingPatients from "@/components/Patients/PendingPatients"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { httpStatus } from "@/lib/http"
+import { httpStatus, retryTransient } from "@/lib/http"
 
 /**
  * The server's maximum page size (`MAX_PATIENTS_PAGE_SIZE` in
@@ -19,9 +20,10 @@ import { httpStatus } from "@/lib/http"
 const PAGE_SIZE = 25
 
 /**
- * The list keeps TanStack Query's default retry: a transient failure should recover on its
- * own before the screen reports it. The single-record query below does not, because a `404`
- * is a final answer and retrying it only delays the not-found state.
+ * The list retries what can change on its own — a dropped request or a `5xx` — and nothing
+ * else. A `4xx` here is a final answer: `403` is refused access and `422` a page size the
+ * server will not accept, and retrying either only holds a spinner in front of the state the
+ * user needs to read.
  */
 const patientsQueryOptions = {
   queryKey: ["patients"],
@@ -31,6 +33,7 @@ const patientsQueryOptions = {
         query: { limit: PAGE_SIZE },
       })
     ).data,
+  retry: retryTransient,
 }
 
 export const Route = createFileRoute("/_layout/patients/")({
@@ -62,6 +65,8 @@ function Patients() {
 
       {isPending ? (
         <PendingPatients />
+      ) : isError && httpStatus(error) === 403 ? (
+        <PatientsNoAccess error={error} />
       ) : isError ? (
         <PatientsError
           status={httpStatus(error)}
@@ -118,9 +123,8 @@ function PatientsError({
   onRetry: () => void
   retrying: boolean
 }) {
-  // A `403` (the account has no organisation) is handled globally: `main.tsx` clears the
-  // token and redirects to `/login` for `401` and `403`, so this screen does not try to
-  // explain it. What is left here is a failure worth retrying.
+  // A `403` is refused access and has its own state above (`PatientsNoAccess`); this is what
+  // is left, which is a failure worth retrying.
   const detail =
     status === undefined
       ? "The request could not reach the API. Check your connection and try again."

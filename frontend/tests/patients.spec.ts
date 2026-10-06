@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test"
 
-import { createUserWithClinic } from "./utils/publicApi"
+import { createUser, createUserWithClinic } from "./utils/publicApi"
 import { randomEmail, randomPassword } from "./utils/random"
 import { logInUser, logOutUser } from "./utils/user"
 
@@ -185,5 +185,35 @@ test.describe("Patients", () => {
     await expect(
       page.getByRole("heading", { name: `${givenName} ${familyName}` }),
     ).toHaveCount(0)
+  })
+})
+
+test.describe("Refused access", () => {
+  test.use({ storageState: { cookies: [], origins: [] } })
+
+  test("an account with no organisation is told so, and stays signed in", async ({
+    page,
+  }) => {
+    // The regression this pins: the patients API answers `403` for a signed-in account that
+    // belongs to no organisation, `main.tsx` used to clear the token on any `403`, and so
+    // opening this tab signed the user out — with the API's real answer thrown away, and the
+    // same loop waiting after signing in again.
+    const email = randomEmail()
+    const password = randomPassword()
+    await createUser({ email, password })
+    await logInUser(page, email, password)
+
+    await page.goto("/patients")
+
+    const refused = page.getByTestId("patients-no-access")
+    await expect(refused).toBeVisible()
+    await expect(refused).toHaveAttribute("data-reason", "no-organisation")
+    await expect(page.getByText("not part of an organisation")).toBeVisible()
+
+    // Still on the screen, still holding a session: nothing signed the user out.
+    await expect(page).toHaveURL(/\/patients$/)
+    expect(
+      await page.evaluate(() => localStorage.getItem("access_token")),
+    ).toBeTruthy()
   })
 })

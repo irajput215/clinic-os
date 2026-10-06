@@ -17,6 +17,7 @@
 import { AxiosError } from "axios"
 
 import type { PermissionRead, RoleRead } from "@/client"
+import { apiErrorCode } from "@/lib/http"
 
 export type PermissionGroup = {
   /** Stable id, used for React keys and test ids. */
@@ -180,30 +181,6 @@ export function formatCodeList(codes: readonly string[]): string {
   if (codes.length === 0) return ""
   if (codes.length === 1) return codes[0]
   return `${codes.slice(0, -1).join(", ")} and ${codes[codes.length - 1]}`
-}
-
-/**
- * The machine-readable reason code from the API's standard denial envelope
- * (`{ detail: { code, message } }`). `undefined` for a string detail or a network failure.
- */
-export function apiErrorCode(error: unknown): string | undefined {
-  if (!(error instanceof AxiosError)) return undefined
-  const detail: unknown = error.response?.data?.detail
-  if (typeof detail !== "object" || detail === null) return undefined
-  const code = (detail as { code?: unknown }).code
-  return typeof code === "string" ? code : undefined
-}
-
-/** The API's own message for a denial, or `undefined` when it sent none. */
-export function apiErrorMessage(error: unknown): string | undefined {
-  if (!(error instanceof AxiosError)) return undefined
-  const detail: unknown = error.response?.data?.detail
-  if (typeof detail === "string") return detail
-  if (typeof detail === "object" && detail !== null) {
-    const message = (detail as { message?: unknown }).message
-    if (typeof message === "string") return message
-  }
-  return undefined
 }
 
 /**

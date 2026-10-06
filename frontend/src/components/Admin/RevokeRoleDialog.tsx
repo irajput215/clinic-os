@@ -24,13 +24,8 @@ import {
 } from "@/components/ui/dialog"
 import { LoadingButton } from "@/components/ui/loading-button"
 import useCustomToast from "@/hooks/useCustomToast"
-import {
-  apiErrorCode,
-  isForbidden,
-  retryDelayMs,
-  retryOnRateLimit,
-} from "@/lib/admin"
-import { httpStatus } from "@/lib/http"
+import { isForbidden, retryDelayMs, retryOnRateLimit } from "@/lib/admin"
+import { apiErrorCode, httpStatus } from "@/lib/http"
 
 export function RevokeRoleDialog({
   userId,
@@ -49,7 +44,6 @@ export function RevokeRoleDialog({
       UsersService.revokeRole({
         path: { user_id: userId, role_id: assignment.role_id },
       }),
-    meta: { skipAuthRedirect: true },
     retry: retryOnRateLimit,
     retryDelay: retryDelayMs,
     onSuccess: () => {

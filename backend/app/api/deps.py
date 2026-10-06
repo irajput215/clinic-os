@@ -19,6 +19,13 @@ reusable_oauth2 = OAuth2PasswordBearer(
     tokenUrl=f"{settings.API_V1_STR}/login/access-token"
 )
 
+# The reason code for "authenticated, but not attached to an organisation". Every refusal in this
+# codebase carries a machine-readable code — the policy layer's `DecisionCode`, the users-and-roles
+# `LAST_ADMINISTRATOR` — and this boundary answer was the one that did not, so a client could not
+# tell "you have no organisation" from "you are not allowed to do this". The patients screen reads
+# the code to say what to do next rather than guessing from the status.
+NO_ORGANISATION = "NO_ORGANISATION"
+
 
 def get_db() -> Generator[Session]:
     with Session(engine) as session:
@@ -30,6 +37,16 @@ TokenDep = Annotated[str, Depends(reusable_oauth2)]
 
 
 def get_current_user(session: SessionDep, token: TokenDep) -> User:
+    """Resolve the session, and answer `401` whenever the session cannot be used.
+
+    Every way a session can be unusable is `401` and only `401`: a token that does not verify, a
+    token for an account that no longer exists, and a deactivated account (R5 — *"the deactivated
+    user's next request returns `401`"*). This is a contract, not a preference: the client signs out
+    on `401` and keeps every other status in the page, so a session problem reported as `403` or
+    `404` would leave a signed-in user looking at a screen that will never load. A `403` means the
+    opposite thing here — the session is valid and the identity is simply not allowed — and
+    `get_actor` below is where that starts.
+    """
     try:
         payload = jwt.decode(
             token, settings.SECRET_KEY, algorithms=[security.ALGORITHM]
@@ -37,14 +54,23 @@ def get_current_user(session: SessionDep, token: TokenDep) -> User:
         token_data = TokenPayload(**payload)
     except InvalidTokenError, ValidationError:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
+            status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
         )
     user = session.get(User, token_data.sub)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="This session's account no longer exists",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     if not user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Inactive user",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return user
 
 
@@ -67,7 +93,10 @@ def get_actor(current_user: CurrentUser) -> Actor:
     if current_user.tenant_id is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="This account has no organisation",
+            detail={
+                "code": NO_ORGANISATION,
+                "message": "This account has no organisation",
+            },
         )
     return users_roles_service.actor_for(
         user_id=current_user.id,
