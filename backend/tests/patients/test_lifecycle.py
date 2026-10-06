@@ -127,20 +127,31 @@ def test_list_limit_is_capped_by_the_server_maximum(api: PatientsApi) -> None:
 def test_the_four_declared_paths_are_served() -> None:
     """Exactly the declared paths, with no trailing slash and no `DELETE`."""
     openapi = app.openapi()
-    paths = sorted(path for path in openapi["paths"] if path.startswith(PATIENTS_URL))
 
-    # The patients feature declares four routes; it does not own the whole `/patients/` namespace.
-    # Feature 06 declares one more beneath it — `GET /api/v1/patients/{patient_id}/clinical-records`
-    # (`06-clinical-records/03-design.md`, "Endpoints") — so that path is named here rather than the
-    # assertion forbidding every nested path. The list stays exact: a route under `/patients/` that
-    # no design declares still fails, which is the property this test exists to protect.
-    clinical_records_path = f"{PATIENTS_URL}/{{patient_id}}/clinical-records"
+    # The patients module owns four routes; it does not own the whole `/patients/` namespace. Two
+    # other features each declare one nested route beneath it, and each is named here by its exact
+    # path — never by a name pattern — together with the methods it declares:
+    #
+    # * `GET /api/v1/patients/{patient_id}/clinical-records` — feature 06
+    #   (`docs/features/06-clinical-records/03-design.md`, "Endpoints");
+    # * `GET /api/v1/patients/{patient_id}/tga-approvals` — feature 08
+    #   (`docs/features/08-tga-approvals/03-design.md`, "Endpoints").
+    #
+    # The census stays exact, which is the property this test exists to protect: a route under
+    # `/patients/` that no design declares, a trailing-slash variant of any of them, or a method set
+    # that changes, all still fail.
+    declared_elsewhere = {
+        f"{PATIENTS_URL}/{{patient_id}}/clinical-records": {"get"},
+        f"{PATIENTS_URL}/{{patient_id}}/tga-approvals": {"get"},
+    }
 
-    assert paths == [
-        PATIENTS_URL,
-        f"{PATIENTS_URL}/{{patient_id}}",
-        clinical_records_path,
-    ]
+    assert sorted(
+        path
+        for path in openapi["paths"]
+        if path.startswith(PATIENTS_URL) and path not in declared_elsewhere
+    ) == [PATIENTS_URL, f"{PATIENTS_URL}/{{patient_id}}"]
     assert set(openapi["paths"][PATIENTS_URL]) == {"post", "get"}
     assert set(openapi["paths"][f"{PATIENTS_URL}/{{patient_id}}"]) == {"get", "patch"}
-    assert set(openapi["paths"][clinical_records_path]) == {"get"}
+    # And the nested routes are asserted too, so the census cannot pass by one of them vanishing.
+    for path, methods in declared_elsewhere.items():
+        assert set(openapi["paths"][path]) == methods, path

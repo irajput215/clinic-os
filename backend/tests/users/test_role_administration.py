@@ -13,6 +13,7 @@ The denial path is asserted first, because a route that only works is not eviden
 import uuid
 
 from app.core.config import settings
+from app.modules.users_roles.catalog import PERMISSION_CATALOGUE
 from tests.utils.rbac import ActorSession, RbacApi
 
 ROLES_URL = f"{settings.API_V1_STR}/roles"
@@ -121,12 +122,14 @@ def test_a_caller_with_the_permission_lists_roles_with_their_bundles(
 def test_a_caller_with_the_permission_lists_the_permission_catalogue(
     rbac: RbacApi,
 ) -> None:
-    """R7: the catalogue is global reference data, read-only, and the declared codes.
+    """R7: the catalogue is global reference data, read-only, and exactly what `catalog.py` declares.
 
-    **20, not 19, and the twentieth is the one recorded deviation**: `tenant:read`, which
-    `01-tenancy-and-clinics/03-design.md` "Endpoints" requires for `GET /api/v1/tenants/current` and
-    records as OPEN-2 ("absent from the fixed 19-permission catalogue"). It is named here rather than
-    left to `catalog.py` so the count stays a check on the catalogue instead of a restatement of it.
+    The expected set is read from the catalogue rather than written down as a count, because this test
+    guards the **endpoint**: the property it can fail on is "the catalogue route serves the catalogue
+    and nothing but the catalogue, without duplicates". A count written down here goes stale on every
+    future permission — it has already gone from 19 to 20 to 21. `test_seed_catalogue.py` is the test
+    that guards the catalogue's *contents*, against the 19 of `01-requirements.md` plus the named
+    deviations: `tenant:read` (Feature 01, OPEN-2) and `tga_approval:revoke` (Feature 08).
     """
     owner = rbac.register_tenant(clinic_name="Catalogue Clinic")
     assert owner.tenant_id is not None
@@ -134,12 +137,16 @@ def test_a_caller_with_the_permission_lists_the_permission_catalogue(
     response = rbac.client.get(PERMISSIONS_URL, headers=owner.headers)
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["count"] == 20
+    declared = {code for code, _description in PERMISSION_CATALOGUE}
+    assert body["count"] == len(declared)
     codes = [permission["code"] for permission in body["data"]]
-    assert len(set(codes)) == 20
+    assert set(codes) == declared
+    assert len(codes) == len(declared), "the catalogue is served without duplicates"
     assert "users:manage" in codes
-    # The one code beyond the 19 of `01-requirements.md`.
+    # The two codes beyond the 19 of `01-requirements.md`, each still named here so the deviation is
+    # visible in the test rather than only inferable from the catalogue.
     assert "tenant:read" in codes
+    assert "tga_approval:revoke" in codes
     # A candidate code is never granted (OPEN-1).
     assert "role:manage" not in codes
     assert "admin:feature_flag" not in codes

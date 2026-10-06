@@ -21,6 +21,7 @@ from app.modules.clinical_records.models import (
 from app.modules.clinics.models import Clinic
 from app.modules.identity_tenancy.models import Tenant
 from app.modules.patients.models import Patient
+from app.modules.tga_approvals.models import TgaApproval, TgaApprovalEvent
 from app.modules.users_roles.models import (
     Permission,
     Role,
@@ -41,6 +42,8 @@ __all__ = [
     "Role",
     "RolePermission",
     "Tenant",
+    "TgaApproval",
+    "TgaApprovalEvent",
     "User",
     "UserRole",
 ]

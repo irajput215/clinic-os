@@ -5,6 +5,10 @@ from app.modules.audit.router import router as audit_router
 from app.modules.clinical_records.router import router as clinical_records_router
 from app.modules.identity_tenancy.router import router as tenants_router
 from app.modules.patients.router import router as patients_router
+from app.modules.tga_approvals.router import (
+    patient_router as tga_patient_router,
+)
+from app.modules.tga_approvals.router import router as tga_approvals_router
 from app.modules.users_roles.router import (
     permissions_router,
     roles_router,
@@ -23,3 +27,8 @@ api_router.include_router(user_roles_router)
 api_router.include_router(tenants_router)
 api_router.include_router(audit_router)
 api_router.include_router(clinical_records_router)
+# Feature 08. Two routers, and the second is the design's patient-scoped list path
+# (`GET /api/v1/patients/{patient_id}/tga-approvals`), which cannot live under the
+# `/tga-approvals` prefix. The patients router is another module's; a module owns its routes.
+api_router.include_router(tga_approvals_router)
+api_router.include_router(tga_patient_router)

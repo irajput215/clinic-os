@@ -6,7 +6,7 @@
 | ---- | ---- | ------- | -------- | -------- | ------- | ------- |
 | created_at | timestamp with time zone |  | false |  |  |  |
 | data_region | varchar(32) |  | false |  |  |  |
-| id | uuid | gen_random_uuid() | false | [public.care_relationships](public.care_relationships.md) [public.clinical_record_versions](public.clinical_record_versions.md) [public.clinical_records](public.clinical_records.md) [public.clinics](public.clinics.md) [public.patients](public.patients.md) [public.role_permissions](public.role_permissions.md) [public.roles](public.roles.md) [public.user](public.user.md) [public.user_roles](public.user_roles.md) |  |  |
+| id | uuid | gen_random_uuid() | false | [public.care_relationships](public.care_relationships.md) [public.clinical_record_versions](public.clinical_record_versions.md) [public.clinical_records](public.clinical_records.md) [public.clinics](public.clinics.md) [public.patients](public.patients.md) [public.role_permissions](public.role_permissions.md) [public.roles](public.roles.md) [public.tga_approval_events](public.tga_approval_events.md) [public.tga_approvals](public.tga_approvals.md) [public.user](public.user.md) [public.user_roles](public.user_roles.md) |  |  |
 | legal_name | varchar(255) |  | false |  |  |  |
 | retention_profile | varchar(64) |  | false |  |  |  |
 | slug | varchar(64) |  | false |  |  |  |
@@ -48,6 +48,8 @@ erDiagram
 "public.patients" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.role_permissions" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.roles" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.tga_approval_events" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.tga_approvals" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.user" }o--o| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL"
 "public.user_roles" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 
@@ -145,6 +147,42 @@ erDiagram
   varchar name
   uuid tenant_id FK
   timestamp_with_time_zone updated_at
+}
+"public.tga_approval_events" {
+  uuid actor_id
+  uuid approval_id FK
+  varchar from_state
+  uuid id
+  timestamp_with_time_zone occurred_at
+  varchar reason
+  varchar source
+  uuid tenant_id FK
+  varchar to_state
+}
+"public.tga_approvals" {
+  varchar approval_reference
+  timestamp_with_time_zone created_at
+  uuid created_by
+  varchar creation_reason
+  varchar dosage_form
+  uuid id
+  uuid patient_id FK
+  timestamp_with_time_zone revoked_at
+  uuid revoked_by
+  varchar revoked_reason_code
+  varchar source
+  uuid source_document_id
+  varchar state
+  uuid superseded_by_id
+  uuid supersedes_id FK
+  uuid tenant_id FK
+  varchar tga_category
+  timestamp_with_time_zone updated_at
+  date valid_from
+  date valid_to
+  daterange validity_interval
+  timestamp_with_time_zone verified_at
+  uuid verified_by
 }
 "public.user" {
   timestamp_with_time_zone created_at

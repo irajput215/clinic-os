@@ -58,6 +58,15 @@ PERMISSION_CATALOGUE: Final[tuple[tuple[str, str], ...]] = (
     ("tga_approval:read", "Read TGA approvals."),
     ("tga_approval:create", "Create a TGA approval request."),
     ("tga_approval:verify", "Verify a TGA approval."),
+    # Added by Feature 08 (`docs/features/08-tga-approvals/03-design.md`, endpoints table:
+    # `POST /api/v1/tga-approvals/{id}/revoke` requires `tga_approval:revoke`). `01-requirements.md`'s
+    # 19-code matrix in this feature's own document set does not list it, because revocation was
+    # specified as *"a practice owner revokes"* (08 US-6) rather than as a granular code. Without a
+    # code of its own, revoke would have to reuse `tga_approval:verify` — which
+    # `COMPLIANCE_AUDITOR` holds, so an auditor could revoke (08 US-7 says an auditor changes
+    # nothing). The bundle below is the reason the code is additive: `PRACTICE_OWNER` is built from
+    # this tuple, so it gains the code without a second edit.
+    ("tga_approval:revoke", "Revoke a TGA approval."),
     ("tga_inbox:process", "Process the TGA inbox."),
     ("audit:read", "Read the organisation's audit trail."),
     ("reports:export", "Export reports."),
@@ -250,6 +259,19 @@ USERS_ROLES_AUDIT_ACTIONS: Final[dict[str, str]] = {
 # — and named here so the route declaration and the policy call cannot drift apart, exactly as
 # `PATIENT_PERMISSIONS` and `USERS_ROLES_PERMISSIONS` do for their routes.
 AUDIT_READ_PERMISSION: Final[str] = "audit:read"
+
+# The permission each TGA approval route requires. Named here so the route declaration, the policy
+# call and the access-control test cannot drift apart, exactly as `PATIENT_PERMISSIONS` does for the
+# patient routes. `tga_approval:read` is already in the catalogue above and is granted to every
+# clinical role plus `COMPLIANCE_AUDITOR` (US-7's read-only auditor).
+TGA_APPROVAL_READ: Final[str] = "tga_approval:read"
+
+TGA_APPROVAL_PERMISSIONS: Final[dict[str, str]] = {
+    "create": "tga_approval:create",
+    "read": TGA_APPROVAL_READ,
+    "verify": "tga_approval:verify",
+    "revoke": "tga_approval:revoke",
+}
 
 # The audit action a role grant **and** a role revoke emit. This is doc 07 §1's name — the closed
 # catalogue `docs/features/04-audit-log/05-data-and-audit.md` makes normative — and not the
