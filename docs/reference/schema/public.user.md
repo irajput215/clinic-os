@@ -8,7 +8,7 @@
 | email | varchar(255) |  | false |  |  |  |
 | full_name | varchar(255) |  | true |  |  |  |
 | hashed_password | varchar |  | false |  |  |  |
-| id | uuid |  | false | [public.clinical_record_versions](public.clinical_record_versions.md) [public.clinical_records](public.clinical_records.md) [public.user_roles](public.user_roles.md) |  |  |
+| id | uuid |  | false | [public.care_relationships](public.care_relationships.md) [public.clinical_record_versions](public.clinical_record_versions.md) [public.clinical_records](public.clinical_records.md) [public.user_roles](public.user_roles.md) |  |  |
 | is_active | boolean |  | false |  |  |  |
 | is_superuser | boolean |  | false |  |  |  |
 | tenant_id | uuid |  | true |  | [public.tenants](public.tenants.md) |  |
@@ -38,6 +38,7 @@
 ```mermaid
 erDiagram
 
+"public.care_relationships" }o--|| "public.user" : "FOREIGN KEY (practitioner_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
 "public.clinical_record_versions" }o--|| "public.user" : "FOREIGN KEY (author_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
 "public.clinical_records" }o--|| "public.user" : "FOREIGN KEY (author_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
 "public.user_roles" }o--|| "public.user" : "FOREIGN KEY (granted_by) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
@@ -53,6 +54,18 @@ erDiagram
   boolean is_active
   boolean is_superuser
   uuid tenant_id FK
+}
+"public.care_relationships" {
+  timestamp_with_time_zone active_from
+  timestamp_with_time_zone active_to
+  uuid clinic_id FK
+  timestamp_with_time_zone created_at
+  uuid id
+  uuid patient_id FK
+  uuid practitioner_id FK
+  varchar_128_ source
+  uuid tenant_id FK
+  timestamp_with_time_zone updated_at
 }
 "public.clinical_record_versions" {
   uuid author_id FK

@@ -5,8 +5,10 @@
 | Name | Columns | Comment | Type |
 | ---- | ------- | ------- | ---- |
 | [public.audit_log](public.audit_log.md) | 16 |  | BASE TABLE |
+| [public.care_relationships](public.care_relationships.md) | 10 |  | BASE TABLE |
 | [public.clinical_record_versions](public.clinical_record_versions.md) | 12 |  | BASE TABLE |
 | [public.clinical_records](public.clinical_records.md) | 9 |  | BASE TABLE |
+| [public.clinics](public.clinics.md) | 7 |  | BASE TABLE |
 | [public.patients](public.patients.md) | 23 |  | BASE TABLE |
 | [public.permissions](public.permissions.md) | 3 |  | BASE TABLE |
 | [public.role_permissions](public.role_permissions.md) | 3 |  | BASE TABLE |
@@ -36,12 +38,17 @@
 ```mermaid
 erDiagram
 
+"public.care_relationships" }o--|| "public.user" : "FOREIGN KEY (practitioner_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
+"public.care_relationships" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.care_relationships" }o--|| "public.patients" : "FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE RESTRICT"
+"public.care_relationships" }o--o| "public.clinics" : "FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE RESTRICT"
 "public.clinical_record_versions" }o--|| "public.user" : "FOREIGN KEY (author_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
 "public.clinical_record_versions" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.clinical_record_versions" }o--|| "public.clinical_records" : "FOREIGN KEY (tenant_id, clinical_record_id) REFERENCES clinical_records(tenant_id, id) ON DELETE RESTRICT"
 "public.clinical_records" }o--|| "public.user" : "FOREIGN KEY (author_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
 "public.clinical_records" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.clinical_records" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
+"public.clinics" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.patients" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.patients" }o--o| "public.patients" : "FOREIGN KEY (merged_into_patient_id) REFERENCES patients(id) ON DELETE RESTRICT"
 "public.role_permissions" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
@@ -72,6 +79,18 @@ erDiagram
   uuid tenant_id
   timestamp_with_time_zone timestamp
 }
+"public.care_relationships" {
+  timestamp_with_time_zone active_from
+  timestamp_with_time_zone active_to
+  uuid clinic_id FK
+  timestamp_with_time_zone created_at
+  uuid id
+  uuid patient_id FK
+  uuid practitioner_id FK
+  varchar_128_ source
+  uuid tenant_id FK
+  timestamp_with_time_zone updated_at
+}
 "public.clinical_record_versions" {
   uuid author_id FK
   varchar body
@@ -96,6 +115,15 @@ erDiagram
   varchar record_type
   timestamp_with_time_zone signed_at
   uuid tenant_id FK
+}
+"public.clinics" {
+  varchar_255_ address
+  timestamp_with_time_zone created_at
+  uuid id
+  varchar_255_ name
+  varchar_64_ phone
+  uuid tenant_id FK
+  timestamp_with_time_zone updated_at
 }
 "public.patients" {
   varchar address_line
