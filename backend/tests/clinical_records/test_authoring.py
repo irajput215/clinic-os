@@ -11,9 +11,11 @@ from sqlalchemy import text
 
 from app.core.db import engine
 from tests.clinical_records.conftest import (
+    BLANK_SOAP_SURFACES,
     DEFAULT_NOTE_BODY,
     ClinicalApi,
     ClinicalTenant,
+    assert_blank_narrative_refusal,
     created_record,
 )
 
@@ -83,6 +85,43 @@ def test_create_note_rejects_a_missing_or_doubled_narrative(
     assert empty_soap.status_code == 422, empty_soap.text
 
     assert clinical.row_counts(tenant.tenant_id) == (0, 0)
+
+
+def test_create_note_rejects_a_blank_soap_narrative(
+    clinical: ClinicalApi, tenant: ClinicalTenant
+) -> None:
+    """R2/R3: a SOAP surface whose every section is blank is `422`, with zero rows written."""
+    for soap in BLANK_SOAP_SURFACES:
+        refused = clinical.create_record(
+            tenant.owner, tenant.patient, body=None, soap=soap
+        )
+        assert refused.status_code == 422, refused.text
+        assert_blank_narrative_refusal(refused.json())
+
+    blank_body = clinical.create_record(tenant.owner, tenant.patient, body="  \n ")
+    assert blank_body.status_code == 422, blank_body.text
+
+    assert clinical.row_counts(tenant.tenant_id) == (0, 0)
+
+
+def test_create_note_keeps_a_blank_section_beside_a_written_one(
+    clinical: ClinicalApi, tenant: ClinicalTenant
+) -> None:
+    """`docs2/sdlc/03-consult-notes/api.md`: every section sent is rendered, blank or not.
+
+    The blank-narrative refusal is about a note with nothing in it, not about a note with one
+    unwritten section.
+    """
+    response = clinical.create_record(
+        tenant.owner,
+        tenant.patient,
+        body=None,
+        soap={"subjective": "Headache for three days.", "objective": "  "},
+    )
+    version = created_record(response)["versions"][0]
+
+    assert "Headache for three days." in version["body"]
+    assert "## Objective" in version["body"]
 
 
 def test_narrative_is_single_body_column(

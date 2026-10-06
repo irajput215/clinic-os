@@ -11,7 +11,7 @@ session in every case.
 
 The narrative is **one field**. A client may send either `body` (+ `body_format`) or the `soap`
 authoring surface; a validator refuses a request that sends both, sends neither, or sends an empty
-one. When `soap` is sent the service serialises it into `clinical_record_versions.body` — the single
+one (a `soap` whose every section is blank counts as empty). When `soap` is sent the service serialises it into `clinical_record_versions.body` — the single
 narrative column R3 fixes — so there are no SOAP columns and no second notes table.
 
 Response models declare exactly what the API returns. `ClinicalRecordVersionRead` exposes the
@@ -92,16 +92,21 @@ def _exactly_one_narrative(body: str | None, soap: SoapNote | None) -> None:
 
     Sending `body` *and* `soap` would make the stored narrative depend on an unstated precedence
     rule; sending neither would insert an empty clinical note. Both are `422`, before any query.
+
+    A SOAP surface counts as empty unless at least one section has non-blank text. Sections are
+    whitespace-stripped first, so `{"subjective": "  "}` arrives as `""`; a presence check alone
+    would let it render a heading-only narrative into the permanent record. A blank section beside
+    a written one is still rendered (`docs2/sdlc/03-consult-notes/api.md`). The message is a
+    constant: the refusal names the rule and never repeats the submitted text (INV-5).
     """
     if body is not None and soap is not None:
         raise ValueError("send either body or soap, not both")
     if body is None and soap is None:
         raise ValueError("one of body or soap is required")
     if soap is not None and not any(
-        field is not None
-        for field in (soap.subjective, soap.objective, soap.assessment, soap.plan)
+        field for field in (soap.subjective, soap.objective, soap.assessment, soap.plan)
     ):
-        raise ValueError("soap must carry at least one of its four sections")
+        raise ValueError("soap must carry at least one non-blank section")
 
 
 class ClinicalRecordCreate(SQLModel):
