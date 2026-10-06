@@ -321,3 +321,24 @@ def created_record(response: Response) -> dict[str, Any]:
     """The created record's body, with the status asserted once so every case reads the same."""
     assert response.status_code == 201, response.text
     return response.json()
+
+
+# SOAP surfaces with no non-blank section. Each would otherwise render a heading-only narrative
+# into the permanent record. The submitted text is whitespace, so the refusal must name the rule,
+# never repeat the input.
+BLANK_SOAP_SURFACES: list[dict[str, str]] = [
+    {"subjective": ""},
+    {"subjective": "  "},
+    {"plan": "\n\t "},
+    {"subjective": " ", "objective": "\n", "assessment": "\t", "plan": "   "},
+]
+
+
+def assert_blank_narrative_refusal(response_json: dict[str, object]) -> None:
+    """The module's validation refusal: RFC 7807, `detail` narrowed to `type`/`loc`/`msg`."""
+    assert response_json["status"] == 422
+    detail = response_json["detail"]
+    assert isinstance(detail, list) and detail
+    for error in detail:
+        assert set(error) <= {"type", "loc", "msg"}
+    assert any("non-blank" in error["msg"] for error in detail)

@@ -14,7 +14,13 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from app.core.db import engine
-from tests.clinical_records.conftest import ClinicalApi, ClinicalTenant, created_record
+from tests.clinical_records.conftest import (
+    BLANK_SOAP_SURFACES,
+    ClinicalApi,
+    ClinicalTenant,
+    assert_blank_narrative_refusal,
+    created_record,
+)
 
 
 def test_amendment_creates_new_version_with_provenance(
@@ -58,6 +64,44 @@ def test_amendment_reason_required_from_version_two(
     assert refused.status_code == 422, refused.text
     assert refused.json()["detail"]["code"] == "AMENDMENT_REASON_REQUIRED"
     assert clinical.row_counts(tenant.tenant_id) == (1, 1)
+
+
+def test_append_rejects_a_blank_soap_narrative(
+    clinical: ClinicalApi, tenant: ClinicalTenant
+) -> None:
+    """R6/R3: neither an edit nor an amendment may append a version with an empty narrative."""
+    unsigned = created_record(clinical.create_record(tenant.owner, tenant.patient))
+    signed = created_record(clinical.create_record(tenant.owner, tenant.patient))
+    assert clinical.sign(tenant.owner, signed["id"]).status_code == 200
+
+    for soap in BLANK_SOAP_SURFACES:
+        edited = clinical.patch_record(
+            tenant.owner,
+            unsigned["id"],
+            soap=soap,
+            amendment_reason="Clarified the history",
+        )
+        assert edited.status_code == 422, edited.text
+        assert_blank_narrative_refusal(edited.json())
+
+        amended = clinical.amend(
+            tenant.owner,
+            signed["id"],
+            soap=soap,
+            amendment_reason="Clarified the history",
+        )
+        assert amended.status_code == 422, amended.text
+        assert_blank_narrative_refusal(amended.json())
+
+    blank_body = clinical.amend(
+        tenant.owner,
+        signed["id"],
+        body=" \t ",
+        amendment_reason="Clarified the history",
+    )
+    assert blank_body.status_code == 422, blank_body.text
+
+    assert clinical.row_counts(tenant.tenant_id) == (2, 2)
 
 
 def test_version_one_preserved_byte_for_byte(
