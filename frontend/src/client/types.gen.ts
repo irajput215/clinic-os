@@ -480,6 +480,54 @@ export type RolesPublic = {
 };
 
 /**
+ * TenantCurrentRead
+ *
+ * The caller's own tenant, as `GET /api/v1/tenants/current` returns it.
+ *
+ * `status` and `data_region` are shown (US-1). `retention_profile` and `legal_name` are not: the
+ * application role holds no `SELECT` on either (`03-design.md`, "Database privileges").
+ */
+export type TenantCurrentRead = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Data Region
+     */
+    data_region: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
+ * TenantSettingsUpdate
+ *
+ * The body of `PATCH /api/v1/tenants/current` — no field is settable yet.
+ *
+ * `extra="forbid"` is what makes that a control rather than a comment: a client cannot smuggle a
+ * `tenant_id` (or any future setting) past the route, and any name it sends is a `422` decided by the
+ * validation layer, in the same order the design fixes (validate against a strict schema).
+ */
+export type TenantSettingsUpdate = {
+    [key: string]: never;
+};
+
+/**
  * Token
  */
 export type Token = {
@@ -1444,6 +1492,49 @@ export type usersRevokeRoleResponses = {
 };
 
 export type usersRevokeRoleResponse = usersRevokeRoleResponses[keyof usersRevokeRoleResponses];
+
+export type tenantsReadCurrentTenantData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/tenants/current';
+};
+
+export type tenantsReadCurrentTenantResponses = {
+    /**
+     * Successful Response
+     */
+    200: TenantCurrentRead;
+};
+
+export type tenantsReadCurrentTenantResponse = tenantsReadCurrentTenantResponses[keyof tenantsReadCurrentTenantResponses];
+
+export type tenantsUpdateCurrentTenantData = {
+    body: TenantSettingsUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/tenants/current';
+};
+
+export type tenantsUpdateCurrentTenantErrors = {
+    /**
+     * Refused. `PERMISSION_NOT_HELD` when the caller does not hold `tenant:configure`; `STEP_UP_REQUIRED` for a caller who does, because the step-up control this route requires is not built (feature 02, blocked by D-003). Nothing is written.
+     */
+    403: unknown;
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type tenantsUpdateCurrentTenantError = tenantsUpdateCurrentTenantErrors[keyof tenantsUpdateCurrentTenantErrors];
+
+export type tenantsUpdateCurrentTenantResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
 
 export type auditListAuditEventsData = {
     body?: never;
