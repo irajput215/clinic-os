@@ -13,10 +13,12 @@ from sqlmodel import SQLModel
 from app.core.metadata import NAMING_CONVENTION
 from app.models import User
 from app.modules.audit.models import AuditLogEntry
+from app.modules.care_relationships.models import CareRelationship
 from app.modules.clinical_records.models import (
     ClinicalRecord,
     ClinicalRecordVersion,
 )
+from app.modules.clinics.models import Clinic
 from app.modules.identity_tenancy.models import Tenant
 from app.modules.patients.models import Patient
 from app.modules.users_roles.models import (
@@ -30,6 +32,8 @@ __all__ = [
     "NAMING_CONVENTION",
     "SQLModel",
     "AuditLogEntry",
+    "CareRelationship",
+    "Clinic",
     "ClinicalRecord",
     "ClinicalRecordVersion",
     "Patient",

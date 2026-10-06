@@ -121,17 +121,25 @@ def test_a_caller_with_the_permission_lists_roles_with_their_bundles(
 def test_a_caller_with_the_permission_lists_the_permission_catalogue(
     rbac: RbacApi,
 ) -> None:
-    """R7: the catalogue is global reference data, read-only, and the 19 declared codes."""
+    """R7: the catalogue is global reference data, read-only, and the declared codes.
+
+    **20, not 19, and the twentieth is the one recorded deviation**: `tenant:read`, which
+    `01-tenancy-and-clinics/03-design.md` "Endpoints" requires for `GET /api/v1/tenants/current` and
+    records as OPEN-2 ("absent from the fixed 19-permission catalogue"). It is named here rather than
+    left to `catalog.py` so the count stays a check on the catalogue instead of a restatement of it.
+    """
     owner = rbac.register_tenant(clinic_name="Catalogue Clinic")
     assert owner.tenant_id is not None
 
     response = rbac.client.get(PERMISSIONS_URL, headers=owner.headers)
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["count"] == 19
+    assert body["count"] == 20
     codes = [permission["code"] for permission in body["data"]]
-    assert len(set(codes)) == 19
+    assert len(set(codes)) == 20
     assert "users:manage" in codes
+    # The one code beyond the 19 of `01-requirements.md`.
+    assert "tenant:read" in codes
     # A candidate code is never granted (OPEN-1).
     assert "role:manage" not in codes
     assert "admin:feature_flag" not in codes
