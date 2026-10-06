@@ -93,7 +93,7 @@ rather than the step-up refusal, exactly as the `users:manage` boundary is docum
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlmodel import select
+from sqlalchemy import select
 
 from app.api.deps import ActorDep
 from app.core.db import tenant_transaction
@@ -144,15 +144,30 @@ def _current_tenant(*, tenant_id: uuid.UUID) -> TenantCurrentRead | None:
     helper" and because it fails closed with no context.
     """
     with tenant_transaction(tenant_id=tenant_id) as session:
+        # The statement names its six columns explicitly, through the table rather than the model's
+        # class attributes: SQLModel types a class attribute as its *declared* type (`uuid.UUID`), so
+        # `select(Tenant.id, ...)` is not a typed column select, and `load_only` needs mapped
+        # attributes rather than names. Naming the columns is the control, not a detail — the
+        # application role holds `SELECT` on exactly these, and an ORM entity select would ask for
+        # `retention_profile` and `legal_name` too and fail with `permission denied for column` the
+        # day the application connects as `clinos_app` instead of as the table owner.
+        # `Tenant.metadata.tables` rather than `Tenant.__table__`: SQLModel's base class does not
+        # declare `__table__` in its type stubs, while `metadata` is declared, so this is the spelling
+        # that type-checks and still yields the same `Table`.
+        table = Tenant.metadata.tables["tenants"]
         statement = select(
-            Tenant.id,
-            Tenant.slug,
-            Tenant.status,
-            Tenant.data_region,
-            Tenant.created_at,
-            Tenant.updated_at,
-        ).where(Tenant.id == tenant_id)
-        row = session.exec(statement).one_or_none()
+            table.c.id,
+            table.c.slug,
+            table.c.status,
+            table.c.data_region,
+            table.c.created_at,
+            table.c.updated_at,
+        ).where(table.c.id == tenant_id)
+        # `connection().execute`, not `session.exec`: `session.exec` is typed for a single-entity
+        # scalar select (`Select[_TSelectParam]`), `session.execute` is the shim SQLModel deprecates,
+        # and a Core select executed on the session's connection is the same transaction without
+        # either caveat — `app/core/db.py` uses the connection the same way.
+        row = session.connection().execute(statement).one_or_none()
         if row is None:
             return None
         return TenantCurrentRead(

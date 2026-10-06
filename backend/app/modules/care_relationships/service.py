@@ -72,13 +72,16 @@ def active_relationship(
         statement = (
             select(CareRelationship)
             .where(
-                CareRelationship.tenant_id == actor.tenant_id,
-                CareRelationship.practitioner_id == actor.user_id,
-                CareRelationship.patient_id == patient_id,
-                CareRelationship.active_from <= now,
+                # Every column goes through `col()`: SQLModel types a class attribute as its
+                # *declared* type, so `CareRelationship.active_to > now` reads to a type checker as
+                # `datetime | None > datetime`. `col()` recovers the SQL expression.
+                col(CareRelationship.tenant_id) == actor.tenant_id,
+                col(CareRelationship.practitioner_id) == actor.user_id,
+                col(CareRelationship.patient_id) == patient_id,
+                col(CareRelationship.active_from) <= now,
                 or_(
                     col(CareRelationship.active_to).is_(None),
-                    CareRelationship.active_to > now,
+                    col(CareRelationship.active_to) > now,
                 ),
             )
             .order_by(
