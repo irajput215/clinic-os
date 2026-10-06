@@ -31,7 +31,7 @@ export const Route = createFileRoute("/_layout/patients/$patientId")({
   head: () => ({
     meta: [
       {
-        title: "Patient - clinicOS",
+        title: "Patient - ClinicOS",
       },
     ],
   }),
