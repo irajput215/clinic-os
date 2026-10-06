@@ -1,3 +1,4 @@
 {
-  "extends": ["../../frontend/biome.json"]
+  "extends": ["../../frontend-features/biome.json"],
+  "vcs": { "root": "../.." }
 }

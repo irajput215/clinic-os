@@ -3,18 +3,19 @@ FROM oven/bun:1 AS frontend-build
 WORKDIR /app
 
 COPY package.json bun.lock /app/
-COPY frontend/package.json /app/frontend/
-# The root package.json names frontend-features as a workspace; bun needs its manifest to resolve.
 COPY frontend-features/package.json /app/frontend-features/
 
-WORKDIR /app/frontend
+WORKDIR /app/frontend-features
 
 RUN bun install
 
-COPY ./frontend /app/frontend
+COPY ./frontend-features /app/frontend-features
 
+# Empty: the backend serves this build and the API from one origin, so the client calls `/api` on
+# its own origin and the build's CSP `connect-src` is `'self'` alone.
 ARG VITE_API_URL=
 
+# vite.config.ts writes the build to ../backend/app/frontend, i.e. /app/backend/app/frontend.
 RUN bun run build
 
 
