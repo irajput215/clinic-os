@@ -2,7 +2,7 @@
 
 import { type Client, type Options as Options2, type TDataShape, urlSearchParamsBodySerializer } from './client';
 import { client } from './client.gen';
-import type { healthReadinessData, healthReadinessErrors, healthReadinessResponses, loginLoginAccessTokenData, loginLoginAccessTokenErrors, loginLoginAccessTokenResponses, loginRecoverPasswordData, loginRecoverPasswordErrors, loginRecoverPasswordResponses, loginResetPasswordData, loginResetPasswordErrors, loginResetPasswordResponses, loginTestTokenData, loginTestTokenResponses, patientsCreatePatientData, patientsCreatePatientErrors, patientsCreatePatientResponses, patientsListPatientsData, patientsListPatientsErrors, patientsListPatientsResponses, patientsReadPatientData, patientsReadPatientErrors, patientsReadPatientResponses, patientsUpdatePatientData, patientsUpdatePatientErrors, patientsUpdatePatientResponses, permissionsListPermissionsData, permissionsListPermissionsResponses, rolesListRolesData, rolesListRolesResponses, usersAssignRoleData, usersAssignRoleErrors, usersAssignRoleResponses, usersCreateUserData, usersCreateUserErrors, usersCreateUserResponses, usersDeleteUserData, usersDeleteUserErrors, usersDeleteUserMeData, usersDeleteUserMeResponses, usersDeleteUserResponses, usersReadUserByIdData, usersReadUserByIdErrors, usersReadUserByIdResponses, usersReadUserMeData, usersReadUserMeResponses, usersReadUserPermissionsData, usersReadUserPermissionsErrors, usersReadUserPermissionsResponses, usersReadUserRolesData, usersReadUserRolesErrors, usersReadUserRolesResponses, usersReadUsersData, usersReadUsersErrors, usersReadUsersResponses, usersRegisterUserData, usersRegisterUserErrors, usersRegisterUserResponses, usersRevokeRoleData, usersRevokeRoleErrors, usersRevokeRoleResponses, usersUpdatePasswordMeData, usersUpdatePasswordMeErrors, usersUpdatePasswordMeResponses, usersUpdateUserData, usersUpdateUserErrors, usersUpdateUserMeData, usersUpdateUserMeErrors, usersUpdateUserMeResponses, usersUpdateUserResponses, utilsHealthCheckData, utilsHealthCheckResponses, utilsTestEmailData, utilsTestEmailErrors, utilsTestEmailResponses } from './types.gen';
+import type { auditListAuditEventsData, auditListAuditEventsErrors, auditListAuditEventsResponses, auditReadAuditEventData, auditReadAuditEventErrors, auditReadAuditEventResponses, healthReadinessData, healthReadinessErrors, healthReadinessResponses, loginLoginAccessTokenData, loginLoginAccessTokenErrors, loginLoginAccessTokenResponses, loginRecoverPasswordData, loginRecoverPasswordErrors, loginRecoverPasswordResponses, loginResetPasswordData, loginResetPasswordErrors, loginResetPasswordResponses, loginTestTokenData, loginTestTokenResponses, patientsCreatePatientData, patientsCreatePatientErrors, patientsCreatePatientResponses, patientsListPatientsData, patientsListPatientsErrors, patientsListPatientsResponses, patientsReadPatientData, patientsReadPatientErrors, patientsReadPatientResponses, patientsUpdatePatientData, patientsUpdatePatientErrors, patientsUpdatePatientResponses, permissionsListPermissionsData, permissionsListPermissionsResponses, rolesListRolesData, rolesListRolesResponses, usersAssignRoleData, usersAssignRoleErrors, usersAssignRoleResponses, usersCreateUserData, usersCreateUserErrors, usersCreateUserResponses, usersDeleteUserData, usersDeleteUserErrors, usersDeleteUserMeData, usersDeleteUserMeResponses, usersDeleteUserResponses, usersReadUserByIdData, usersReadUserByIdErrors, usersReadUserByIdResponses, usersReadUserMeData, usersReadUserMeResponses, usersReadUserPermissionsData, usersReadUserPermissionsErrors, usersReadUserPermissionsResponses, usersReadUserRolesData, usersReadUserRolesErrors, usersReadUserRolesResponses, usersReadUsersData, usersReadUsersErrors, usersReadUsersResponses, usersRegisterUserData, usersRegisterUserErrors, usersRegisterUserResponses, usersRevokeRoleData, usersRevokeRoleErrors, usersRevokeRoleResponses, usersUpdatePasswordMeData, usersUpdatePasswordMeErrors, usersUpdatePasswordMeResponses, usersUpdateUserData, usersUpdateUserErrors, usersUpdateUserMeData, usersUpdateUserMeErrors, usersUpdateUserMeResponses, usersUpdateUserResponses, utilsHealthCheckData, utilsHealthCheckResponses, utilsTestEmailData, utilsTestEmailErrors, utilsTestEmailResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -455,6 +455,36 @@ export class PermissionsService {
             responseType: 'json',
             security: [{ scheme: 'bearer', type: 'http' }],
             url: '/api/v1/permissions',
+            ...options
+        });
+    }
+}
+
+export class AuditService {
+    /**
+     * List Audit Events
+     *
+     * One keyset page of the caller's audit trail, newest first, and the read is itself audited.
+     */
+    public static listAuditEvents<ThrowOnError extends boolean = true>(options?: Options<auditListAuditEventsData, ThrowOnError>) {
+        return (options?.client ?? client).get<auditListAuditEventsResponses, auditListAuditEventsErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/audit/events',
+            ...options
+        });
+    }
+    
+    /**
+     * Read Audit Event
+     *
+     * One event of the caller's trail. Another tenant's event is `404`, and the attempt is audited.
+     */
+    public static readAuditEvent<ThrowOnError extends boolean = true>(options: Options<auditReadAuditEventData, ThrowOnError>) {
+        return (options.client ?? client).get<auditReadAuditEventResponses, auditReadAuditEventErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/audit/events/{event_id}',
             ...options
         });
     }

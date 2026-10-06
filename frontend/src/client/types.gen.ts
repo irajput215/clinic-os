@@ -5,6 +5,103 @@ export type ClientOptions = {
 };
 
 /**
+ * AuditEventRead
+ *
+ * One audit event as the API returns it — the design's envelope, and nothing else.
+ *
+ * `tenant_id` is not declared: the caller already knows its own tenant, and the row was read under
+ * it. `prev_hash` and `hash` are exposed because verifying the trail is the point of reading it.
+ */
+export type AuditEventRead = {
+    /**
+     * Event Id
+     */
+    event_id: string;
+    /**
+     * Timestamp
+     */
+    timestamp: string;
+    /**
+     * Actor Id
+     */
+    actor_id?: string | null;
+    /**
+     * Actor Role
+     */
+    actor_role?: string | null;
+    /**
+     * Action
+     */
+    action: string;
+    /**
+     * Resource Type
+     */
+    resource_type: string;
+    /**
+     * Resource Id
+     */
+    resource_id?: string | null;
+    /**
+     * Result
+     */
+    result: string;
+    /**
+     * Reason
+     */
+    reason?: string | null;
+    /**
+     * Source Ip
+     */
+    source_ip?: string | null;
+    /**
+     * Request Id
+     */
+    request_id: string;
+    /**
+     * Correlation Id
+     */
+    correlation_id?: string | null;
+    /**
+     * Prev Hash
+     */
+    prev_hash: string;
+    /**
+     * Hash
+     */
+    hash: string;
+    /**
+     * Payload
+     */
+    payload?: {
+        [key: string]: unknown;
+    } | null;
+};
+
+/**
+ * AuditEventsPublic
+ *
+ * A keyset page of audit events.
+ *
+ * `next_cursor` is opaque and `None` on the last page. `count` is the number of rows in this page,
+ * not the tenant's total: the total is not disclosed and is not knowable without a scan, which R12
+ * refuses.
+ */
+export type AuditEventsPublic = {
+    /**
+     * Data
+     */
+    data: Array<AuditEventRead>;
+    /**
+     * Count
+     */
+    count: number;
+    /**
+     * Next Cursor
+     */
+    next_cursor?: string | null;
+};
+
+/**
  * Body_login-login_access_token
  */
 export type Body_login_login_access_token = {
@@ -1347,3 +1444,95 @@ export type usersRevokeRoleResponses = {
 };
 
 export type usersRevokeRoleResponse = usersRevokeRoleResponses[keyof usersRevokeRoleResponses];
+
+export type auditListAuditEventsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+        /**
+         * Action
+         */
+        action?: string | null;
+        /**
+         * Actor Id
+         */
+        actor_id?: string | null;
+        /**
+         * Resource Type
+         */
+        resource_type?: string | null;
+        /**
+         * Resource Id
+         */
+        resource_id?: string | null;
+        /**
+         * Result
+         */
+        result?: string | null;
+        /**
+         * From
+         */
+        from?: string | null;
+        /**
+         * To
+         */
+        to?: string | null;
+    };
+    url: '/api/v1/audit/events';
+};
+
+export type auditListAuditEventsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type auditListAuditEventsError = auditListAuditEventsErrors[keyof auditListAuditEventsErrors];
+
+export type auditListAuditEventsResponses = {
+    /**
+     * Successful Response
+     */
+    200: AuditEventsPublic;
+};
+
+export type auditListAuditEventsResponse = auditListAuditEventsResponses[keyof auditListAuditEventsResponses];
+
+export type auditReadAuditEventData = {
+    body?: never;
+    path: {
+        /**
+         * Event Id
+         */
+        event_id: string;
+    };
+    query?: never;
+    url: '/api/v1/audit/events/{event_id}';
+};
+
+export type auditReadAuditEventErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type auditReadAuditEventError = auditReadAuditEventErrors[keyof auditReadAuditEventErrors];
+
+export type auditReadAuditEventResponses = {
+    /**
+     * Successful Response
+     */
+    200: AuditEventRead;
+};
+
+export type auditReadAuditEventResponse = auditReadAuditEventResponses[keyof auditReadAuditEventResponses];

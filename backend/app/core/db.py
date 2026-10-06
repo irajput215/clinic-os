@@ -41,12 +41,23 @@ def tenant_transaction(
     tenant_id: UUID | None,
     actor_id: UUID | None = None,
     request_id: str | None = None,
+    actor_role: str | None = None,
+    source_ip: str | None = None,
+    correlation_id: str | None = None,
 ) -> Iterator[Session]:
     """Open one transaction carrying tenant context.
 
     Fails closed: without a tenant no transaction opens, so there is no path to an
     unscoped query. The settings are transaction-scoped, so they revert at COMMIT
     or ROLLBACK and cannot leak across pooled requests.
+
+    **The audit writer reads its actor context from here, not from a parameter**
+    (`app.modules.audit.service`). `app.tenant_id` is set with `SET LOCAL`, and the actor,
+    role, request, source address and correlation identifiers are recorded on the session,
+    so a caller cannot describe an audit event as coming from somebody else, and cannot
+    chain one into another tenant's trail (INV-1). `actor_role` is the role held at
+    decision time, which is why the caller supplies it rather than the writer
+    re-deriving it later.
     """
     if tenant_id is None:
         raise TenantContextRequired(
@@ -55,10 +66,19 @@ def tenant_transaction(
 
     with Session(engine) as session, session.begin():
         _set_context(session, "app.tenant_id", str(tenant_id))
+        session.info["tenant_id"] = str(tenant_id)
         if actor_id is not None:
             _set_context(session, "app.actor_id", str(actor_id))
+            session.info["actor_id"] = str(actor_id)
         if request_id is not None:
             _set_context(session, "app.request_id", request_id)
+            session.info["request_id"] = request_id
+        if actor_role is not None:
+            session.info["actor_role"] = actor_role
+        if source_ip is not None:
+            session.info["source_ip"] = source_ip
+        if correlation_id is not None:
+            session.info["correlation_id"] = correlation_id
         yield session
 
 
