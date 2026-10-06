@@ -11,7 +11,13 @@ import { describeError, httpStatus } from "@/lib/http"
 import { signIn } from "@/lib/session"
 import { cn } from "@/lib/utils"
 import { z } from "@/lib/zod"
-import { AuthFailure, AuthLayout, AuthTitle, authLinkClass } from "./AuthLayout"
+import {
+  AuthFailure,
+  AuthLayout,
+  AuthLead,
+  AuthTitle,
+  authLinkClass,
+} from "./AuthLayout"
 
 const schema = z.object({
   username: z.email("Enter the email you sign in with."),
@@ -52,12 +58,7 @@ export function LoginPage({ redirectTo }: { redirectTo: string }) {
   return (
     <AuthLayout>
       <AuthTitle>Clinic OS</AuthTitle>
-      <p className="mb-1.5 font-serif text-[15px] text-stone italic">
-        Calm software for careful medicine.
-      </p>
-      <p className="mb-6 text-[12.5px] tracking-[0.02em] text-stone-faint uppercase">
-        Banksia Family Medical
-      </p>
+      <AuthLead>Calm software for careful medicine.</AuthLead>
 
       <form onSubmit={onSubmit} noValidate aria-label="Sign in">
         <div className="space-y-4">
@@ -114,20 +115,12 @@ export function LoginPage({ redirectTo }: { redirectTo: string }) {
         </Button>
       </form>
 
-      <div className="mt-4 space-y-1.5 text-center text-[13px] text-stone">
-        <p>
-          New patient?{" "}
-          <a href="/book/banksia-family-medical" className={authLinkClass}>
-            Book an appointment
-          </a>
-        </p>
-        <p>
-          Setting up a practice?{" "}
-          <Link to="/signup" className={authLinkClass}>
-            Create an organisation
-          </Link>
-        </p>
-      </div>
+      <p className="mt-4 text-center text-[13px] text-stone">
+        Setting up a practice?{" "}
+        <Link to="/signup" className={authLinkClass}>
+          Create an organisation
+        </Link>
+      </p>
     </AuthLayout>
   )
 }

@@ -34,8 +34,11 @@ export interface NavItem {
     | "/approvals"
     | "/admin"
     | "/settings"
-  /** Opens outside the app shell (the public booking page). */
-  href?: string
+  /**
+   * The clinic's public booking page, opened outside the app shell at `/book/<slug>`. Shown only
+   * once the signed-in clinic's slug is known.
+   */
+  bookingPage?: true
   count?: CountKey
   /** Shown only to someone who may administer (see `useCanAdminister`); the server still decides. */
   requiresAdmin?: boolean
@@ -95,7 +98,7 @@ export const NAV: Array<{ group: string; items: NavItem[] }> = [
       {
         label: "Booking page",
         icon: ExternalLink,
-        href: "/book/banksia-family-medical",
+        bookingPage: true,
       },
     ],
   },

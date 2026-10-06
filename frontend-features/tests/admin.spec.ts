@@ -101,6 +101,9 @@ test("an account without the permission gets no Administration entry, and a refu
   const nav = page.getByRole("navigation", { name: "Main" })
   await expect(nav.getByRole("link", { name: "Settings" })).toBeVisible()
   await expect(nav.getByRole("link", { name: "Administration" })).toHaveCount(0)
+  // No organisation, so no clinic to name and no booking page to link: never a stand-in.
+  await expect(page.getByTestId("sidebar-clinic")).toBeEmpty()
+  await expect(nav.getByRole("link", { name: "Booking page" })).toHaveCount(0)
 
   await page.goto("/admin")
   await expect(

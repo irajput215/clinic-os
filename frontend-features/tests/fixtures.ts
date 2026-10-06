@@ -7,6 +7,8 @@ export interface Clinic {
   email: string
   password: string
   fullName: string
+  /** The organisation's routing slug, as the server derives it from the clinic name at signup. */
+  slug: string
   /** The owner's access token, from the setup project's one sign-in. */
   token: string
 }

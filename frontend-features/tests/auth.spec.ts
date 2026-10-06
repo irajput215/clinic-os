@@ -56,3 +56,23 @@ test("signing out clears the session", async ({ page, clinic }) => {
   await page.goto("/patients")
   await expect(page).toHaveURL(/\/login/)
 })
+
+test("the sidebar names the signed-in clinic and links its own booking page", async ({
+  signedIn: page,
+  clinic,
+}) => {
+  // `GET /tenants/current` is in the administrative rate-limit class: 20 a minute per client
+  // address, shared by every test in a parallel run. The sidebar waits out a `429` (5 s, 20 s, 40 s)
+  // and shows nothing meanwhile, so the step allows for the full wait.
+  test.setTimeout(150_000)
+  await page.goto("/")
+  // The slug is the only clinic identity the API returns.
+  await expect(page.getByTestId("sidebar-clinic")).toHaveText(clinic.slug, {
+    timeout: 90_000,
+  })
+  await expect(
+    page
+      .getByRole("navigation", { name: "Main" })
+      .getByRole("link", { name: "Booking page" }),
+  ).toHaveAttribute("href", `/book/${clinic.slug}`)
+})

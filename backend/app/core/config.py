@@ -32,7 +32,9 @@ class Settings(BaseSettings):
     # deliberately absent from `.env.example`; a deployment overrides it by setting it, and the
     # default carries the control.
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
-    FRONTEND_HOST: str = "http://localhost:5173"
+    # The origin emailed links (password reset) point at. The backend serves the app at `/`, so
+    # locally that is the backend itself (`fastapi dev`, and compose.override.yml, on :8000).
+    FRONTEND_HOST: str = "http://localhost:8000"
     FASTAPI_ENV: Literal["development"] | None = None
 
     PROJECT_NAME: str
