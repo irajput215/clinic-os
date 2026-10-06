@@ -182,7 +182,13 @@ test.describe("Admin user management", () => {
 test.describe("Admin page access control", () => {
   test.use({ storageState: { cookies: [], origins: [] } })
 
-  test("Non-superuser cannot access admin page", async ({ page }) => {
+  test("A non-superuser without an organisation sees a permission-denied state", async ({
+    page,
+  }) => {
+    // The screen retries a `429` from the administrative rate limit (20/min, shared across
+    // a run), which can take up to a minute; give this test room for it.
+    test.setTimeout(120_000)
+
     const email = randomEmail()
     const password = randomPassword()
 
@@ -191,8 +197,16 @@ test.describe("Admin page access control", () => {
 
     await page.goto("/admin")
 
-    await expect(page.getByRole("heading", { name: "Users" })).not.toBeVisible()
-    await expect(page).not.toHaveURL(/\/admin/)
+    // The administration API is the boundary, not the route: the screen renders and the
+    // refusal is explained rather than redirected away from. See admin-roles.spec.ts.
+    // The longer timeout covers the screen's own retry when the administrative rate limit
+    // (20/min, shared across this run) has been reached.
+    await expect(page.getByTestId("admin-access-denied")).toBeVisible({
+      timeout: 90_000,
+    })
+    // The superuser-only user management is not shown to a plain account.
+    await expect(page.getByRole("heading", { name: "Users" })).toHaveCount(0)
+    await expect(page.getByRole("button", { name: "Add User" })).toHaveCount(0)
   })
 
   test("Superuser can access admin page", async ({ page }) => {
