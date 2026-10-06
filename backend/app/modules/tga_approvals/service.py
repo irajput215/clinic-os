@@ -716,7 +716,7 @@ def _constraint_refusal(error: IntegrityError) -> Refusal:
         )
     return _refuse(
         CONSTRAINT_VIOLATION,
-        status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
         "The approval could not be stored: it violates a clinical constraint",
     )
 
@@ -862,7 +862,7 @@ def verify_approval(
             )
             return _refuse(
                 APPLICATION_NUMBER_MISMATCH,
-                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
                 "The application number does not match the record being verified",
             )
 
