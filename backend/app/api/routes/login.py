@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 
 from app import crud
-from app.api.deps import CurrentUser, SessionDep
+from app.api.deps import ActiveTenantUser, SessionDep
 from app.core import security
 from app.core.config import settings
 from app.core.rate_limit import login_rate_limit, password_recovery_rate_limit
@@ -46,9 +46,12 @@ def login_access_token(
 
 
 @router.post("/login/test-token", response_model=UserPublic)
-def test_token(current_user: CurrentUser) -> Any:
+def test_token(current_user: ActiveTenantUser) -> Any:
     """
     Test access token
+
+    Carries the tenant-status refusal (R10) like the other self-service routes: a suspended
+    organisation's session is refused here too, not only where tenant data is read.
     """
     return current_user
 
@@ -80,10 +83,18 @@ def recover_password(email: str, session: SessionDep) -> Message:
     )
 
 
-@router.post("/reset-password/")
+@router.post(
+    "/reset-password/",
+    dependencies=[Depends(password_recovery_rate_limit)],
+)
 def reset_password(session: SessionDep, body: NewPassword) -> Message:
     """
     Reset password
+
+    Carries the same 5/min recovery limit as the request route
+    (`docs/reference/build-contract.md` control 10): the reset token is a bearer credential that
+    grants a session, so guessing one must be at least as expensive as asking for one. Both routes
+    share the `password-recovery` window, which caps recovery work from one address in total.
     """
     email = verify_password_reset_token(token=body.token)
     if not email:

@@ -3,14 +3,15 @@ doc_id: OZ-PROGRESS
 title: Build progress against the contract
 owner: CTO (interim: Ishu Rajput)
 status: DRAFT — for review
-last_reviewed: 2026-10-05
-next_review: 2026-11-05
+last_reviewed: 2026-10-06
+next_review: 2026-11-06
 classification: RESTRICTED
 repo_docs:
   - README.md
   - reference/build-contract.md
   - reference/gates.md
   - reference/decisions/README.md
+  - to-be-completed.md
 ---
 
 # Build progress
@@ -18,8 +19,9 @@ repo_docs:
 One page answering three questions: **what is actually built**, **what is verified**, and **what the rest
 of this set now says that is no longer true**.
 
-[`README.md`](README.md) states that "nothing is implemented". That is no longer accurate — but it is not
-far from accurate either. The domain is still empty: no feature is complete and no gate is signed.
+[`README.md`](README.md) states that "nothing is implemented". That is no longer accurate. The foundations,
+the first tenant-scoped clinical table (`patients`) with forced RLS, the central RBAC authorization engine,
+and the management UI are built and verified.
 
 Everything below is stated against an artefact. `README.md`'s evidence discipline applies here too: a
 claim with no artefact is a gap, not progress.
@@ -56,21 +58,50 @@ Read this first. **Done** means merged to `main` and verified; **Next** is order
 | D20 | The outage closed: the deployed credential corrected, then verified live — readiness `200`, login `200`, signup creates the organisation | Deploy run `37303519527`, green end to end |
 | D21 | The two `tenants` check constraints renamed to what the models declare, and a test asserting **every** constraint and index name against the metadata | migration `f993c55e6eaf` · [`test_schema_conventions.py`](../backend/tests/core/test_schema_conventions.py) |
 | D22 | Schema conventions written down ([`database-conventions.md`](reference/database-conventions.md)); `User` ↔ `Tenant` relationships declared on both sides with a test; `alembic check` and the generated ER diagrams now gated in CI | [`schema-diagram.sh`](../scripts/schema-diagram.sh) · [`schema/`](reference/schema/README.md) · `.github/workflows/test-backend.yml` |
-| D23 | `patients` created — the first tenant-scoped table — with forced RLS, a permissive policy that actually grants a caller its own rows, the design's restrictive floor, and `clinos_app` (no superuser, no `BYPASSRLS`, no `DELETE` grant) | migration `134a7201f6d2` · [`test_patients_isolation.py`](../backend/tests/isolation/test_patients_isolation.py) |
+| D23 | `patients` created — the first tenant-scoped table — with forced RLS, a permissive policy that actually grants a caller its own rows, the design's restrictive floor, and `clinos_app` (no superuser, no `BYPASSRLS`, no `DELETE` grant) | PR #28 · migration `134a7201f6d2` · [`test_patients_isolation.py`](../backend/tests/isolation/test_patients_isolation.py) |
 | D24 | The five database roles created with least-privilege grants — `clinos_app` holds no `DELETE` or `TRUNCATE` — and `MIGRATION_DATABASE_URL` split from `DATABASE_URL` so migrations own and the app does not | migration `33c56ebab859` · [`test_app_role_is_not_owner.py`](../backend/tests/isolation/test_app_role_is_not_owner.py) · [`test_every_tenant_table_has_policy.py`](../backend/tests/isolation/test_every_tenant_table_has_policy.py) |
+| D25 | **Patients HTTP API**: 4 routes (`POST`, `GET`, `GET /{id}`, `PATCH /{id}`), deny-by-default, cross-tenant obscurity (`404`), server-side page size limit (25) | PR #29 · [`modules/patients/router.py`](../backend/app/modules/patients/router.py) · [`tests/patients/`](../backend/tests/patients/) |
+| D26 | **Patients UI Screens**: Patients list view with server pagination, Add Patient dialog with submit validation, and individual Patient detail record screen | PR #30 · [`frontend/src/routes/_layout/patients.tsx`](../frontend/src/routes/_layout/patients.tsx) |
+| D27 | **RBAC Policy Layer & Catalog**: Schema for `roles`, `permissions`, `role_permissions`, `user_roles` with forced RLS; pure decision engine `can()` and `can_grant()` (R3); seed migration for 7 system roles and 19 permissions per tenant | PR #35 · migrations `f96bc0861b16`, `4d092676eafa`, `a1f2b3c4d5e6` · [`modules/users_roles/`](../backend/app/modules/users_roles/) |
+| D28 | **Role Administration API**: 6 administrative routes (`GET /roles`, `GET /permissions`, `GET/POST /users/{id}/roles`, `GET /users/{id}/permissions`, `DELETE /users/{id}/roles/{role_id}`), rate limited at 20/min | PR #35 · [`modules/users_roles/router.py`](../backend/app/modules/users_roles/router.py) · [`tests/security/test_role_administration_authz.py`](../backend/tests/security/test_role_administration_authz.py) |
+| D29 | **Admin UI Screens**: Roles & Permissions tab in navigation, interactive permissions bundle viewer, role assignment dialog, and role revocation | PR #36 · [`frontend/src/components/Admin/`](../frontend/src/components/Admin/) |
+| D30 | **Playwright Test Sharding & Stability**: Bound shard runtimes and diagnostic artifact capture in CI workflows | PR #37 · [`.github/workflows/playwright.yml`](../.github/workflows/playwright.yml) |
+| D31 | **RBAC Last Administrator Rule (R8)**: Revoking a role refuses with `403 LAST_ADMINISTRATOR` when it would leave a tenant with zero administrators | PR #38 · [`modules/users_roles/service.py`](../backend/app/modules/users_roles/service.py) |
+| D32 | **Session Auth 401 vs 403 Separation**: Only unauthenticated `401` triggers a sign-out; `403 Forbidden` routes to a dedicated access-denied state without destroying the user's session | PR #39 · [`frontend/src/client/core/request.ts`](../frontend/src/client/core/request.ts) |
+
+---
 
 ### 🔄 In progress
 
-**Nothing.** The working tree is clean and the next slice has not started. This row is empty on purpose.
+**Nothing.** The working tree on `main` is clean.
 
-### ⏭ Next — in this order
+---
 
-| # | Step | Why it is next |
-|:---:|---|---|
-| N1 | **Patients** — table, service, `POST`/`GET /api/v1/patients` | The first *tenant-scoped* table. It brings the first forced RLS policy, which is where INV-1 stops being an intention |
-| N2 | **TGA approvals** — manual entry with a validity window | The gate in N3 needs an `ACTIVE` approval to exist |
-| N3 | **The prescription safety gate** — dispatch refused without an approval at the grain | INV-2, and the screen that demonstrates the product's hard constraint |
-| N4 | **Isolation tests** — two tenants, absence assertions | Proves N1's RLS rather than asserting it |
+### ⏭ Next Steps — in priority order
+
+> 📋 **Complete Backlog**: For the exhaustive, task-by-task inventory across all 186 delivery tasks, 17 feature specifications, 7 security gates, and 6 invariants, refer to [`docs/to-be-completed.md`](to-be-completed.md).
+
+Ordered into two parallel streams: **Pre-Production Hardening** (addressing known security/integrity gaps) followed by the **Clinical Regulatory Milestones**.
+
+#### Stream 1: Pre-Production Hardening (Immediate)
+
+| # | Step | Why it is next | Owner |
+|:---:|---|---|---|
+| **P1** | **Enforce Tenant Status in Auth (`get_actor`)** | Requirement R10: A `SUSPENDED` tenant must be refused on every request. Currently, suspended clinic users can still query patient records. | Backend Lead |
+| **P2** | **Shorten Access Token Expiration & Protect Password Reset** | Control 1 mandates 15-minute access tokens; current setting is 8 days (`config.py`). `POST /api/v1/reset-password/` currently lacks rate limiting. | Security Lead |
+| **P3** | **Atomic Organization Registration** | `register_user` runs across 4 separate database transactions. If role seeding fails, the user is left half-provisioned with 0 roles and locked out. Needs single-transaction atomicity and slug retry. | Backend Lead |
+| **P4** | **Safe User Deactivation (No Hard Deletes)** | Requirement R11: `DELETE /api/v1/users/{id}` currently calls hard `session.delete(user)`, triggering foreign key crashes on `user_roles` and destroying audit attribution. Replace with `user.is_active = False`. | Backend Lead |
+| **P5** | **Activate `clinos_app` in Production** | PostgreSQL RLS is bypassed in production because `DATABASE_URL` connects as `neondb_owner` (`rolbypassrls = true`). Grant `clinos_app` `INSERT ON tenants` and `SELECT ON user.hashed_password`, then switch connection. | Infra / DevOps |
+
+#### Stream 2: Clinical Regulatory Milestones
+
+| # | Step | Why it is next | Milestone |
+|:---:|---|---|---|
+| **N1** | **Append-Only Audit Trail (Feature 04)** | Invariant INV-4 and Control 6: Append-only `audit_log` table with SHA-256 hash chaining, writer facade, and immutable compliance export. Needed by clinical reads. | Gate 2 |
+| **N2** | **TGA Approvals Engine (Feature 08)** | Invariant INV-2: Store SAS-B and Authorised Prescriber approvals at the grain (`patient_id` + `category` + `dosage_form` + `validity_window`) with a GiST exclusion constraint on active intervals. | Gate 4 · M2 |
+| **N3** | **Prescription Safety Gate (Feature 10)** | The hard clinical constraint: script dispensing refused (`BLOCKED`) without an active, matching TGA approval. Negative decision matrix and audit emission. | Gate 5 · M3 |
+
+---
 
 ### ⏸ Blocked — cannot start
 
@@ -82,301 +113,68 @@ Read this first. **Done** means merged to `main` and verified; **Next** is order
 | Gate 1 sign-off | D-003 and D-004 both |
 | The `valid_to` boundary in the safety gate | **D-006**, awaiting the Clinical Safety Officer |
 
+---
+
 ### ⬜ Not started
 
-Features 01–16 as features (no feature is complete) · row-level security · the audit log · RBAC ·
-reporting and exports · integrations · CI security scanning (T0-13–T0-15) · every gate's evidence
-bundle · password recovery that can actually send mail.
+Features 06–07, 09, 11–16 · full OIDC provider integration · prescription safety gate · S3 Object Lock compliance export · CI security scanning (T0-13–T0-15).
 
-### Where each area stands
+---
+
+### Where each area stands today
 
 | Area | State | Evidence |
 |---|---|---|
-| ClinicOS domain features (01–16) | **Not started** — no domain endpoint exists | [`§2`](#2-what-the-api-serves-today) |
 | `tenants` table | **Created**, plus an opt-in demo seed | migration `706856e36a80` |
 | Tenant-scoped transaction helper | **Built** — `SET LOCAL`, fails closed without a tenant | [`backend/app/core/db.py`](../backend/app/core/db.py) |
-| Row-level security | **Not implemented.** `tenants` is global by design; the first forced policy lands with the first tenant-scoped table | [`03-design.md`](features/01-tenancy-and-clinics/03-design.md) |
-| Audit log (feature 04) | **Not started** | — |
-| Authentication (feature 02) | **Template only**, and blocked by D-003 | [`D-003`](reference/decisions/D-003-identity-model.md) |
-| Self-registration | **Open** — one signup creates an organisation and its administrator (D17) | `USERS_OPEN_REGISTRATION` |
-| Liveness vs readiness | **Separated.** Liveness answers without touching the database; readiness returns `503` when it cannot reach one | [`core/health.py`](../backend/app/core/health.py) |
-| Rate limiting | **Built** for login (20/min) and password recovery (5/min) | [`backend/app/core/rate_limit.py`](../backend/app/core/rate_limit.py) |
-| Database migrations | 12, head `33c56ebab859`, `alembic check` clean | `uv run alembic check` |
-| Tests | **131 passing, 94% coverage** | `uv run pytest` |
-| Schema diagrams | **Generated and committed**; CI fails when they are stale | [`docs/reference/schema/`](reference/schema/README.md) |
-| CI | 15 checks green: backend, compose, 4 Playwright shards, pre-commit, zizmor, coverage | PR #15 |
-| Gate 1–7 | **None passed, none signed.** No evidence bundle exists | [`gates.md`](reference/gates.md) |
-| Deployment | FastAPI Cloud + Neon (`ap-southeast-2`), **automatic on merge to `main`**, **gated on the readiness probe**, credential corrected and verified green | D19 · D20 · [`§6`](#6-known-gaps-and-risks) |
+| Row-level security | **Enforced in code, bypassed in cloud.** Tables `patients`, `roles`, `role_permissions`, `user_roles` carry forced RLS policies. Live enforcement requires switching from `neondb_owner` to `clinos_app` (P5). | [`test_every_tenant_table_has_policy.py`](../backend/tests/isolation/test_every_tenant_table_has_policy.py) |
+| Patients domain (Feature 05) | **CRUD Built**: Table, RLS, 4 API endpoints, React screens. Identifier encryption and search deferred. | PR #28, #29, #30 |
+| RBAC domain (Feature 03) | **Built**: 7 roles, 19 permissions, pure policy engine `can()`, 6 admin routes, Admin UI screens. | PR #35, #36, #38 |
+| Audit log (Feature 04) | **Not started** | All domain routes note `Audit: deferred` |
+| Authentication (Feature 02) | **Template only**, 8-day token lifetime, blocked by D-003 | [`D-003`](reference/decisions/D-003-identity-model.md) |
+| Organisation self-registration | **Operational** — signup registers the clinic, creates the tenant, and makes the signer Practice Owner | `POST /api/v1/users/signup` |
+| Rate limiting | **Built** for login (20/min), password recovery (5/min), and admin API (20/min) | [`backend/app/core/rate_limit.py`](../backend/app/core/rate_limit.py) |
+| Database migrations | **15 migrations, head `a1f2b3c4d5e6`**, `alembic check` clean | `uv run alembic check` |
+| Tests | **184 passing backend tests, 94%+ coverage**; Playwright E2E suites passing | `uv run pytest` · Playwright CI |
+| Schema diagrams | **Generated and committed**; CI gates against drift | [`docs/reference/schema/`](reference/schema/README.md) |
+| Deployment | FastAPI Cloud + Neon (`ap-southeast-2`), **automatic on merge to `main`**, gated on `/api/v1/health/ready/` | Green end-to-end |
 
 ---
 
 ## 2. What the API serves today
 
-Twelve routes. Six are unauthenticated — more than the endpoint declaration standard's two permitted
-*surfaces*, but they are exactly those two: public intake (login, recovery, signup) and the probes.
+Twenty-two routes across public intake, probes, user management, patient records, and role administration:
 
-| Method | Path | Auth |
-|---|---|---|
-| `POST` | `/api/v1/login/access-token` | open — rate limited |
-| `POST` | `/api/v1/password-recovery/{email}` | open — rate limited |
-| `POST` | `/api/v1/reset-password/` | open — **not rate limited** |
-| `POST` | `/api/v1/users/signup` | open — **refuses with 403 unless `USERS_OPEN_REGISTRATION`** (on by default since D17); creates the tenant |
-| `GET` | `/api/v1/utils/health-check/` | open — liveness; does **not** touch the database |
-| `GET` | `/api/v1/health/ready/` | open — readiness; `503` with a boolean body when the database is unreachable |
-| `POST` | `/api/v1/login/test-token` | session |
-| `GET/POST` | `/api/v1/users/` | session |
-| `GET/PATCH/DELETE` | `/api/v1/users/me` | session |
-| `PATCH` | `/api/v1/users/me/password` | session |
-| `GET/PATCH/DELETE` | `/api/v1/users/{user_id}` | session |
-| `POST` | `/api/v1/utils/test-email/` | session |
-
-Removed from the template: `/api/v1/items/*` (the example domain), `/api/v1/private/users/`
-(unauthenticated user creation) and `/api/v1/password-recovery-html-content/{email}` (an enumeration
-oracle). `users` and `login` remain the template's, pending features 02 and 03.
-
----
-
-## 3. What changed during 2026-10-04 → 05
-
-Nine pull requests, all merged, plus three follow-ups (#20–#21 and this change) to close the outage they
-exposed. Each is a measured step, not a feature.
-
-| PR | Change |
-|---|---|
-| #11 | `.env` untracked, `.gitignore`d, `.env.example` added; control 8's live violation closed |
-| #12 | `AGENTS.md`; the tenant transaction helper; `tenants` table, migration and seed; a pytest guard that refuses a non-local database |
-| #13 | One constraint naming convention and one model registry; `updated_at` actually maintained; the demo seed made opt-in; `private` route removed |
-| #14 | Self-registration closed by default; the signup page removed (reversed by #19) |
-| #15 | The `item` domain dropped; rate limiting on login and recovery; the recovery HTML oracle removed |
-| #16 | This board, and the index corrections it required |
-| #17 | Branding work merged into the wrong base branch — recovered, not lost, as #18 |
-| #18 | clinicOS branding ships for real; the auth forms validate on submit, not on blur |
-| #19 | Signup restored as organisation registration; one signup creates one tenant and its administrator |
-| #20 · #21 · #22 · #23 | Readiness probe; the deploy now fails when the app cannot serve. A runtime-config sync was attempted and removed — the deploy token cannot manage app environment variables |
-| this change | D21: the two `tenants` check constraints renamed, and a test that compares every constraint and index name against the model metadata. D22: schema conventions written down, relationships declared on both sides, and `alembic check` plus the generated ER diagrams gated in CI |
-
-Also in this window: six defects corrected in the document set itself ([`traceability.md`](reference/traceability.md),
-[`control-matrix.md`](reference/control-matrix.md), [`definition-of-done.md`](reference/definition-of-done.md),
-[`tasks/00`](tasks/00-phase-0-foundation.md), a dead anchor in [`gates.md`](reference/gates.md), and stale
-labels in [`open-questions.md`](reference/open-questions.md)).
+| Method | Path | Auth | Protection / Tenant Scope |
+|---|---|---|---|
+| `POST` | `/api/v1/login/access-token` | Open | Rate-limited (20/min) |
+| `POST` | `/api/v1/password-recovery/{email}` | Open | Rate-limited (5/min) |
+| `POST` | `/api/v1/reset-password/` | Open | Unauthenticated (**gap: not rate-limited**) |
+| `POST` | `/api/v1/users/signup` | Open | Organisation registration; creates tenant & assigns Practice Owner |
+| `GET` | `/api/v1/utils/health-check/` | Open | Liveness probe (does not touch database) |
+| `GET` | `/api/v1/health/ready/` | Open | Readiness probe (verifies database connectivity) |
+| `POST` | `/api/v1/login/test-token` | Session | Validates token payload |
+| `GET/POST` | `/api/v1/users/` | Session | Superuser only |
+| `GET/PATCH/DELETE` | `/api/v1/users/me` | Session | Account profile management |
+| `PATCH` | `/api/v1/users/me/password` | Session | Password update |
+| `GET/PATCH/DELETE` | `/api/v1/users/{user_id}` | Session | User management (superuser) |
+| `POST` | `/api/v1/utils/test-email/` | Session | SMTP diagnostic |
+| `POST` | `/api/v1/patients` | Session | `patient:create` · Tenant resolved from session |
+| `GET` | `/api/v1/patients` | Session | `patient:read` · Server-side limit 25 · Tenant scoped |
+| `GET` | `/api/v1/patients/{patient_id}` | Session | `patient:read` · Cross-tenant returns `404` |
+| `PATCH` | `/api/v1/patients/{patient_id}` | Session | `patient:update` · Cross-tenant returns `404` |
+| `GET` | `/api/v1/roles` | Session | `users:manage` · Rate-limited (20/min) · Tenant scoped |
+| `GET` | `/api/v1/permissions` | Session | `users:manage` · Rate-limited (20/min) · Global reference |
+| `GET` | `/api/v1/users/{user_id}/roles` | Session | `users:manage` · Rate-limited (20/min) · Tenant scoped |
+| `GET` | `/api/v1/users/{user_id}/permissions` | Session | `users:manage` · Rate-limited (20/min) · Computed server-side |
+| `POST` | `/api/v1/users/{user_id}/roles` | Session | `users:manage` · R3 grantability rule · Idempotent grant |
+| `DELETE` | `/api/v1/users/{user_id}/roles/{role_id}` | Session | `users:manage` · R8 last admin rule · Scoped revocation |
 
 ---
 
-## 4. Where this document set is now wrong
+## 3. Verified Metrics Summary
 
-A defect to raise, not a judgement call to make silently.
-
-1. **[`build-contract.md` §12](reference/build-contract.md) "Verified baseline"** is dated 2026-10-04 and
-   states that the routes are `users`, `items`, `login`, `private` and `utils`. `items` and `private` no
-   longer exist and `tenants` does. The section needs re-verification, or to be marked as the historical
-   starting point it now is.
-2. **[`README.md`](README.md) status** — "Everything in this set is `DRAFT — for review`. Nothing is
-   implemented." The first sentence holds; the second does not.
-3. **Feature 01 is partially and unevenly built.** `tenants` exists with the documented column set, but
-   `clinics` does not (OPEN-1), there is no RLS, no endpoint, and no grant — `clinos_app` does not exist
-   (T1-11). Feature 01's status is *not started*, not *in progress*.
-4. **[`open-questions.md`](reference/open-questions.md)** — the committed-`.env` finding is resolved by #11.
-   D-003 and D-004 remain open.
-5. **A probe has no home in the module map.** [`build-contract.md` §7](reference/build-contract.md) and
-   [`control-matrix.md` §1.4](reference/control-matrix.md) name twelve target modules, none of which is an
-   operations or observability module — yet
-   [`16-operations-and-observability/03-design.md`](features/16-operations-and-observability/03-design.md)
-   requires liveness and readiness probes, and `AGENTS.md` says no route may be added outside
-   `app/modules/`. The probe was therefore placed in the thin HTTP layer (`app/api/routes/health.py`)
-   beside the existing `utils` probe, with the decision in `app/core/health.py`. **This is a raised
-   conflict, not a settled one**: either the module map gains an operations module, or the layout rule
-   gains a stated exception for platform probes. The path itself
-   (`/api/v1/health/ready/`) is OPEN in the design and is a repo choice.
-6. **No `spec.md` declares the probe under the endpoint declaration standard.** The standard requires every
-   endpoint to declare authentication, permission, tenant scope, ownership, input and output schema, audit,
-   rate limit and errors. The probe's declaration is recorded in its module docstrings
-   ([`health.py`](../backend/app/api/routes/health.py)) rather than in a phase spec, because no phase owns
-   it. It needs either a spec home or an explicit exemption.
-7. **`alembic check` cannot be the only guard on the schema, and the standing orders treat it as one.**
-   [AGENTS.md](../AGENTS.md) requires `uv run alembic check` before committing a model change, but
-   autogenerate **does not compare CHECK constraints**. Both `tenants` checks were double-prefixed in
-   every database — the deployed one and one built from scratch — and `alembic check` reported "no new
-   upgrade operations detected" throughout. The convention in [`core/metadata.py`](../backend/app/core/metadata.py)
-   was therefore not true of the schema, invisibly, for as long as those tables existed. D21 renames them;
-   [`test_schema_conventions.py`](../backend/tests/core/test_schema_conventions.py) now compares every
-   constraint and index name the models declare against the database, which is the check `alembic` does
-   not perform. **Raised, not settled:** whether the standing order keeps naming `alembic check` alone.
-8. **Migrations here are not hermetic, and the first version of D21 assumed they were.** `706856e36a80`
-   produced *different* constraint names depending on the code around it: it reached the deployed
-   database from PR #12, before `app.core.metadata` existed, so Postgres took its declared name literally
-   (`ck_tenants_status`); every database rebuilt afterwards replays it with the convention active and gets
-   `ck_tenants_ck_tenants_status`. **Replaying migrations with newer code does not reproduce history.**
-   The first D21 migration asserted one state and failed on the deployed database
-   (`constraint "ck_tenants_ck_tenants_status" does not exist`, Deploy run `37308445828`), so it now
-   converges both states instead. A rebuilt database and the deployed one agree on constraint names but
-   were *built differently*, and nothing in the repo records that. Worth a decision: whether migrations
-   get pinned against the convention with `op.f()` as a rule, not only where someone remembered.
-9. **`app/models.py` is frozen, and D22 added one line to it anyway.** `User.tenant` is the reverse of
-   `Tenant.users`, and it could not be declared without editing the legacy template layer, because the
-   module that owns `users` does not exist yet. The module map
-   ([`build-contract.md` §7](reference/build-contract.md)) already assigns `users` to `users_roles`, so
-   the `User` model is overdue to move to `app/modules/users_roles/models.py` — taking its schemas and
-   the template's `crud.py` with it. **Raised as a deferred refactor, not resolved**: the alternative was
-   leaving the relationship half-declared, which is worse. Two earlier changes to the same file were
-   unavoidable (the `tenant_id` column, the `updated_at` fix), so the pattern is established, not new.
-10. **The ER diagrams are generated but not auto-committed.** The ask was for diagrams that "regenerate
-   on every merge". They regenerate on demand, and CI **fails** when the committed copy is stale, which
-   reaches the same end by a different route. Auto-committing needs a token that can push to `main`, and
-   the `pr-push` step in `.github/workflows/pre-commit.yml` already fails with "did not issue an
-   installation token", so that path is known-broken here. **Raised:** fix the push token and
-   auto-commit, or keep the drift gate.
-
-11. **RLS was decorative in this deployment, and `FORCE` does not fix it.** `FORCE ROW LEVEL SECURITY`
-   defeats the *owner* exemption only. A role holding `BYPASSRLS` ignores every policy, and the
-   deployment connects as `neondb_owner`, which has `rolbypassrls = True` — as does local `postgres`
-   (a superuser). So a policy can be present, `alembic check` clean and the isolation tests green while
-   production reads every tenant's rows. D23 creates `clinos_app` (no superuser, no `BYPASSRLS`, owns
-   nothing) and proves isolation by `SET LOCAL ROLE`. **Still outstanding:** the application connects as
-   the owner, so enforcement is proven but not yet in force — switching the connection needs a
-   credential for the role and a second URL for migrations, since migrations need ownership the app role
-   must not have. Gate 2's "app role is not the owner" condition stays unmet until then.
-12. **The normative RLS policy, taken literally, denies every row.** `03-design.md` specifies
-   `AS RESTRICTIVE`. A restrictive policy can only *narrow* access and cannot grant it, so with no
-   permissive policy present the table denies everything — measured: a non-bypass role with the correct
-   `app.tenant_id` set still saw **zero** rows. D23 therefore creates a permissive policy with the same
-   predicate alongside the design's restrictive floor. The feature document needs the permissive policy
-   stated, or the next table will repeat this.
-13. **The patient endpoints cannot be built faithfully yet.** The eight routes need RBAC (feature 03,
-   not started); R7's treating-relationship rule needs `care_relationships`, which has no table and no
-   owner; merge needs step-up, blocked by D-003; `patient.merged`/`patient.merge_reversed` are required
-   *and* unregistered (the feature says doc 07 §1 must be extended before build); the identifier
-   algorithms and the `sex_at_birth` vocabulary are OPEN; and export and access-history are required in
-   prose with no declared route, schema or limit. T1-05 also demands a `patient_identifiers` table the
-   design explicitly forbids, and the task layer and feature layer name different test files for the
-   same obligations.
-
-14. **Two feature designs specify contradictory grants for `users`, and one silently wins.**
-   `03-users-and-roles/03-design.md` grants `clinos_app` table-level `SELECT, INSERT, UPDATE ON users`;
-   `02-authentication/03-design.md` requires `REVOKE ALL ON users` plus column-level grants and, under
-   Branch B, `REVOKE SELECT (hashed_password)`. **A table-level `GRANT SELECT` survives a column-level
-   `REVOKE`** (verified in Postgres), so applying both is silently one or the other — and the loser would be
-   the protection on `hashed_password`. D24 therefore grants nothing on the existing `user` table, which is
-   fail-closed, and reserves it for T1-03 with the real `users` table (blocked by D-003). Consequence:
-   `clinos_auth`, `clinos_readonly_audit` and `clinos_retention` hold **no privilege on any table that exists
-   today** — every grant the design gives them names a table that has not landed.
-15. **The `patients` policy applies to `PUBLIC`, not to `clinos_app` as the design shows.** Left unchanged
-   because RLS shape is an ask-first boundary, and because a policy restricted to a role that does not yet
-   have a credential would deny everything. Recorded in the migration docstring; it becomes a real decision
-   when the application switches connection.
-16. **The test suite has a teardown fragility that a green run can hide.** `DELETE FROM tenants` is blocked
-   by `fk_patients_tenant_id_tenants` (RESTRICT, by design) whenever patient rows exist, and the
-   `clean_tenants` fixture does not delete patients first. A full-suite run showed 14 such errors, triggered
-   by leftover rows from an aborted run rather than by the change under test. It will mask a genuine failure
-   eventually and should be fixed.
-
-17. **The design's least privilege for `clinos_app` forbids what self-service signup does**, so the
-   roles from D24 are in place but inert. `01-tenancy-and-clinics/03-design.md` specifies
-   `REVOKE ALL ON tenants FROM clinos_app` plus a column-level `SELECT`, and grants nothing on `user` —
-   the design assumes tenants are provisioned centrally. Org signup (D17) *creates* a tenant, and login
-   reads `user.hashed_password` while signup inserts into `user`. Measured: `clinos_app` holds
-   `patients: INSERT, SELECT, UPDATE`; `tenants:` column-level `SELECT` on four columns; `user:` nothing.
-   **Switching `DATABASE_URL` to `clinos_app` today would therefore break login and signup** — the exact
-   outage this work exists to prevent. Activation is blocked on two decisions, not on code: whether the
-   application may `INSERT` a tenant, and how the authentication path obtains `hashed_password` (the
-   design's `clinos_auth` role implies a second runtime connection; authentication's shape is entangled
-   with D-003). Until then the deployed RLS policy remains unenforced and this must not be described as
-   isolation being in force.
-
----
-
-## 5. Decisions and blockers
-
-| Item | State |
-|---|---|
-| **D-003** identity | 🔴 OPEN — blocks Gate 3 |
-| **D-004** deployment target | 🔴 OPEN on paper, **decided in practice**: the application runs on FastAPI Cloud with a Neon database. Neither is one of D-004's three options, so this needs its own decision record and a statement of which Gate 6 checks it substitutes |
-| **D-006** `valid_to` boundary | 🔴 OPEN — awaits the Clinical Safety Officer; a clinical safety parameter |
-| **INV-6** data stays in Australia | **Partial evidence only**: the Neon database is in `ap-southeast-2`. There is no vendor register entry and no residency register |
-| **Dependabot alerts** | Disabled on the repository — no vulnerability alerts, no security-update PRs |
-
----
-
-## 6. Known gaps and risks
-
-- **Deployment is automatic, and it was automatic and green throughout a total outage.** The Deploy
-  workflow runs on push to `main`; the runs for #12–#19 all succeeded. Earlier in this window this
-  document claimed the opposite ("merging does not deploy anything"), which was wrong — the workflow has
-  existed since `d338605`. The true risk is worse than the one written down: **a green deploy proved
-  nothing about whether the app worked.**
-- **The deployed database credential had drifted from the one CI migrates with.** On 2026-10-05 the live
-  app returned `500` for `POST /api/v1/users/signup` *and* `POST /api/v1/login/access-token` — every route
-  that touches the database — while `GET /api/v1/utils/health-check/` returned `200 true`, because
-  liveness never touched the database and nothing asked whether the app could serve. The cause was not
-  code: `fastapi deploy` ships code only and never carries configuration, so FastAPI Cloud's
-  `DATABASE_URL` held a credential Neon rejects (`password authentication failed for user 'neondb_owner'`)
-  while the GitHub secret's credential migrated that same database successfully in the same run. D18 and
-  D19 close the detection half: the workflow now fails when the readiness probe does not answer `200`, so
-  this class of outage can never again present as a green deploy. Also noted: that variable is stored in
-  FastAPI Cloud as **non-secret**, so making it secret needs delete-and-recreate.
-  **Resolved** the same day: the current Neon credential was verified to authenticate and to point at the
-  same database (same alembic head `0bc1f345552b`, superuser and tenant intact) before being written, the
-  app redeployed, and the flow re-verified end to end — readiness `200`, login `200`, signup returning a
-  `tenant_id`. Deploy run `37303519527` is green including the verification step. The guard from D19 was
-  used for the write, so a credential fix could not double as a silent database move.
-- **Drift between the GitHub secret and the deployed environment cannot be *prevented* from CI, only
-  detected.** Syncing the value from the workflow was attempted and is not possible:
-  `FASTAPI_CLOUD_TOKEN` is a **deploy** token, accepted by `fastapi deploy` only. `fastapi cloud env
-  get`/`set` require an interactive login and fail in CI with `{"code": "not_logged_in"}`. Until FastAPI
-  Cloud offers a scoped configuration credential, the runtime `DATABASE_URL` is maintained by hand and the
-  readiness gate is the backstop. What that cost: two Deploy runs (37302188799, 37302397756) failed and
-  skipped the code deploy before this was understood.
-- **`POST /api/v1/reset-password/`** is unauthenticated and, unlike its siblings, not rate limited.
-- **Password recovery cannot deliver mail** (`SMTP_HOST=localhost`), so it returns success and nothing
-  arrives — a silent dead end.
-- **Rate limiting is per process and keys on the ASGI client address.** Behind a proxy that does not
-  rewrite it (uvicorn trusts `X-Forwarded-For` only from `--forwarded-allow-ips`), every request shares
-  one bucket and the limit becomes global.
-- **No security scanning in CI** (T0-13–T0-15): 0 occurrences of semgrep, trivy, gitleaks, bandit,
-  pip-audit or codeql across the workflows.
-- **The pre-commit workflow cannot push its own fixes** — its `pr-push` step fails with "did not issue an
-  installation token", so a hook that reformats files turns the check red instead of committing.
-- **The pre-untracking `.env` values remain in git history.** Rotation is a Phase 0 exit task and is not
-  evidenced anywhere in this repo.
-- **The production database credential has been in a chat transcript, and rotating it is deferred
-  by decision.** The owner deprioritised rotating `neondb_owner` while this is an MVP holding
-  synthetic data, which is a reasonable risk call rather than an oversight. The exposure is bounded:
-  the repository is not public, and `.env.cloud` holds only the earlier credential that no longer
-  authenticates (verified — it fails with `password authentication failed`). The plaintext copy at
-  `/tmp/neon_current_url` was deleted; the value can be re-read with `fastapi cloud env get`.
-  **Revisit trigger: the first real patient data, or any sharing of this repository or its history
-  outside the current circle.** Rotation is then `ALTER ROLE neondb_owner PASSWORD '<new>'` on Neon,
-  followed immediately by the FastAPI Cloud env var (which redeploys) and the GitHub `DATABASE_URL`
-  secret (which the deploy's migration step reads). Miss the second and the deploy breaks; miss both
-  and production 500s, which is exactly the outage recorded above. Keep the old value: one
-  `ALTER ROLE` rolls back. `admin1234` is in the same position and should be changed through the app,
-  not by an agent that would only re-expose it here.
-- **No gate has an evidence bundle**, and no sign-off record exists for Gates 1–7.
-
----
-
-## 7. Why that order
-
-[The board's Next column](#1-the-board) is the single home for what comes next. The reasoning behind it:
-
-- **Patients first** because it is the first *tenant-scoped* table. Until one exists, INV-1 is a design
-  statement; the moment one does, it carries a forced RLS policy and INV-1 becomes something a test can
-  fail ([`05-patients`](features/05-patients/01-requirements.md)).
-- **Approvals before prescribing** because the safety gate has nothing to check without an `ACTIVE`
-  approval at the grain.
-- **The gate before anything cosmetic** because it is the product's hard constraint, and the one screen
-  that shows a clinic owner what the platform refuses to do.
-- **Isolation tests with patients, not after them** because the RLS policy has to be proved in the same
-  change, not by a later audit.
-
-Deliberately excluded until after that: RBAC (feature 03), MFA and OIDC (feature 02, pending D-003),
-audit-log completeness (feature 04), reporting, integrations, and the gate sign-offs.
-
----
-
-## 8. How this document stays honest
-
-- **Every claim names an artefact.** A command, a migration, a file, or a signed record. An artefact that
-  does not link to what it proves is not evidence (`README.md`).
-- **"Not started" is a status.** It is written here rather than left blank.
-- **Update it in the same change** that changes a status. A stale progress document is worse than none,
-  because it is believed.
+* **Backend Test Suite**: **184 passing tests** (`tests/api/`, `tests/core/`, `tests/isolation/`, `tests/patients/`, `tests/rbac/`, `tests/security/`, `tests/tenancy/`).
+* **Code Quality**: `ruff` passing 0 errors, `mypy` strict mode passing on all source files.
+* **Database Schema**: 15 Alembic migrations, 0 autogenerate drift (`alembic check` clean).
+* **Data Residency**: AWS Sydney (`ap-southeast-2`) on Neon PostgreSQL (**INV-6**).

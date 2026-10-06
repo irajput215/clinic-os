@@ -37,7 +37,7 @@ const DeleteUser = ({ id, onSuccess }: DeleteUserProps) => {
   const mutation = useMutation({
     mutationFn: deleteUser,
     onSuccess: () => {
-      showSuccessToast("The user was deleted successfully")
+      showSuccessToast("The user has been deactivated successfully")
       setIsOpen(false)
       onSuccess()
     },
@@ -59,16 +59,16 @@ const DeleteUser = ({ id, onSuccess }: DeleteUserProps) => {
         onClick={() => setIsOpen(true)}
       >
         <Trash2 />
-        Delete User
+        Deactivate User
       </DropdownMenuItem>
       <DialogContent className="sm:max-w-md">
         <form onSubmit={handleSubmit(onSubmit)}>
           <DialogHeader>
-            <DialogTitle>Delete User</DialogTitle>
+            <DialogTitle>Deactivate User</DialogTitle>
             <DialogDescription>
-              All items associated with this user will also be{" "}
-              <strong>permanently deleted.</strong> Are you sure? You will not
-              be able to undo this action.
+              This user will be <strong>deactivated</strong>: they will be
+              signed out and can no longer sign in. Their records and history
+              are kept. Are you sure?
             </DialogDescription>
           </DialogHeader>
 
@@ -83,7 +83,7 @@ const DeleteUser = ({ id, onSuccess }: DeleteUserProps) => {
               type="submit"
               loading={mutation.isPending}
             >
-              Delete
+              Deactivate
             </LoadingButton>
           </DialogFooter>
         </form>

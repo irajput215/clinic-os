@@ -21,8 +21,17 @@ class Settings(BaseSettings):
     )
     API_V1_STR: str = "/api/v1"
     SECRET_KEY: str
-    # 60 minutes * 24 hours * 8 days = 8 days
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8
+    # Control 1 (`docs/reference/build-contract.md` §6): 15-minute access tokens.
+    # `docs/features/02-authentication/01-requirements.md` OPEN-2 records the source conflict (10
+    # minutes in doc 06 §3, 15 minutes in doc 02 §1 and doc 03 §4); 15 is the value the build
+    # contract states and the one this repository adopts.
+    #
+    # Until refresh-token rotation lands, this lifetime *is* the whole session: feature 02 specifies
+    # rotation and revocation (R4–R7) but they are blocked by D-003, so nothing extends a session
+    # past this token. The 8-day value this replaced was the template's, not a decision. The key is
+    # deliberately absent from `.env.example`; a deployment overrides it by setting it, and the
+    # default carries the control.
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     FRONTEND_HOST: str = "http://localhost:5173"
     FASTAPI_ENV: Literal["development"] | None = None
 

@@ -14,6 +14,11 @@ from sqlmodel import Session, create_engine, select, text
 
 from app import crud
 from app.core.config import settings
+from app.core.logging import (
+    current_correlation_id,
+    current_request_id,
+    record_identity,
+)
 from app.models import User, UserCreate
 
 
@@ -51,13 +56,18 @@ def tenant_transaction(
     unscoped query. The settings are transaction-scoped, so they revert at COMMIT
     or ROLLBACK and cannot leak across pooled requests.
 
+    `request_id` and `correlation_id` are resolved, not supplied: an explicit argument wins, and
+    otherwise the ambient handles set by `app.core.logging`'s middleware are used, so every database
+    session opened while serving a request carries them without each caller having to thread them
+    through (`16-operations-and-observability/03-design.md` step 1). Outside a request they are left
+    unset, exactly as before.
+
     **The audit writer reads its actor context from here, not from a parameter**
-    (`app.modules.audit.service`). `app.tenant_id` is set with `SET LOCAL`, and the actor,
-    role, request, source address and correlation identifiers are recorded on the session,
-    so a caller cannot describe an audit event as coming from somebody else, and cannot
-    chain one into another tenant's trail (INV-1). `actor_role` is the role held at
-    decision time, which is why the caller supplies it rather than the writer
-    re-deriving it later.
+    (`app.modules.audit.service`). The actor, role, request and correlation identifiers — and the
+    source address when a caller supplies one — are recorded on the session, so a caller cannot
+    describe an audit event as coming from somebody else, and cannot chain one into another tenant's
+    trail (INV-1). `actor_role` is the role held at decision time, which is why the caller supplies
+    it rather than the writer re-deriving it later.
     """
     if tenant_id is None:
         raise TenantContextRequired(
@@ -70,15 +80,24 @@ def tenant_transaction(
         if actor_id is not None:
             _set_context(session, "app.actor_id", str(actor_id))
             session.info["actor_id"] = str(actor_id)
-        if request_id is not None:
-            _set_context(session, "app.request_id", request_id)
-            session.info["request_id"] = request_id
+        # The same two handles the observability middleware puts on the log line, resolved the same
+        # way: an explicit argument wins, otherwise the ambient one. `app.request_id` reaches the
+        # database; the audit writer reads its copies from `session.info` (below), because the
+        # envelope carries both and the correlation identifier has no `SET LOCAL` key of its own.
+        effective_request_id = request_id or current_request_id()
+        if effective_request_id is not None:
+            _set_context(session, "app.request_id", effective_request_id)
+            session.info["request_id"] = effective_request_id
+        effective_correlation_id = correlation_id or current_correlation_id()
+        if effective_correlation_id is not None:
+            session.info["correlation_id"] = effective_correlation_id
         if actor_role is not None:
             session.info["actor_role"] = actor_role
         if source_ip is not None:
             session.info["source_ip"] = source_ip
-        if correlation_id is not None:
-            session.info["correlation_id"] = correlation_id
+        # Keyed pseudonyms for the request log line: a raw identifier never enters a log field
+        # (`16-operations-and-observability/05-data-and-audit.md`).
+        record_identity(tenant_id=tenant_id, actor_id=actor_id)
         yield session
 
 

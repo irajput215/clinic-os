@@ -85,7 +85,8 @@ def test_get_non_existing_user_as_superuser(
         headers=superuser_token_headers,
     )
     assert r.status_code == 404
-    assert r.json() == {"detail": "User not found"}
+    # The error envelope is RFC 7807 and additive (`app/core/errors.py`); `detail` is unchanged.
+    assert r.json()["detail"] == "User not found"
 
 
 def test_get_existing_user_current_user(client: TestClient, db: Session) -> None:
@@ -127,7 +128,7 @@ def test_get_existing_user_permissions_error(
         headers=normal_user_token_headers,
     )
     assert r.status_code == 403
-    assert r.json() == {"detail": "The user doesn't have enough privileges"}
+    assert r.json()["detail"] == "The user doesn't have enough privileges"
 
 
 def test_get_non_existing_user_permissions_error(
@@ -141,7 +142,7 @@ def test_get_non_existing_user_permissions_error(
         headers=normal_user_token_headers,
     )
     assert r.status_code == 403
-    assert r.json() == {"detail": "The user doesn't have enough privileges"}
+    assert r.json()["detail"] == "The user doesn't have enough privileges"
 
 
 def test_create_user_existing_username(
@@ -443,6 +444,7 @@ def test_update_user_email_exists(
 
 
 def test_delete_user_me(client: TestClient, db: Session) -> None:
+    """`DELETE /users/me` deactivates: R14 forbids removing the row."""
     username = random_email()
     password = random_lower_string()
     user_in = UserCreate(email=username, password=password)
@@ -463,14 +465,12 @@ def test_delete_user_me(client: TestClient, db: Session) -> None:
         headers=headers,
     )
     assert r.status_code == 200
-    deleted_user = r.json()
-    assert deleted_user["message"] == "User deleted successfully"
-    result = db.exec(select(User).where(User.id == user_id)).first()
-    assert result is None
+    assert r.json()["message"] == "User deactivated successfully"
 
-    user_query = select(User).where(User.id == user_id)
-    user_db = db.execute(user_query).first()
-    assert user_db is None
+    db.expire_all()
+    result = db.exec(select(User).where(User.id == user_id)).first()
+    assert result is not None
+    assert result.is_active is False
 
 
 def test_delete_user_me_as_superuser(
@@ -488,6 +488,7 @@ def test_delete_user_me_as_superuser(
 def test_delete_user_super_user(
     client: TestClient, superuser_token_headers: dict[str, str], db: Session
 ) -> None:
+    """The admin offboarding route deactivates too — no hard delete path remains."""
     username = random_email()
     password = random_lower_string()
     user_in = UserCreate(email=username, password=password)
@@ -498,10 +499,12 @@ def test_delete_user_super_user(
         headers=superuser_token_headers,
     )
     assert r.status_code == 200
-    deleted_user = r.json()
-    assert deleted_user["message"] == "User deleted successfully"
+    assert r.json()["message"] == "User deactivated successfully"
+
+    db.expire_all()
     result = db.exec(select(User).where(User.id == user_id)).first()
-    assert result is None
+    assert result is not None
+    assert result.is_active is False
 
 
 def test_delete_user_not_found(

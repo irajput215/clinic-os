@@ -29,17 +29,19 @@ same invariants, expressed against the stack this codebase actually uses.
 
 ```
 docs/
-├── features/      → the build unit: 17 numbered folders, seven documents each
-├── tasks/         → the ordered work breakdown: 186 tasks, one file per delivery phase
-├── reference/     → the shared contract: build contract, gates, definition of done,
-│                     control matrix, open questions, traceability, decision records,
-│                     the business flow
-└── progress.md    → what is actually built today, and what this set now gets wrong
+├── features/            → the build unit: 17 numbered folders, seven documents each
+├── tasks/               → the ordered work breakdown: 186 tasks, one file per delivery phase
+├── reference/           → the shared contract: build contract, gates, definition of done,
+│                         control matrix, open questions, traceability, decision records,
+│                         the business flow
+├── progress.md          → what is actually built today, and what this set now gets wrong
+└── to-be-completed.md   → exhaustive remaining backlog across all tasks, features, and gates
 ```
 
 | Layer | Entry point | Answers |
 |---|---|---|
 | **Status** | [`progress.md`](progress.md) | What is built and verified, and where this set is now wrong |
+| **Backlog** | [`to-be-completed.md`](to-be-completed.md) | Exhaustive remaining scope across all 186 tasks, 17 features, and 7 gates |
 | **Business flow** | [`reference/business-flow.md`](reference/business-flow.md) | Who does what, from a clinic signing up to a pharmacy dispensing |
 | **Delivery** | [`reference/build-contract.md`](reference/build-contract.md) | Invariants, controls, stack and the verified baseline |
 | **Requirements** | [`features/README.md`](features/README.md) | What must each feature do, for whom, and how is it proven? |
