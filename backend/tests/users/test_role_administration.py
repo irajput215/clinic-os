@@ -124,10 +124,12 @@ def test_a_caller_with_the_permission_lists_the_permission_catalogue(
 ) -> None:
     """R7: the catalogue is global reference data, read-only, and exactly what `catalog.py` declares.
 
-    The expected set is read from the catalogue itself rather than from a count written down here:
-    feature 08 adds `tga_approval:revoke` (migration `e5a9d3b8c2f4`), and a magic number would make
-    every future permission a false failure. The assertion is still exact — the endpoint serves the
-    catalogue and nothing but the catalogue, with no duplicates.
+    The expected set is read from the catalogue rather than written down as a count, because this test
+    guards the **endpoint**: the property it can fail on is "the catalogue route serves the catalogue
+    and nothing but the catalogue, without duplicates". A count written down here goes stale on every
+    future permission — it has already gone from 19 to 20 to 21. `test_seed_catalogue.py` is the test
+    that guards the catalogue's *contents*, against the 19 of `01-requirements.md` plus the named
+    deviations: `tenant:read` (Feature 01, OPEN-2) and `tga_approval:revoke` (Feature 08).
     """
     owner = rbac.register_tenant(clinic_name="Catalogue Clinic")
     assert owner.tenant_id is not None
@@ -141,6 +143,10 @@ def test_a_caller_with_the_permission_lists_the_permission_catalogue(
     assert set(codes) == declared
     assert len(codes) == len(declared), "the catalogue is served without duplicates"
     assert "users:manage" in codes
+    # The two codes beyond the 19 of `01-requirements.md`, each still named here so the deviation is
+    # visible in the test rather than only inferable from the catalogue.
+    assert "tenant:read" in codes
+    assert "tga_approval:revoke" in codes
     # A candidate code is never granted (OPEN-1).
     assert "role:manage" not in codes
     assert "admin:feature_flag" not in codes

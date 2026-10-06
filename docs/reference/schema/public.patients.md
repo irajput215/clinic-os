@@ -13,7 +13,7 @@
 | family_name | varchar |  | false |  |  |  |
 | gender_identity | varchar |  | true |  |  |  |
 | given_name | varchar |  | false |  |  |  |
-| id | uuid | gen_random_uuid() | false | [public.patients](public.patients.md) [public.tga_approvals](public.tga_approvals.md) |  |  |
+| id | uuid | gen_random_uuid() | false | [public.care_relationships](public.care_relationships.md) [public.clinical_records](public.clinical_records.md) [public.patients](public.patients.md) [public.tga_approvals](public.tga_approvals.md) |  |  |
 | ihi | bytea |  | true |  |  |  |
 | ihi_blind_index | bytea |  | true |  |  |  |
 | medicare_blind_index | bytea |  | true |  |  |  |
@@ -25,7 +25,7 @@
 | sex_at_birth | varchar |  | true |  |  |  |
 | state | varchar |  | true |  |  |  |
 | suburb | varchar |  | true |  |  |  |
-| tenant_id | uuid |  | false | [public.tga_approvals](public.tga_approvals.md) | [public.tenants](public.tenants.md) |  |
+| tenant_id | uuid |  | false | [public.clinical_records](public.clinical_records.md) [public.tga_approvals](public.tga_approvals.md) | [public.tenants](public.tenants.md) |  |
 | updated_at | timestamp with time zone |  | false |  |  |  |
 
 ## Constraints
@@ -62,6 +62,8 @@
 ```mermaid
 erDiagram
 
+"public.care_relationships" }o--|| "public.patients" : "FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE RESTRICT"
+"public.clinical_records" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
 "public.patients" }o--o| "public.patients" : "FOREIGN KEY (merged_into_patient_id) REFERENCES patients(id) ON DELETE RESTRICT"
 "public.tga_approvals" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
 "public.patients" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
@@ -90,6 +92,29 @@ erDiagram
   varchar suburb
   uuid tenant_id FK
   timestamp_with_time_zone updated_at
+}
+"public.care_relationships" {
+  timestamp_with_time_zone active_from
+  timestamp_with_time_zone active_to
+  uuid clinic_id FK
+  timestamp_with_time_zone created_at
+  uuid id
+  uuid patient_id FK
+  uuid practitioner_id FK
+  varchar_128_ source
+  uuid tenant_id FK
+  timestamp_with_time_zone updated_at
+}
+"public.clinical_records" {
+  uuid author_id FK
+  timestamp_with_time_zone created_at
+  integer current_version
+  timestamp_with_time_zone deleted_at
+  uuid id
+  uuid patient_id FK
+  varchar record_type
+  timestamp_with_time_zone signed_at
+  uuid tenant_id FK
 }
 "public.tga_approvals" {
   varchar approval_reference

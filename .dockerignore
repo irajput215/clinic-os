@@ -10,4 +10,9 @@ frontend/dist
 frontend/node_modules
 frontend/playwright-report
 frontend/test-results
+frontend-features/blob-report
+frontend-features/dist
+frontend-features/node_modules
+frontend-features/playwright-report
+frontend-features/test-results
 node_modules

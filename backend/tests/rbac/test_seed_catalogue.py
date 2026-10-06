@@ -5,6 +5,15 @@ catalogue (role x permission)", and each role's resolved set is the `G` cells of
 is still open, so this asserts the 19-code transcription the seed was built from, not a settled
 catalogue; a change to the matrix must change `catalog.py` and this test together.
 
+**Two codes have been added since, and each is a named deviation rather than a silent drift from
+nineteen**: `tenant:read`, which `docs/features/01-tenancy-and-clinics/03-design.md` "Endpoints"
+requires for `GET /api/v1/tenants/current` and records as OPEN-2 ("absent from the fixed
+19-permission catalogue"); and `tga_approval:revoke`, which
+`docs/features/08-tga-approvals/03-design.md` "Endpoints" requires for the revoke route, and which is
+deliberately **not** satisfied by reusing `tga_approval:verify` — that would let a
+`COMPLIANCE_AUDITOR` revoke an approval, which Feature 08's US-7 forbids. Both are named in
+`ADDED_CODES` below and asserted separately.
+
 A `tenant_transaction` expires its ORM attributes at COMMIT, so every value is read inside the block.
 """
 
@@ -25,15 +34,22 @@ from app.modules.users_roles.service import actor_for, seed_tenant_roles
 from tests.utils.rbac import RbacApi
 
 # Codes named by `01-requirements.md` under "Candidate additions named elsewhere". None is granted
-# while OPEN-1 is open, so none may appear in the seeded catalogue.
+# while OPEN-1 is open, so none may appear in the seeded catalogue. `tenant:read` was on that list and
+# has been promoted by the Feature 01 tenancy routes (OPEN-2); it is asserted in `ADDED_CODES` below
+# instead, so this tuple keeps meaning "not granted".
 CANDIDATE_CODES = (
-    "tenant:read",
     "clinic:manage",
     "patient:merge",
     "clinical_record:create",
     "admin:feature_flag",
     "export:bulk",
 )
+
+# The seeded codes that are **not** in the 19 of `01-requirements.md`, with the route that needs each.
+# Two names now stand here, and each is a permission-matrix change and needs the CTO's OPEN-1/OPEN-2
+# reconciliation: `tenant:read` (Feature 01's `GET /api/v1/tenants/current`) and `tga_approval:revoke`
+# (Feature 08's `POST /api/v1/tga-approvals/{id}/revoke`).
+ADDED_CODES = ("tenant:read", "tga_approval:revoke")
 
 
 def _stored_permission_codes(tenant_id: uuid.UUID) -> set[str]:
@@ -43,20 +59,51 @@ def _stored_permission_codes(tenant_id: uuid.UUID) -> set[str]:
 
 
 def test_the_permission_catalogue_is_the_declared_codes(rbac: RbacApi) -> None:
-    """The catalogue as `catalog.py` declares it, which is 19 + Feature 08's `tga_approval:revoke`.
+    """The seeded catalogue is the 19 codes of the matrix plus the recorded additions, and nothing else.
 
-    Feature 08's endpoints table requires a `tga_approval:revoke` permission
-    (`docs/features/08-tga-approvals/03-design.md`), and the alternative — reusing
-    `tga_approval:verify` — would let a `COMPLIANCE_AUDITOR` revoke an approval, which that feature's
-    US-7 forbids. This test's own docstring is the rule it follows here: *"a change to the matrix
-    must change `catalog.py` and this test together"*.
+    The count assertion is deliberate rather than derived from `PERMISSION_CATALOGUE`: a test that
+    reads its expected value from the thing it is testing cannot fail. `ADDED_CODES` names the
+    deviations here, so a reader sees them in the test that guards the matrix instead of inferring
+    them from a diff.
     """
     owner = rbac.register_tenant(clinic_name="Catalogue Clinic")
     assert owner.tenant_id is not None
     stored = _stored_permission_codes(owner.tenant_id)
-    assert len(PERMISSION_CATALOGUE) == 20
+    assert len(PERMISSION_CATALOGUE) == 19 + len(ADDED_CODES)
     assert stored == PERMISSION_CODES
-    assert len(stored) == 20
+    assert len(stored) == 19 + len(ADDED_CODES)
+
+
+@pytest.mark.parametrize("code", ADDED_CODES)
+def test_an_added_code_is_seeded_and_granted(rbac: RbacApi, code: str) -> None:
+    """The addition is real: the row is seeded, and the code resolves for every role that holds it.
+
+    The roles are read from `SYSTEM_ROLE_CATALOGUE`, not written down. `tenant:read` is held by
+    `PRACTICE_OWNER` and `COMPLIANCE_AUDITOR`; `tga_approval:revoke` by `PRACTICE_OWNER` alone — which
+    is the whole point of adding it, because a `COMPLIANCE_AUDITOR` who could revoke is exactly what
+    Feature 08's US-7 forbids. A hardcoded `COMPLIANCE_AUDITOR` here would assert the opposite of the
+    requirement for the second code.
+    """
+    owner = rbac.register_tenant(clinic_name="Catalogue Clinic")
+    assert owner.tenant_id is not None
+    assert code in _stored_permission_codes(owner.tenant_id)
+
+    holders = [role for role, _name, bundle in SYSTEM_ROLE_CATALOGUE if code in bundle]
+    assert holders, (
+        f"{code} is seeded but no system role holds it, so no route can ever resolve it"
+    )
+    for role_code in holders:
+        holder = rbac.add_actor(
+            tenant_id=owner.tenant_id,
+            granted_by=owner.user_id,
+            role_code=role_code,
+        )
+        resolved = actor_for(
+            user_id=holder.user_id,
+            tenant_id=owner.tenant_id,
+            is_active=True,
+        )
+        assert code in resolved.permissions, role_code
 
 
 @pytest.mark.parametrize("code", CANDIDATE_CODES)

@@ -6,7 +6,7 @@
 | ---- | ---- | ------- | -------- | -------- | ------- | ------- |
 | created_at | timestamp with time zone |  | false |  |  |  |
 | data_region | varchar(32) |  | false |  |  |  |
-| id | uuid | gen_random_uuid() | false | [public.patients](public.patients.md) [public.role_permissions](public.role_permissions.md) [public.roles](public.roles.md) [public.tga_approval_events](public.tga_approval_events.md) [public.tga_approvals](public.tga_approvals.md) [public.user](public.user.md) [public.user_roles](public.user_roles.md) |  |  |
+| id | uuid | gen_random_uuid() | false | [public.care_relationships](public.care_relationships.md) [public.clinical_record_versions](public.clinical_record_versions.md) [public.clinical_records](public.clinical_records.md) [public.clinics](public.clinics.md) [public.patients](public.patients.md) [public.role_permissions](public.role_permissions.md) [public.roles](public.roles.md) [public.tga_approval_events](public.tga_approval_events.md) [public.tga_approvals](public.tga_approvals.md) [public.user](public.user.md) [public.user_roles](public.user_roles.md) |  |  |
 | legal_name | varchar(255) |  | false |  |  |  |
 | retention_profile | varchar(64) |  | false |  |  |  |
 | slug | varchar(64) |  | false |  |  |  |
@@ -41,6 +41,10 @@
 ```mermaid
 erDiagram
 
+"public.care_relationships" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.clinical_record_versions" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.clinical_records" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.clinics" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.patients" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.role_permissions" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.roles" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
@@ -57,6 +61,52 @@ erDiagram
   varchar_64_ retention_profile
   varchar_64_ slug
   varchar_16_ status
+  timestamp_with_time_zone updated_at
+}
+"public.care_relationships" {
+  timestamp_with_time_zone active_from
+  timestamp_with_time_zone active_to
+  uuid clinic_id FK
+  timestamp_with_time_zone created_at
+  uuid id
+  uuid patient_id FK
+  uuid practitioner_id FK
+  varchar_128_ source
+  uuid tenant_id FK
+  timestamp_with_time_zone updated_at
+}
+"public.clinical_record_versions" {
+  uuid author_id FK
+  varchar body
+  varchar body_format
+  uuid clinical_record_id FK
+  timestamp_with_time_zone created_at
+  uuid id
+  varchar reason
+  varchar signature_digest
+  timestamp_with_time_zone signed_at
+  integer supersedes_version
+  uuid tenant_id FK
+  integer version
+}
+"public.clinical_records" {
+  uuid author_id FK
+  timestamp_with_time_zone created_at
+  integer current_version
+  timestamp_with_time_zone deleted_at
+  uuid id
+  uuid patient_id FK
+  varchar record_type
+  timestamp_with_time_zone signed_at
+  uuid tenant_id FK
+}
+"public.clinics" {
+  varchar_255_ address
+  timestamp_with_time_zone created_at
+  uuid id
+  varchar_255_ name
+  varchar_64_ phone
+  uuid tenant_id FK
   timestamp_with_time_zone updated_at
 }
 "public.patients" {

@@ -1,0 +1,127 @@
+# public.clinical_records
+
+## Columns
+
+| Name | Type | Default | Nullable | Children | Parents | Comment |
+| ---- | ---- | ------- | -------- | -------- | ------- | ------- |
+| author_id | uuid |  | false |  | [public.user](public.user.md) |  |
+| created_at | timestamp with time zone |  | false |  |  |  |
+| current_version | integer |  | false |  |  |  |
+| deleted_at | timestamp with time zone |  | true |  |  |  |
+| id | uuid | gen_random_uuid() | false | [public.clinical_record_versions](public.clinical_record_versions.md) |  |  |
+| patient_id | uuid |  | false |  | [public.patients](public.patients.md) |  |
+| record_type | varchar |  | false |  |  |  |
+| signed_at | timestamp with time zone |  | true |  |  |  |
+| tenant_id | uuid |  | false | [public.clinical_record_versions](public.clinical_record_versions.md) | [public.tenants](public.tenants.md) [public.patients](public.patients.md) |  |
+
+## Constraints
+
+| Name | Type | Definition |
+| ---- | ---- | ---------- |
+| ck_clinical_records_record_type | CHECK | CHECK (((record_type)::text = ANY ((ARRAY['NOTE'::character varying, 'OBSERVATION'::character varying, 'HISTORY'::character varying, 'ADDENDUM'::character varying, 'RESULT'::character varying])::text[]))) |
+| clinical_records_author_id_not_null | n | NOT NULL author_id |
+| clinical_records_created_at_not_null | n | NOT NULL created_at |
+| clinical_records_current_version_not_null | n | NOT NULL current_version |
+| clinical_records_id_not_null | n | NOT NULL id |
+| clinical_records_patient_id_not_null | n | NOT NULL patient_id |
+| clinical_records_record_type_not_null | n | NOT NULL record_type |
+| clinical_records_tenant_id_not_null | n | NOT NULL tenant_id |
+| fk_clinical_records_author_id_user | FOREIGN KEY | FOREIGN KEY (author_id) REFERENCES "user"(id) ON DELETE RESTRICT |
+| fk_clinical_records_tenant_id_patient_id_patients | FOREIGN KEY | FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT |
+| fk_clinical_records_tenant_id_tenants | FOREIGN KEY | FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT |
+| pk_clinical_records | PRIMARY KEY | PRIMARY KEY (id) |
+| uq_clinical_records_tenant_id_id | UNIQUE | UNIQUE (tenant_id, id) |
+
+## Indexes
+
+| Name | Definition |
+| ---- | ---------- |
+| ix_clinical_records_tenant_patient_created_at | CREATE INDEX ix_clinical_records_tenant_patient_created_at ON public.clinical_records USING btree (tenant_id, patient_id, created_at) |
+| pk_clinical_records | CREATE UNIQUE INDEX pk_clinical_records ON public.clinical_records USING btree (id) |
+| uq_clinical_records_tenant_id_id | CREATE UNIQUE INDEX uq_clinical_records_tenant_id_id ON public.clinical_records USING btree (tenant_id, id) |
+
+## Relations
+
+```mermaid
+erDiagram
+
+"public.clinical_records" }o--|| "public.user" : "FOREIGN KEY (author_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
+"public.clinical_record_versions" }o--|| "public.clinical_records" : "FOREIGN KEY (tenant_id, clinical_record_id) REFERENCES clinical_records(tenant_id, id) ON DELETE RESTRICT"
+"public.clinical_records" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
+"public.clinical_records" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+
+"public.clinical_records" {
+  uuid author_id FK
+  timestamp_with_time_zone created_at
+  integer current_version
+  timestamp_with_time_zone deleted_at
+  uuid id
+  uuid patient_id FK
+  varchar record_type
+  timestamp_with_time_zone signed_at
+  uuid tenant_id FK
+}
+"public.user" {
+  timestamp_with_time_zone created_at
+  varchar_255_ email
+  varchar_255_ full_name
+  varchar hashed_password
+  uuid id
+  boolean is_active
+  boolean is_superuser
+  uuid tenant_id FK
+}
+"public.clinical_record_versions" {
+  uuid author_id FK
+  varchar body
+  varchar body_format
+  uuid clinical_record_id FK
+  timestamp_with_time_zone created_at
+  uuid id
+  varchar reason
+  varchar signature_digest
+  timestamp_with_time_zone signed_at
+  integer supersedes_version
+  uuid tenant_id FK
+  integer version
+}
+"public.patients" {
+  varchar address_line
+  timestamp_with_time_zone created_at
+  date date_of_birth
+  timestamp_with_time_zone deceased_at
+  timestamp_with_time_zone deleted_at
+  varchar email
+  varchar family_name
+  varchar gender_identity
+  varchar given_name
+  uuid id
+  bytea ihi
+  bytea ihi_blind_index
+  bytea medicare_blind_index
+  bytea medicare_number
+  uuid merged_into_patient_id FK
+  varchar phone
+  varchar postcode
+  varchar preferred_name
+  varchar sex_at_birth
+  varchar state
+  varchar suburb
+  uuid tenant_id FK
+  timestamp_with_time_zone updated_at
+}
+"public.tenants" {
+  timestamp_with_time_zone created_at
+  varchar_32_ data_region
+  uuid id
+  varchar_255_ legal_name
+  varchar_64_ retention_profile
+  varchar_64_ slug
+  varchar_16_ status
+  timestamp_with_time_zone updated_at
+}
+```
+
+---
+
+> Generated by [tbls](https://github.com/k1LoW/tbls)
