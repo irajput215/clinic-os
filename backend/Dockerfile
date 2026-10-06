@@ -4,6 +4,8 @@ WORKDIR /app
 
 COPY package.json bun.lock /app/
 COPY frontend/package.json /app/frontend/
+# The root package.json names frontend-features as a workspace; bun needs its manifest to resolve.
+COPY frontend-features/package.json /app/frontend-features/
 
 WORKDIR /app/frontend
 

@@ -1,0 +1,182 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "@fontsource-variable/source-serif-4/opsz.css";
+@import "@fontsource-variable/source-serif-4/opsz-italic.css";
+@import "@fontsource/instrument-sans/400.css";
+@import "@fontsource/instrument-sans/500.css";
+@import "@fontsource/instrument-sans/600.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+
+/*
+ * Clinic OS design tokens. Source of truth: docs2/design-system.md.
+ * Values are taken from the reference product's own :root (clay, oat, paper, stone, ...), so the
+ * palette names below are the design system's vocabulary, not Tailwind's.
+ */
+@theme {
+  --font-serif: "Source Serif 4 Variable", "Source Serif 4", Georgia, serif;
+  --font-sans: "Instrument Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  --color-clay: #c05b3d;
+  --color-clay-hover: #a84b30;
+  --color-clay-deep: #8a3018;
+  --color-clay-tint: #f3e2d9;
+  --color-clay-soft: #eac7b8;
+  --color-ink: #26221b;
+  --color-oat: #f4f0e9;
+  --color-paper: #fbf9f5;
+  --color-stone: #6f675a;
+  --color-stone-faint: #9a917f;
+  --color-line: #e4dccd;
+  --color-line-faint: #ece7dc;
+  --color-fill: #efe9dd;
+  --color-ok: #567f5f;
+  --color-ok-deep: #3d5c44;
+  --color-ok-tint: #e4ede3;
+  --color-warn: #a97a1f;
+  --color-warn-deep: #7a5813;
+  --color-warn-tint: #f5ead1;
+  --color-danger: #b0402a;
+  --color-danger-deep: #8a3018;
+  --color-danger-tint: #f6e0d9;
+  --color-info: #4e7387;
+  --color-info-deep: #38576a;
+  --color-info-tint: #e1eaee;
+  --color-purple: #7a6390;
+  --color-purple-deep: #5d4a70;
+  --color-purple-tint: #eae3f0;
+
+  --radius-card: 14px;
+  --radius-inner: 10px;
+  --radius-btn: 9px;
+  --radius-chip: 6px;
+
+  --shadow-card: 0 1px 2px rgba(38, 34, 27, 0.08);
+  --shadow-pop:
+    0 8px 32px rgba(38, 34, 27, 0.14), 0 1px 2px rgba(38, 34, 27, 0.08);
+
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13.5px;
+  --text-base: 15px;
+
+  --animate-rise: rise 0.45s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  @keyframes rise {
+    from {
+      transform: translateY(14px);
+      opacity: 0;
+    }
+    to {
+      transform: none;
+      opacity: 1;
+    }
+  }
+}
+
+/* The shadcn primitives in src/components/ui read these names; they map onto the tokens above. */
+@theme inline {
+  --color-background: var(--color-oat);
+  --color-foreground: var(--color-ink);
+  --color-card: var(--color-paper);
+  --color-card-foreground: var(--color-ink);
+  --color-popover: var(--color-paper);
+  --color-popover-foreground: var(--color-ink);
+  --color-primary: var(--color-clay);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: var(--color-fill);
+  --color-secondary-foreground: var(--color-ink);
+  --color-muted: var(--color-fill);
+  --color-muted-foreground: var(--color-stone);
+  --color-accent: var(--color-clay-tint);
+  --color-accent-foreground: var(--color-clay-deep);
+  --color-destructive: var(--color-danger);
+  --color-border: var(--color-line);
+  --color-input: var(--color-line);
+  --color-ring: var(--color-clay);
+  --radius-sm: var(--radius-chip);
+  --radius-md: var(--radius-btn);
+  --radius-lg: var(--radius-inner);
+  --radius-xl: var(--radius-card);
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    @apply bg-oat font-sans text-base text-ink;
+    margin: 0;
+  }
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-line);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-clay);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      /* biome-ignore lint/complexity/noImportantStyles: reduced motion must beat every component animation */
+      animation-duration: 0.01ms !important;
+      /* biome-ignore lint/complexity/noImportantStyles: same as above */
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  /* Patterned sign-in backdrop: two warm glows over a tiled mark, as in the reference. */
+  .backdrop-pattern {
+    background-color: var(--color-oat);
+    background-image:
+      radial-gradient(
+        ellipse 750px 540px at 12% -8%,
+        rgba(192, 91, 61, 0.13),
+        transparent 62%
+      ),
+      radial-gradient(
+        ellipse 900px 640px at 105% 108%,
+        rgba(86, 127, 95, 0.1),
+        transparent 62%
+      ),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='168'%3E%3Cg fill='none' stroke='%23E4DCCD' stroke-width='1.5'%3E%3Crect x='18' y='18' width='44' height='44' rx='12'/%3E%3Crect x='104' y='104' width='34' height='34' rx='10'/%3E%3C/g%3E%3Cg fill='%23ECE7DC'%3E%3Crect x='106' y='24' width='16' height='16' rx='5'/%3E%3Crect x='113.5' y='31.5' width='16' height='16' rx='5'/%3E%3Crect x='28' y='112' width='12' height='12' rx='4'/%3E%3Crect x='33.5' y='117.5' width='12' height='12' rx='4'/%3E%3C/g%3E%3Cg fill='%23E4DCCD'%3E%3Ccircle cx='84' cy='84' r='2.6'/%3E%3Ccircle cx='150' cy='58' r='2'/%3E%3Ccircle cx='16' cy='150' r='2'/%3E%3C/g%3E%3C/svg%3E");
+  }
+
+  .field-label {
+    @apply mb-1.5 block text-xs font-semibold tracking-[0.06em] text-stone uppercase;
+  }
+
+  .field-input {
+    @apply w-full rounded-btn border border-line bg-paper px-3 py-2.5 text-[14px] text-ink transition-[border-color,box-shadow] outline-none placeholder:text-stone-faint;
+  }
+  .field-input:focus {
+    border-color: var(--color-clay);
+    box-shadow: 0 0 0 3px rgba(192, 91, 61, 0.14);
+  }
+  .field-input[aria-invalid="true"] {
+    border-color: var(--color-danger);
+  }
+
+  /* Uppercase small-caps table header and roomy rows, as the reference's .data table. */
+  .data-table {
+    @apply w-full border-separate border-spacing-0 text-sm;
+  }
+  .data-table th {
+    @apply bg-oat px-3.5 py-2.5 text-left text-2xs font-semibold tracking-[0.08em] text-stone-faint uppercase;
+  }
+  .data-table td {
+    @apply border-t border-line-faint px-3.5 py-[11px] align-middle;
+  }
+  .data-table tbody tr {
+    @apply transition-colors;
+  }
+  .data-table tbody tr[data-href]:hover {
+    @apply cursor-pointer bg-oat/60;
+  }
+}

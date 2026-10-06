@@ -13,10 +13,11 @@ repos:
         exclude: |
             (?x)^(
                 frontend/src/client/.*|
+                frontend-features/src/client/.*|
                 backend/app/email-templates/.*
             )$
       - id: trailing-whitespace
-        exclude: ^frontend/src/client/.*
+        exclude: ^frontend(-features)?/src/client/.*
   - repo: https://github.com/crate-ci/typos
     rev: 00f422f3b19c57bc6338715ebfe3316d38768461 # frozen: v1.50.3
     hooks:
@@ -30,6 +31,12 @@ repos:
         language: system
         types: [text]
         files: ^frontend/
+      - id: local-biome-check-features
+        name: biome check (frontend-features)
+        entry: bun run --filter frontend-features lint
+        language: system
+        types: [text]
+        files: ^frontend-features/
 
       - id: local-ruff-check
         name: ruff check
@@ -64,7 +71,7 @@ repos:
         entry: bash ./scripts/generate-client.sh
         pass_filenames: false
         language: unsupported
-        files: ^backend/app/.*\.py$|^backend/pyproject\.toml$|^uv\.lock$|^frontend/openapi-ts\.config\.ts$|^scripts/generate-client\.sh$
+        files: ^backend/app/.*\.py$|^backend/pyproject\.toml$|^uv\.lock$|^frontend/openapi-ts\.config\.ts$|^frontend-features/openapi-ts\.config\.ts$|^scripts/generate-client\.sh$
 
       - id: add-release-date
         language: unsupported
