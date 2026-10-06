@@ -90,6 +90,27 @@ def request_id_for(request: Request) -> str | None:
     return request_id_from_scope(request.scope) or current_request_id()
 
 
+def request_instance(request: Request) -> str:
+    """The RFC 7807 `instance`: the resolution path, with path-parameter *values* removed.
+
+    A cross-tenant `404` must not echo the resource id it refused — that is the assertion in
+    `tests/patients/test_denials.py::test_cross_tenant_read_is_404_with_no_patient_data`, and it is
+    the same rule that keeps path parameters out of the log line. So the resolved segment is
+    replaced by its name: `/api/v1/patients/{patient_id}`. The path is never taken from the query
+    string, which the contract forbids carrying identifiers in at all.
+
+    A request that matched no route has no parameters to remove; its `instance` is the path the
+    caller asked for, which is the caller's own input and the only identifier available. The
+    `request_id` member is what identifies the individual occurrence.
+    """
+    path = request.url.path
+    path_params = request.scope.get("path_params") or {}
+    for name, value in path_params.items():
+        if value is not None:
+            path = path.replace(f"/{value}", f"/{{{name}}}")
+    return path
+
+
 def problem_body(
     request: Request,
     *,
@@ -103,7 +124,7 @@ def problem_body(
         "title": title or _status_phrase(status_code),
         "status": status_code,
         "detail": detail,
-        "instance": request.url.path,
+        "instance": request_instance(request),
         "request_id": request_id_for(request),
     }
 

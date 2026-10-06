@@ -281,6 +281,27 @@ def test_the_500_body_carries_no_query_string(client: TestClient) -> None:
     assert body["instance"] == USERS_ME
 
 
+def test_instance_names_the_route_and_never_the_path_parameter(
+    client: TestClient,
+) -> None:
+    """`404` must not confirm which resource it refused: the id is replaced by its name.
+
+    The same rule as the log line: a resolved path parameter may be an identifier, so the envelope
+    reports the template and `request_id` identifies the occurrence.
+    """
+    patients = PatientsApi(client)
+    try:
+        tenant = patients.register(clinic_name="Envelope Clinic")
+        missing_id = str(uuid.uuid4())
+        response = patients.read(tenant, missing_id)
+    finally:
+        patients.cleanup()
+
+    body = _problem(response, status=404, path=f"{PATIENTS_URL}/{{patient_id}}")
+    assert missing_id not in response.text
+    assert missing_id not in json.dumps(body)
+
+
 @pytest.mark.parametrize(
     ("exception", "expected"),
     [
