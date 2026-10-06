@@ -3,11 +3,12 @@ import { createFileRoute, Link as RouterLink } from "@tanstack/react-router"
 import { AlertCircle, ArrowLeft, SearchX } from "lucide-react"
 
 import { PatientsService } from "@/client"
+import PatientsNoAccess from "@/components/Patients/NoAccess"
 import PatientDetails from "@/components/Patients/PatientDetails"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { isNotFound } from "@/lib/http"
+import { httpStatus, isNotFound } from "@/lib/http"
 import { patientFullName } from "@/lib/patients"
 
 /**
@@ -16,7 +17,8 @@ import { patientFullName } from "@/lib/patients"
  * `retry: false` is deliberate. The API answers `404` both for a record that does not exist
  * and for one belonging to another organisation — that is how it avoids confirming that
  * someone else's record exists — and it answers `422` for an id that is not a UUID. Each is
- * a final answer, so retrying would only hold a spinner in front of the not-found state.
+ * a final answer, so retrying would only hold a spinner in front of the not-found state. A
+ * `403` is the same kind of answer, and it has its own state rather than a retry button.
  */
 const patientQueryOptions = (patientId: string) => ({
   queryKey: ["patients", patientId],
@@ -49,6 +51,7 @@ function PatientRecord() {
   } = useQuery(patientQueryOptions(patientId))
 
   const notFound = isError && isNotFound(error)
+  const forbidden = isError && httpStatus(error) === 403
 
   return (
     <div className="flex flex-col gap-6">
@@ -79,6 +82,8 @@ function PatientRecord() {
         <PendingPatient />
       ) : notFound ? (
         <PatientNotFound />
+      ) : forbidden ? (
+        <PatientsNoAccess error={error} />
       ) : isError ? (
         <PatientError onRetry={() => refetch()} retrying={isFetching} />
       ) : patient ? (

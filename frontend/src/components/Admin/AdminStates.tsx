@@ -4,8 +4,8 @@
  * A `403` is never an error here. The API answers `403` for a signed-in caller who does not
  * hold `users:manage`, and for an account that belongs to no organisation; both mean "there
  * is nothing this screen may show you", which is a state with an explanation, not a crash
- * and not a blank page. `main.tsx` normally redirects a `403` to sign-in, so the requests in
- * `adminQueries.ts` opt out of that redirect with `meta: { skipAuthRedirect: true }`.
+ * and not a blank page. `main.tsx` signs out on `401` only, so a `403` stays in the page for
+ * every request and no screen has to opt out of anything.
  */
 
 import { AlertCircle, Inbox, RefreshCw, ShieldX } from "lucide-react"

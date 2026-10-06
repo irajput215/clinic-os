@@ -66,7 +66,6 @@ import {
 } from "@/components/ui/select"
 import useCustomToast from "@/hooks/useCustomToast"
 import {
-  apiErrorMessage,
   describeAdminError,
   formatCodeList,
   GRANTABILITY_EXPLANATION,
@@ -77,7 +76,7 @@ import {
   roleGrantability,
 } from "@/lib/admin"
 import { formatTimestamp } from "@/lib/date"
-import { isNotFound } from "@/lib/http"
+import { apiErrorMessage, isNotFound } from "@/lib/http"
 import {
   rolesQueryOptions,
   selfPermissionsQueryOptions,
@@ -167,7 +166,6 @@ export function UserAccessPanel({ currentUserId }: { currentUserId: string }) {
         path: { user_id: accountId },
         body: { role_id: roleId },
       }),
-    meta: { skipAuthRedirect: true },
     retry: retryOnRateLimit,
     retryDelay: retryDelayMs,
     onSuccess: () => {

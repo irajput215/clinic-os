@@ -22,7 +22,6 @@ function getUsersQueryOptions() {
     queryFn: async () =>
       (await UsersService.readUsers({ query: { skip: 0, limit: 100 } })).data,
     queryKey: ["users"],
-    meta: { skipAuthRedirect: true },
   }
 }
 

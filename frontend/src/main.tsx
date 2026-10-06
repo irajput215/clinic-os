@@ -19,41 +19,27 @@ client.setConfig({
   auth: () => localStorage.getItem("access_token") || "",
 })
 
-/** Opt a request out of the `403` sign-out below. See `Admin/adminQueries.ts`. */
-type AuthRedirectMeta = {
-  skipAuthRedirect?: boolean
-}
-
-declare module "@tanstack/react-query" {
-  interface Register {
-    queryMeta: AuthRedirectMeta
-    mutationMeta: AuthRedirectMeta
-  }
-}
-
 /**
- * A `401` means the session is gone, so it always signs out. A `403` usually means the same
- * thing to this app — an account with no organisation — but the administration API uses it
- * for a signed-in caller who simply lacks `users:manage`, and that screen must show the
- * refusal. A request carrying `meta: { skipAuthRedirect: true }` keeps its `403` in the page.
+ * `401` is the only status that signs the user out.
+ *
+ * `get_current_user` answers `401` for every unusable session — a token that does not verify, an
+ * account that no longer exists, a deactivated account — so `401` means exactly "sign in again".
+ * Every other status stays in the page: a `403` means the session is valid and this identity is not
+ * allowed to do this, and the screen that asked explains it. Signing out on `403` was what turned
+ * "your account has no organisation" on the Patients tab into a login loop, with the real answer
+ * discarded. A per-request opt-out (`meta: { skipAuthRedirect: true }`) used to carve a `403` out of
+ * that rule; there is nothing left to carve out, so the rule is one line in one place and no screen
+ * can forget it.
  */
-const handleApiError = (error: Error, meta: AuthRedirectMeta | undefined) => {
+const handleApiError = (error: Error) => {
   if (!(error instanceof AxiosError)) return
-  const status = error.response?.status ?? 0
-  if (meta?.skipAuthRedirect && status === 403) return
-  if ([401, 403].includes(status)) {
-    localStorage.removeItem("access_token")
-    window.location.href = "/login"
-  }
+  if (error.response?.status !== 401) return
+  localStorage.removeItem("access_token")
+  window.location.href = "/login"
 }
 const queryClient = new QueryClient({
-  queryCache: new QueryCache({
-    onError: (error, query) => handleApiError(error, query.meta),
-  }),
-  mutationCache: new MutationCache({
-    onError: (error, _variables, _context, mutation) =>
-      handleApiError(error, mutation.meta),
-  }),
+  queryCache: new QueryCache({ onError: handleApiError }),
+  mutationCache: new MutationCache({ onError: handleApiError }),
 })
 
 const router = createRouter({ routeTree })
