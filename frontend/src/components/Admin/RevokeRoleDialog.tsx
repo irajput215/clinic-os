@@ -24,7 +24,12 @@ import {
 } from "@/components/ui/dialog"
 import { LoadingButton } from "@/components/ui/loading-button"
 import useCustomToast from "@/hooks/useCustomToast"
-import { isForbidden, retryDelayMs, retryOnRateLimit } from "@/lib/admin"
+import {
+  apiErrorCode,
+  isForbidden,
+  retryDelayMs,
+  retryOnRateLimit,
+} from "@/lib/admin"
 import { httpStatus } from "@/lib/http"
 
 export function RevokeRoleDialog({
@@ -59,6 +64,14 @@ export function RevokeRoleDialog({
       })
     },
     onError: (error) => {
+      if (apiErrorCode(error) === "LAST_ADMINISTRATOR") {
+        // R8. Nothing was removed, and the API's own sentence is the accurate one: say it
+        // rather than a generic failure, and leave the list as it is.
+        setErrorMessage(
+          "This is the organisation's last account that can manage users. Assign another administrator before revoking this role.",
+        )
+        return
+      }
       if (isForbidden(error)) {
         setErrorMessage(
           "You do not have permission to revoke roles in this organisation.",

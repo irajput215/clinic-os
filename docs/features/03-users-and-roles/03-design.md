@@ -114,10 +114,12 @@ All client-facing paths carry the `/api/v1` prefix (D-005).
 | `POST /api/v1/users` | `users:manage` | yes, 5 min | invite; `409` duplicate email; `422` role not grantable |
 | `GET /api/v1/users/{id}` | `users:manage` | no | `404` on cross-tenant |
 | `POST /api/v1/users/{id}/deactivate` | `users:manage` | yes | revokes sessions; `USER_DEACTIVATED` |
-| `POST /api/v1/users/{id}/roles` | `users:manage` | yes, 5 min | `ROLE_ASSIGNED` |
-| `DELETE /api/v1/users/{id}/roles/{role_id}` | `users:manage` | yes, 5 min | `ROLE_REVOKED` |
+| `POST /api/v1/users/{id}/roles` | `users:manage` | yes, 5 min | `ROLE_ASSIGNED`; `200` when the account already holds the role, `201` when the grant is created |
+| `DELETE /api/v1/users/{id}/roles/{role_id}` | `users:manage` | yes, 5 min | `ROLE_REVOKED`; `409 LAST_ADMINISTRATOR` when it would remove the last role granting `users:manage` (R8) |
+| `GET /api/v1/users/{id}/roles` | `users:manage` | no | the roles one account holds; `404` on cross-tenant |
 | `GET /api/v1/users/{id}/permissions` | `users:manage` | no | effective set, computed server-side |
 | `GET /api/v1/roles` | `users:manage` | no | roles with their permission bundles |
+| `GET /api/v1/permissions` | `users:manage` | no | the global catalogue (R7); read-only reference data with no tenant key |
 | `PUT /api/v1/roles/{id}/permissions` | `users:manage` | yes, 5 min | passkey/hardware key only; `PERMISSION_GRANTED`/`PERMISSION_REVOKED` |
 | `GET /api/v1/auth/capabilities` | valid session | no | advisory UI data only; never a control |
 

@@ -24,12 +24,14 @@ same for tenants that already existed when it ran.
 
 import uuid
 from collections.abc import Iterable, Sequence
+from enum import StrEnum
 
 from sqlmodel import Session, select
 
 from app.core.db import tenant_transaction
 from app.models import User
 from app.modules.users_roles.catalog import (
+    ADMINISTRATION_PERMISSION,
     BOOTSTRAP_ROLE_CODE,
     PERMISSION_CATALOGUE,
     SYSTEM_ROLE_CATALOGUE,
@@ -57,6 +59,7 @@ __all__ = [
     "Actor",
     "Decision",
     "ResourceRef",
+    "RevokeOutcome",
     "actor_for",
     "assign_role",
     "authorize",
@@ -74,6 +77,21 @@ __all__ = [
     "revoke_role",
     "seed_tenant_roles",
 ]
+
+
+class RevokeOutcome(StrEnum):
+    """What one revoke attempt did, so the router maps it to a status without re-deciding.
+
+    `NOT_FOUND` is the answer for an absent account, an absent role and an absent assignment alike:
+    the router turns all three into `404`, because distinguishing them would disclose existence across
+    a tenant boundary (R6). `LAST_ADMINISTRATOR` is R8's refusal, and it is the only outcome that
+    explains itself — the router returns `409` with the design's reason code.
+    """
+
+    REVOKED = "REVOKED"
+    NOT_FOUND = "NOT_FOUND"
+    LAST_ADMINISTRATOR = "LAST_ADMINISTRATOR"
+
 
 # The catalogue's declared order, so a listing is stable and matches
 # `01-requirements.md`'s matrix rather than the database's physical order.
@@ -477,18 +495,64 @@ def assign_role(
         )
 
 
+def _removal_locks_out_the_organisation(
+    session: Session, *, tenant_id: uuid.UUID, user_id: uuid.UUID, role_id: uuid.UUID
+) -> bool:
+    """R8: `True` when deleting this one assignment would leave nobody able to manage users.
+
+    "The last Administrator permission" is `ADMINISTRATION_PERMISSION` (`01-requirements.md`,
+    permission matrix: `users:manage` is held by `PRACTICE_OWNER` and `ADMINISTRATOR` only). The check
+    asks whether any *other* assignment in the tenant still resolves to a role granting it.
+
+    It fails closed: an unreadable catalogue refuses the removal rather than assuming an administrator
+    survives it. That path is unreachable for an authorised caller — the actor had to hold
+    `users:manage` to reach here, so the permission row exists — and the refusal is the safe answer if
+    it ever is not.
+    """
+    permission = session.exec(
+        select(Permission).where(Permission.code == ADMINISTRATION_PERMISSION)
+    ).first()
+    if permission is None:
+        return True
+
+    managing_role_ids = {
+        grant.role_id
+        for grant in session.exec(
+            select(RolePermission).where(
+                RolePermission.tenant_id == tenant_id,
+                RolePermission.permission_id == permission.id,
+            )
+        ).all()
+    }
+    if role_id not in managing_role_ids:
+        return False
+
+    remaining = {
+        (assignment.user_id, assignment.role_id)
+        for assignment in session.exec(
+            select(UserRole).where(UserRole.tenant_id == tenant_id)
+        ).all()
+        if assignment.role_id in managing_role_ids
+    }
+    remaining.discard((user_id, role_id))
+    return not remaining
+
+
 def revoke_role(
     *,
     actor: Actor,
     user_id: uuid.UUID,
     role_id: uuid.UUID,
-) -> bool:
+) -> RevokeOutcome:
     """Revoke one role from one account of the actor's tenant.
 
-    Returns `True` when a row was removed and `False` when there was nothing to remove — for an absent
-    account, an absent role, or an assignment that does not exist. The router answers `404` for all
-    three, because distinguishing them would disclose existence across a tenant boundary (R6) and
-    because a partial answer would let a caller enumerate assignments.
+    `NOT_FOUND` for an absent account, an absent role, or an assignment that does not exist — the
+    router answers `404` for all three, because distinguishing them would disclose existence across a
+    tenant boundary (R6) and because a partial answer would let a caller enumerate assignments.
+
+    `LAST_ADMINISTRATOR` for the removal R8 refuses: taking away the last role that grants
+    `ADMINISTRATION_PERMISSION` would leave the organisation with nobody able to manage users, and the
+    router answers `409` with nothing removed.
 
     This is the hard delete the design grants: `03-design.md` gives `clinos_app` `DELETE` on
     `user_roles` and `role_permissions` — *"grant/revoke is real"* — and the append-only audit trail,
@@ -498,7 +562,7 @@ def revoke_role(
         tenant_id=actor.tenant_id, actor_id=actor.user_id
     ) as session:
         if _tenant_user(session, tenant_id=actor.tenant_id, user_id=user_id) is None:
-            return False
+            return RevokeOutcome.NOT_FOUND
         role = session.exec(
             select(Role).where(
                 Role.id == role_id,
@@ -506,7 +570,7 @@ def revoke_role(
             )
         ).first()
         if role is None:
-            return False
+            return RevokeOutcome.NOT_FOUND
         assignment = session.exec(
             select(UserRole).where(
                 UserRole.tenant_id == actor.tenant_id,
@@ -515,6 +579,10 @@ def revoke_role(
             )
         ).first()
         if assignment is None:
-            return False
+            return RevokeOutcome.NOT_FOUND
+        if _removal_locks_out_the_organisation(
+            session, tenant_id=actor.tenant_id, user_id=user_id, role_id=role.id
+        ):
+            return RevokeOutcome.LAST_ADMINISTRATOR
         session.delete(assignment)
-        return True
+        return RevokeOutcome.REVOKED

@@ -186,18 +186,28 @@ PATIENT_PERMISSIONS: Final[dict[str, str]] = {
     "update": "patient:update",
 }
 
-# The permission each administration route requires. `03-design.md` "Endpoints" gives `users:manage`
-# to every `/users/*` and `/roles/*` row. `role:read`/`role:manage` are **candidates only**
-# (`01-requirements.md`, "Candidate additions named elsewhere") and are not granted while OPEN-1 and
-# OPEN-6 are open, so no route uses them.
+# The permission that administers people. `03-design.md` "Endpoints" gives it to every `/users/*` and
+# `/roles/*` row, and R8's "last Administrator permission" — the one whose removal would leave an
+# organisation with nobody able to manage users — is this code.
+ADMINISTRATION_PERMISSION: Final[str] = "users:manage"
+
+# The permission each administration route requires. `03-design.md` "Endpoints" gives
+# `ADMINISTRATION_PERMISSION` to every `/users/*` and `/roles/*` row. `role:read`/`role:manage` are
+# **candidates only** (`01-requirements.md`, "Candidate additions named elsewhere") and are not
+# granted while OPEN-1 and OPEN-6 are open, so no route uses them.
 USERS_ROLES_PERMISSIONS: Final[dict[str, str]] = {
-    "list_roles": "users:manage",
-    "list_permissions": "users:manage",
-    "read_user_roles": "users:manage",
-    "read_user_permissions": "users:manage",
-    "assign_role": "users:manage",
-    "revoke_role": "users:manage",
+    "list_roles": ADMINISTRATION_PERMISSION,
+    "list_permissions": ADMINISTRATION_PERMISSION,
+    "read_user_roles": ADMINISTRATION_PERMISSION,
+    "read_user_permissions": ADMINISTRATION_PERMISSION,
+    "assign_role": ADMINISTRATION_PERMISSION,
+    "revoke_role": ADMINISTRATION_PERMISSION,
 }
+
+# R8's refusal reason. `01-requirements.md` R8 fixes the rule and the status (`409`); it does not name
+# a reason code, so this module names one, in the same `{code, message}` envelope every other denial
+# uses. The administration screen reads the code to explain the refusal rather than guess at it.
+LAST_ADMINISTRATOR: Final[str] = "LAST_ADMINISTRATOR"
 
 # The `Action` suffix the design gives each administration endpoint's audit event
 # (`05-data-and-audit.md`, "Audit events emitted"). Feature 04 is not built, so the routes declare

@@ -213,6 +213,32 @@ def test_a_client_supplied_tenant_value_cannot_influence_anything(
     assert "tenant_id" in forged_body.text
 
 
+def test_r8_never_answers_for_another_tenants_role(rbac: RbacApi) -> None:
+    """R8 is a decision about the caller's own tenant, and it must not leak a foreign one.
+
+    Alpha's owner is Alpha's last holder of `users:manage`, so Alpha's own revoke is `409`. Beta
+    making the same call against Alpha's account must still get the flat `404` (R6) — a `409` there
+    would confirm that the foreign account holds a granting role.
+    """
+    alpha = rbac.register_tenant(clinic_name="R8 Alpha")
+    beta = rbac.register_tenant(clinic_name="R8 Beta")
+    assert alpha.tenant_id is not None and beta.tenant_id is not None
+    alpha_owner_role = rbac.role_id_for(
+        tenant_id=alpha.tenant_id, code="PRACTICE_OWNER"
+    )
+
+    assert (
+        rbac.client.delete(
+            f"{_user_roles_url(alpha.user_id)}/{alpha_owner_role}",
+            headers=beta.headers,
+        ).status_code
+        == 404
+    )
+    assert rbac.assignment_codes(tenant_id=alpha.tenant_id, user_id=alpha.user_id) == [
+        "PRACTICE_OWNER"
+    ], "a cross-tenant revoke removed Alpha's last administrator"
+
+
 def test_the_administrative_rate_limit_refuses_the_twenty_first_request(
     rbac: RbacApi,
 ) -> None:

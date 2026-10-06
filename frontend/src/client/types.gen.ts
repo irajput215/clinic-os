@@ -1328,6 +1328,10 @@ export type usersRevokeRoleData = {
 
 export type usersRevokeRoleErrors = {
     /**
+     * Refused: this is the organisation's last role granting `users:manage` (R8). Assign another administrator first.
+     */
+    409: unknown;
+    /**
      * Validation Error
      */
     422: HTTPValidationError;

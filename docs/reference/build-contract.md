@@ -275,7 +275,7 @@ backend/app/
 | Module id | Responsibility | Owned tables | Endpoints | Phase |
 |---|---|---|---|:---:|
 | `identity_tenancy` | Sessions, tokens, tenant resolution, permission evaluation | `tenants`, `refresh_tokens`, `integration_credentials_refs` | `/api/v1/auth/*`, `/api/v1/tenants/*` | 1 |
-| `users_roles` | User lifecycle, role bundles, permission grants | `users`, `roles`, `permissions`, `role_permissions`, `user_roles` | `/api/v1/users/*`, `/api/v1/roles/*` | 1 |
+| `users_roles` | User lifecycle, role bundles, permission grants | `users`, `roles`, `permissions`, `role_permissions`, `user_roles` | `/api/v1/users/*`, `/api/v1/roles/*`, `/api/v1/permissions/*` | 1 |
 | `patients` | Demographics, identifiers, consent, duplicate detection | `patients`, `consent_records` | `/api/v1/patients/*` | 1 |
 | `clinical_records` | Versioned immutable notes and addenda | `clinical_records`, `clinical_record_versions` | `/api/v1/clinical-records/*` | 1 |
 | `audit` | Append-only event write and read | `audit_log` | `/api/v1/audit/*` | 1 |

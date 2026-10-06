@@ -41,7 +41,7 @@ callback URL because we cut a v2. Webhook ingress is therefore mounted **without
 
 | Route | Convention |
 |---|---|
-| `/api/v1/auth/*`, `/api/v1/tenants/*`, `/api/v1/users/*`, `/api/v1/roles/*` | Prefixed |
+| `/api/v1/auth/*`, `/api/v1/tenants/*`, `/api/v1/users/*`, `/api/v1/roles/*`, `/api/v1/permissions/*` | Prefixed |
 | `/api/v1/patients/*`, `/api/v1/clinical-records/*`, `/api/v1/documents/*` | Prefixed |
 | `/api/v1/tga-approvals/*`, `/api/v1/tga-inbox/*` | Prefixed |
 | `/api/v1/prescriptions/*` | Prefixed |
