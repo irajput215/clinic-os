@@ -306,3 +306,18 @@ def test_recovery_link_is_not_an_invitation(client: TestClient, db: Session) -> 
         f"{settings.API_V1_STR}/users/me", headers={"Authorization": f"Bearer {token}"}
     )
     assert r.status_code == 401
+
+
+def test_recovery_without_email_configured_answers_like_an_unknown_email(
+    client: TestClient, db: Session
+) -> None:
+    """With no outgoing mail configured, asking for a registered account's link must not fail
+    where an unknown address succeeds: a 500 only for real accounts would enumerate them."""
+    user, _ = _new_user(db)
+    with patch("app.core.config.settings.SMTP_HOST", None):
+        known = client.post(f"{settings.API_V1_STR}/password-recovery/{user.email}")
+        unknown = client.post(
+            f"{settings.API_V1_STR}/password-recovery/{random_email()}"
+        )
+    assert known.status_code == unknown.status_code == 200
+    assert known.json() == unknown.json()

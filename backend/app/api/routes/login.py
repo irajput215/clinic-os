@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta
 from typing import Annotated, Any
 
@@ -18,6 +19,8 @@ from app.utils import (
     send_email,
     verify_password_reset_token,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["login"])
 
@@ -69,8 +72,13 @@ def recover_password(email: str, session: SessionDep) -> Message:
     user = crud.get_user_by_email(session=session, email=email)
 
     # Always return the same response to prevent email enumeration attacks
-    # Only send email if user actually exists
-    if user:
+    # Only send email if user actually exists, and only when outgoing mail is configured: without it
+    # `send_email` fails, and a 500 for registered addresses alone would enumerate them.
+    if user and not settings.emails_enabled:
+        logger.warning(
+            "Password recovery requested but outgoing email is not configured"
+        )
+    elif user:
         password_reset_token = generate_password_reset_token(
             email=email, hashed_password=user.hashed_password
         )
