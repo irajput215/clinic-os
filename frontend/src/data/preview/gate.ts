@@ -8,9 +8,9 @@ import type {
 /**
  * PREVIEW STAND-IN for `POST /api/v1/tga-approvals/match` (tga_approvals/service.py `match`).
  *
- * This runs only in preview mode, in place of the server, so the script queue can be exercised before
- * the prescriptions backend exists. It is not a security control and the production UI never calls
- * it: in `api` mode the decision comes from the server and the UI only displays it.
+ * Only the Today page's preview sample still uses it (src/data/dashboard.ts), until
+ * `GET /dashboard/today` lands. The script queue reads the gate from the prescriptions API. It is not
+ * a security control: the server decides at sign and at dispatch.
  *
  * Semantics mirrored from the backend:
  * - the grain is (patient, TGA category, dosage form);

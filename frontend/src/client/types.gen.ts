@@ -430,6 +430,49 @@ export type ClinicalRecordsPublic = {
 };
 
 /**
+ * DispatchRead
+ *
+ * The latest outbox row for a prescription - what the clinic may be told about delivery.
+ *
+ * `transport_configured` is the honest half of the answer: while it is `false`, a `QUEUED` row
+ * has been accepted by ClinicOS and **has not been sent to any pharmacy**.
+ */
+export type DispatchRead = {
+    /**
+     * State
+     */
+    state: string;
+    /**
+     * Attempt Seq
+     */
+    attempt_seq: number;
+    /**
+     * Provider
+     */
+    provider: string | null;
+    /**
+     * Provider Reference
+     */
+    provider_reference: string | null;
+    /**
+     * Outcome Class
+     */
+    outcome_class: string | null;
+    /**
+     * Requested At
+     */
+    requested_at: string;
+    /**
+     * Resolved At
+     */
+    resolved_at: string | null;
+    /**
+     * Transport Configured
+     */
+    transport_configured: boolean;
+};
+
+/**
  * HTTPValidationError
  */
 export type HTTPValidationError = {
@@ -824,6 +867,214 @@ export type PractitionerRead = {
 };
 
 /**
+ * PrescriberRead
+ *
+ * An account that may sign: the reviewing-doctor choice when staging.
+ */
+export type PrescriberRead = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * PrescribersPublic
+ */
+export type PrescribersPublic = {
+    /**
+     * Data
+     */
+    data: Array<PrescriberRead>;
+};
+
+/**
+ * PrescriptionCreate
+ *
+ * `POST /api/v1/prescriptions`: stage a draft (FEAT-11 R1; docs2 07 R1).
+ */
+export type PrescriptionCreate = {
+    /**
+     * Patient Id
+     */
+    patient_id: string;
+    /**
+     * Prescriber Id
+     */
+    prescriber_id: string;
+    /**
+     * Medicine Name
+     */
+    medicine_name: string;
+    /**
+     * Tga Category
+     */
+    tga_category: string;
+    /**
+     * Dosage Form
+     */
+    dosage_form: string;
+    /**
+     * Dose Instruction
+     */
+    dose_instruction: string;
+    /**
+     * Quantity
+     */
+    quantity: number | string;
+    /**
+     * Repeats
+     */
+    repeats: number;
+    /**
+     * Triage Outcome
+     */
+    triage_outcome: string;
+    /**
+     * Conventional Therapy
+     */
+    conventional_therapy: string;
+    /**
+     * Date Of Service
+     */
+    date_of_service: string;
+};
+
+/**
+ * PrescriptionDispatch
+ *
+ * `POST /api/v1/prescriptions/{id}/dispatch`: the step-up proof. The intent key is a header.
+ */
+export type PrescriptionDispatch = {
+    /**
+     * Step Up Token
+     */
+    step_up_token: string;
+};
+
+/**
+ * PrescriptionRead
+ *
+ * One prescription with the names a clinical list shows and, when actionable, the live gate.
+ */
+export type PrescriptionRead = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Patient Id
+     */
+    patient_id: string;
+    /**
+     * Patient Name
+     */
+    patient_name: string | null;
+    /**
+     * Prescriber Id
+     */
+    prescriber_id: string;
+    /**
+     * Prescriber Name
+     */
+    prescriber_name: string | null;
+    /**
+     * Drafted By
+     */
+    drafted_by: string;
+    /**
+     * Drafted By Name
+     */
+    drafted_by_name: string | null;
+    /**
+     * Medicine Name
+     */
+    medicine_name: string;
+    /**
+     * Tga Category
+     */
+    tga_category: string;
+    /**
+     * Dosage Form
+     */
+    dosage_form: string;
+    /**
+     * Dose Instruction
+     */
+    dose_instruction: string;
+    /**
+     * Quantity
+     */
+    quantity: string;
+    /**
+     * Repeats
+     */
+    repeats: number;
+    /**
+     * Triage Outcome
+     */
+    triage_outcome: string;
+    /**
+     * Conventional Therapy
+     */
+    conventional_therapy: string;
+    /**
+     * Date Of Service
+     */
+    date_of_service: string;
+    /**
+     * State
+     */
+    state: string;
+    /**
+     * Approval Id
+     */
+    approval_id: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Signed At
+     */
+    signed_at: string | null;
+    gate: TgaMatchResponse | null;
+    dispatch: DispatchRead | null;
+};
+
+/**
+ * PrescriptionSign
+ *
+ * `POST /api/v1/prescriptions/{id}/sign`: the single-use step-up proof, and nothing else.
+ */
+export type PrescriptionSign = {
+    /**
+     * Step Up Token
+     */
+    step_up_token: string;
+};
+
+/**
+ * PrescriptionsPublic
+ *
+ * One keyset page of the queue and its history, newest first.
+ */
+export type PrescriptionsPublic = {
+    /**
+     * Data
+     */
+    data: Array<PrescriptionRead>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+};
+
+/**
  * PublicBookingCreated
  *
  * The confirmation. The same shape whether the patient was new or matched (never says which).
@@ -1085,6 +1336,54 @@ export type StaffRoleRead = {
      * Name
      */
     name: string;
+};
+
+/**
+ * StepUpGrantRead
+ *
+ * The single-use proof. `step_up_token` is SECRET: held by the client for one call, never logged.
+ */
+export type StepUpGrantRead = {
+    /**
+     * Step Up Token
+     */
+    step_up_token: string;
+    /**
+     * Operation
+     */
+    operation: string;
+    /**
+     * Resource Id
+     */
+    resource_id: string;
+    /**
+     * Expires At
+     */
+    expires_at: string;
+};
+
+/**
+ * StepUpRequest
+ *
+ * `POST /api/v1/auth/step-up`: re-prove the session's factor for one operation on one resource.
+ *
+ * The interim factor is the account password (ADR-F002; D-003 decides the real one). `operation`
+ * is a closed vocabulary and `resource_id` is the record the operation will act on, so the grant
+ * this returns cannot be spent on anything else. No `user_id` or `tenant_id`: both are the session.
+ */
+export type StepUpRequest = {
+    /**
+     * Password
+     */
+    password: string;
+    /**
+     * Operation
+     */
+    operation: 'prescription.sign' | 'prescription.dispatch';
+    /**
+     * Resource Id
+     */
+    resource_id: string;
 };
 
 /**
@@ -3669,3 +3968,189 @@ export type publicBookingCreatePublicBookingResponses = {
 };
 
 export type publicBookingCreatePublicBookingResponse = publicBookingCreatePublicBookingResponses[keyof publicBookingCreatePublicBookingResponses];
+
+export type authStepUpData = {
+    body: StepUpRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/auth/step-up';
+};
+
+export type authStepUpErrors = {
+    /**
+     * `STEP_UP_FAILED`: the password did not verify. Audited; nothing issued.
+     */
+    403: unknown;
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type authStepUpError = authStepUpErrors[keyof authStepUpErrors];
+
+export type authStepUpResponses = {
+    /**
+     * Successful Response
+     */
+    201: StepUpGrantRead;
+};
+
+export type authStepUpResponse = authStepUpResponses[keyof authStepUpResponses];
+
+export type prescriptionsListPrescriptionsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * State
+         */
+        state?: Array<'DRAFT' | 'SIGNED' | 'BLOCKED' | 'QUEUED' | 'DISPATCHED' | 'FAILED' | 'REQUIRES_RECONCILIATION' | 'CANCELLED' | 'REVERSED'> | null;
+        /**
+         * Prescriber Id
+         */
+        prescriber_id?: string | null;
+        /**
+         * Patient Id
+         */
+        patient_id?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+    };
+    url: '/api/v1/prescriptions';
+};
+
+export type prescriptionsListPrescriptionsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type prescriptionsListPrescriptionsError = prescriptionsListPrescriptionsErrors[keyof prescriptionsListPrescriptionsErrors];
+
+export type prescriptionsListPrescriptionsResponses = {
+    /**
+     * Successful Response
+     */
+    200: PrescriptionsPublic;
+};
+
+export type prescriptionsListPrescriptionsResponse = prescriptionsListPrescriptionsResponses[keyof prescriptionsListPrescriptionsResponses];
+
+export type prescriptionsStagePrescriptionData = {
+    body: PrescriptionCreate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/prescriptions';
+};
+
+export type prescriptionsStagePrescriptionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type prescriptionsStagePrescriptionError = prescriptionsStagePrescriptionErrors[keyof prescriptionsStagePrescriptionErrors];
+
+export type prescriptionsStagePrescriptionResponses = {
+    /**
+     * Successful Response
+     */
+    201: PrescriptionRead;
+};
+
+export type prescriptionsStagePrescriptionResponse = prescriptionsStagePrescriptionResponses[keyof prescriptionsStagePrescriptionResponses];
+
+export type prescriptionsListPrescribersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/prescriptions/prescribers';
+};
+
+export type prescriptionsListPrescribersResponses = {
+    /**
+     * Successful Response
+     */
+    200: PrescribersPublic;
+};
+
+export type prescriptionsListPrescribersResponse = prescriptionsListPrescribersResponses[keyof prescriptionsListPrescribersResponses];
+
+export type prescriptionsSignPrescriptionData = {
+    body: PrescriptionSign;
+    path: {
+        /**
+         * Prescription Id
+         */
+        prescription_id: string;
+    };
+    query?: never;
+    url: '/api/v1/prescriptions/{prescription_id}/sign';
+};
+
+export type prescriptionsSignPrescriptionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type prescriptionsSignPrescriptionError = prescriptionsSignPrescriptionErrors[keyof prescriptionsSignPrescriptionErrors];
+
+export type prescriptionsSignPrescriptionResponses = {
+    /**
+     * Successful Response
+     */
+    200: PrescriptionRead;
+};
+
+export type prescriptionsSignPrescriptionResponse = prescriptionsSignPrescriptionResponses[keyof prescriptionsSignPrescriptionResponses];
+
+export type prescriptionsDispatchPrescriptionData = {
+    body: PrescriptionDispatch;
+    headers?: {
+        /**
+         * Idempotency-Key
+         */
+        'Idempotency-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Prescription Id
+         */
+        prescription_id: string;
+    };
+    query?: never;
+    url: '/api/v1/prescriptions/{prescription_id}/dispatch';
+};
+
+export type prescriptionsDispatchPrescriptionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type prescriptionsDispatchPrescriptionError = prescriptionsDispatchPrescriptionErrors[keyof prescriptionsDispatchPrescriptionErrors];
+
+export type prescriptionsDispatchPrescriptionResponses = {
+    /**
+     * A replay of an earlier `Idempotency-Key`: nothing changed.
+     */
+    200: PrescriptionRead;
+    /**
+     * Successful Response
+     */
+    202: PrescriptionRead;
+};
+
+export type prescriptionsDispatchPrescriptionResponse = prescriptionsDispatchPrescriptionResponses[keyof prescriptionsDispatchPrescriptionResponses];
