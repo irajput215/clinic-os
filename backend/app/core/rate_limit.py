@@ -20,6 +20,7 @@ Account lockout (task T1-28) is the control for attacks on one account; this is 
 control for volume from one source.
 """
 
+import hmac
 import math
 from collections import deque
 from collections.abc import Callable
@@ -120,17 +121,44 @@ def rate_limit(
         if not settings.RATE_LIMIT_ENABLED:
             return
 
-        retry_after = limiter.hit(
-            f"{scope}:{client_key(request)}", limit=limit, window_seconds=window_seconds
-        )
-        if retry_after is not None:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Too many requests",
-                headers={"Retry-After": str(int(retry_after))},
+        _refuse_if_limited(
+            limiter.hit(
+                f"{scope}:{client_key(request)}",
+                limit=limit,
+                window_seconds=window_seconds,
             )
+        )
 
     return dependency
+
+
+def _refuse_if_limited(retry_after: float | None) -> None:
+    if retry_after is not None:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many requests",
+            headers={"Retry-After": str(int(retry_after))},
+        )
+
+
+def limit_identifier(
+    *, scope: str, identifier: str, limit: int, window_seconds: int
+) -> None:
+    """Enforce a limit keyed on something the request **says** rather than where it came from.
+
+    For a budget the address cannot bound on its own: the public booking page limits per email as
+    well as per address, so rotating addresses does not buy unlimited bookings for one person. The
+    identifier is held only as a keyed hash (the same HMAC key as the session tokens), so the
+    in-process window never holds an email address in the clear. Case-insensitive.
+    """
+    if not settings.RATE_LIMIT_ENABLED:
+        return
+    digest = hmac.new(
+        settings.SECRET_KEY.encode(), identifier.strip().lower().encode(), "sha256"
+    ).hexdigest()
+    _refuse_if_limited(
+        limiter.hit(f"{scope}:{digest}", limit=limit, window_seconds=window_seconds)
+    )
 
 
 # Policies. `docs/features/01-tenancy-and-clinics/01-requirements.md` R15 sets the
@@ -162,3 +190,13 @@ signup_rate_limit = rate_limit(scope="signup", limit=20, window_seconds=60)
 patient_search_rate_limit = rate_limit(
     scope="patient-search", limit=120, window_seconds=60
 )
+# The public booking page (`docs2/sdlc/04-calendar-and-booking/api.md`). Unauthenticated. Reading the
+# free slots is cheap and a page loads it once per visit type: 60/min per address. Booking writes a
+# patient and an appointment: 10/min per address, and 5 an hour per email address (`limit_identifier`),
+# so neither a single source nor a single identity can fill a clinic's calendar.
+public_slots_rate_limit = rate_limit(scope="public-slots", limit=60, window_seconds=60)
+public_booking_rate_limit = rate_limit(
+    scope="public-booking", limit=10, window_seconds=60
+)
+PUBLIC_BOOKING_EMAIL_LIMIT = 5
+PUBLIC_BOOKING_EMAIL_WINDOW_SECONDS = 3600

@@ -54,6 +54,21 @@ def get_tenant_by_slug(session: Session, slug: str) -> Tenant | None:
     return session.exec(select(Tenant).where(Tenant.slug == slug)).first()
 
 
+def active_tenant_id_for_slug(session: Session, slug: str) -> uuid.UUID | None:
+    """The tenant an unauthenticated public route serves, resolved **server-side** from its slug.
+
+    The slug is routing only, never an authorisation input (`01-tenancy-and-clinics/03-design.md`):
+    it chooses *which* clinic's public booking page is asked for and grants nothing - no session, no
+    permission, no read of anything but that clinic's free slots. Only an `ACTIVE` organisation is
+    returned; an unknown slug and a suspended, closing or closed organisation all answer `None`, so the
+    caller's `404` is uniform and discloses neither existence nor status.
+    """
+    tenant = get_tenant_by_slug(session, slug)
+    if tenant is None or not is_active_status(tenant.status):
+        return None
+    return tenant.id
+
+
 def tenant_is_active(session: Session, *, tenant_id: uuid.UUID) -> bool:
     """Whether the tenant this request resolved is allowed to transact.
 

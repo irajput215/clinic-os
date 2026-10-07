@@ -138,7 +138,9 @@ def test_the_five_declared_paths_are_served() -> None:
     # * `GET /api/v1/patients/{patient_id}/clinical-records` — feature 06
     #   (`docs/features/06-clinical-records/03-design.md`, "Endpoints");
     # * `GET /api/v1/patients/{patient_id}/tga-approvals` — feature 08
-    #   (`docs/features/08-tga-approvals/03-design.md`, "Endpoints").
+    #   (`docs/features/08-tga-approvals/03-design.md`, "Endpoints");
+    # * `GET /api/v1/patients/{patient_id}/appointments` — feature 04 calendar and booking
+    #   (`docs2/sdlc/04-calendar-and-booking/api.md`, agreed 2026-10-07).
     #
     # The census stays exact, which is the property this test exists to protect: a route under
     # `/patients/` that no design declares, a trailing-slash variant of any of them, or a method set
@@ -146,6 +148,7 @@ def test_the_five_declared_paths_are_served() -> None:
     declared_elsewhere = {
         f"{PATIENTS_URL}/{{patient_id}}/clinical-records": {"get"},
         f"{PATIENTS_URL}/{{patient_id}}/tga-approvals": {"get"},
+        f"{PATIENTS_URL}/{{patient_id}}/appointments": {"get"},
     }
 
     assert sorted(

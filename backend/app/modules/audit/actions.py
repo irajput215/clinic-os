@@ -50,6 +50,9 @@ RESOURCE_TYPES: Final[frozenset[str]] = frozenset(
         "REPORT",
         "INTEGRATION",
         "EXPORT",
+        # Added with the appointments module (2026-10-07, owner-approved): a booking is a
+        # patient-linked object of its own, and none of the twelve types above describes it.
+        "APPOINTMENT",
     }
 )
 
@@ -109,6 +112,10 @@ ACTION_CATALOGUE: Final[tuple[tuple[str, tuple[str, ...]], ...]] = (
     ("TENANT", ("tenant.security_config_change",)),
     ("INTEGRATION", ("integration.request",)),
     ("AUDIT", ("audit.read",)),
+    # Registered with the appointments module (2026-10-07, owner-approved, recorded in
+    # `docs/features/04-audit-log/05-data-and-audit.md`): a booking, and each status change it goes
+    # through (`docs2/sdlc/04-calendar-and-booking/api.md`, "Audited").
+    ("APPOINTMENT", ("appointment.create", "appointment.state_change")),
 )
 
 # Derived, never a second source of truth.
@@ -143,6 +150,7 @@ PAYLOAD_KEYS: Final[frozenset[str]] = frozenset(
         "change",
         "changed_fields",
         "field_set",
+        "from_state",
         "patient_id",
         "purpose",
         "query_filters",
@@ -151,9 +159,11 @@ PAYLOAD_KEYS: Final[frozenset[str]] = frozenset(
         "removed",
         "result_count",
         "role_code",
+        "source",
         "step_up",
         "supersedes_version",
         "target_user_id",
+        "to_state",
         "version",
     }
 )
@@ -204,6 +214,11 @@ PAYLOAD_ALLOW_LIST: Final[MappingProxyType[str, frozenset[str]]] = MappingProxyT
         # for the expiry, which is the event's timestamp plus `STAFF_INVITATION_EXPIRE_HOURS`.
         # Only keys already in the vocabulary; a refused invitation carries `added` and no target.
         "user.create": frozenset({"target_user_id", "added", "step_up"}),
+        # A booking: the patient it is for and where it came from (`STAFF` or `PUBLIC_BOOKING`, R6).
+        # Never the time, the type or a name - those live in the row the event points at.
+        "appointment.create": frozenset({"patient_id", "source"}),
+        # A status change (R4): the two **codes** of the transition, never free text.
+        "appointment.state_change": frozenset({"from_state", "to_state"}),
     }
 )
 

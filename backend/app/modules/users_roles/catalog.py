@@ -302,3 +302,24 @@ INVITATION_INVALID: Final[str] = "INVITATION_INVALID"
 # Inviting needs outgoing mail: the invitee sets their own password through the emailed link, so an
 # invitation that cannot be sent is refused before anything is written.
 EMAIL_NOT_CONFIGURED: Final[str] = "EMAIL_NOT_CONFIGURED"
+
+# The permission each appointments route requires (`docs2/sdlc/04-calendar-and-booking/api.md`, agreed
+# 2026-10-07). **No new code**: a booking is part of a patient's care, so reading the calendar is
+# `patient:read` and booking, or moving a booking through its states, is `patient:update`. That gives
+# the calendar to reception (`ADMINISTRATOR`) and every clinical role, keeps writes away from
+# `PHARMACY` and `COMPLIANCE_AUDITOR` (who read patients but change nothing), and adds nothing to the
+# matrix.
+APPOINTMENT_PERMISSIONS: Final[dict[str, str]] = {
+    "read": "patient:read",
+    "write": "patient:update",
+}
+
+# The system roles whose holders are bookable practitioners, and the practitioner role each implies
+# (R2: a type is booked with a doctor or a nurse). `AUTHORISED_PRESCRIBER` is a doctor for booking
+# purposes. `PRACTICE_OWNER` is deliberately absent: it is an administrative bundle, and an owner who
+# also consults holds `DOCTOR` as well.
+PRACTITIONER_ROLE_BY_CODE: Final[dict[str, str]] = {
+    "DOCTOR": "DOCTOR",
+    "AUTHORISED_PRESCRIBER": "DOCTOR",
+    "NURSE": "NURSE",
+}

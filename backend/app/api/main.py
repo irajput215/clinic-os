@@ -1,6 +1,14 @@
 from fastapi import APIRouter
 
 from app.api.routes import health, login, users, utils
+from app.modules.appointments.router import (
+    patient_router as appointments_patient_router,
+)
+from app.modules.appointments.router import (
+    practitioners_router,
+)
+from app.modules.appointments.router import public_router as public_booking_router
+from app.modules.appointments.router import router as appointments_router
 from app.modules.audit.router import router as audit_router
 from app.modules.clinical_records.router import router as clinical_records_router
 from app.modules.identity_tenancy.router import router as tenants_router
@@ -42,3 +50,9 @@ api_router.include_router(clinical_records_router)
 # `/tga-approvals` prefix. The patients router is another module's; a module owns its routes.
 api_router.include_router(tga_approvals_router)
 api_router.include_router(tga_patient_router)
+# Feature 04 (calendar and booking, docs2/sdlc/04). The last two are the unauthenticated public
+# booking routes: the tenant is resolved from the slug on the server, never from the client.
+api_router.include_router(practitioners_router)
+api_router.include_router(appointments_router)
+api_router.include_router(appointments_patient_router)
+api_router.include_router(public_booking_router)
