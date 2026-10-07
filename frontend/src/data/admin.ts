@@ -198,7 +198,7 @@ export interface PermissionGroup {
 /**
  * How the catalogue is grouped for reading. Presentation only: the codes and descriptions come
  * from `GET /permissions`, and a code no group names is kept under "Other", never dropped.
- * MIRROR: backend/app/modules/users_roles/catalog.py (21 codes).
+ * MIRROR: backend/app/modules/users_roles/catalog.py (22 codes).
  */
 const GROUPS: ReadonlyArray<{ id: string; title: string; codes: string[] }> = [
   {
@@ -220,6 +220,7 @@ const GROUPS: ReadonlyArray<{ id: string; title: string; codes: string[] }> = [
     id: "prescriptions",
     title: "Prescriptions",
     codes: [
+      "prescription:read",
       "prescription:create",
       "prescription:modify",
       "prescription:sign",

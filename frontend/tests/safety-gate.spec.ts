@@ -33,7 +33,7 @@ const patientId = async (
 ): Promise<string> => {
   const { data } = await owner.get<{
     data: { id: string; given_name: string }[]
-  }>("/patients?limit=100")
+  }>("/patients?limit=25")
   const found = data.find((p) => p.given_name === given)
   expect(found, `patient ${given}`).toBeTruthy()
   return found!.id
