@@ -65,6 +65,17 @@ def tenant_is_active(session: Session, *, tenant_id: uuid.UUID) -> bool:
     return tenant is not None and is_active_status(tenant.status)
 
 
+def tenant_display_name(session: Session, *, tenant_id: uuid.UUID) -> str | None:
+    """The organisation's name as its own staff see it, or `None` when the row cannot be read.
+
+    For the caller's **own** resolved tenant only (a staff invitation names the clinic the invitee
+    is joining). `tenants` is global with no RLS, so the caller must pass the tenant the session
+    resolved and never a request value.
+    """
+    tenant = session.get(Tenant, tenant_id)
+    return None if tenant is None else tenant.legal_name
+
+
 def slugify(clinic_name: str) -> str:
     """A routing slug: lower-case, hyphenated, within the column's 64 characters.
 

@@ -190,6 +190,13 @@ PAYLOAD_ALLOW_LIST: Final[MappingProxyType[str, frozenset[str]]] = MappingProxyT
         "user.permission_change": frozenset(
             {"target_user_id", "role_code", "change", "added", "removed", "step_up"}
         ),
+        # Doc 07 §1's `user.create`, emitted by the staff invitation
+        # (`POST /api/v1/users/staff`). `03-users-and-roles/05-data-and-audit.md` asks
+        # `USER_CREATED` to carry "target user id, roles, inviter, invitation expiry": the inviter is
+        # the envelope's `actor_id`, the roles are `added` (role **codes**), and no key is invented
+        # for the expiry, which is the event's timestamp plus `STAFF_INVITATION_EXPIRE_HOURS`.
+        # Only keys already in the vocabulary; a refused invitation carries `added` and no target.
+        "user.create": frozenset({"target_user_id", "added", "step_up"}),
     }
 )
 

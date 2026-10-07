@@ -3,6 +3,7 @@ import { PermissionsService, RolesService, UsersService } from "@/client"
 import type {
   PermissionRead,
   RoleRead,
+  StaffInvite,
   UserCreate,
   UserUpdate,
 } from "@/client/types.gen"
@@ -13,8 +14,9 @@ import { currentUserQuery } from "@/lib/session"
  * Administration: accounts, roles, role assignment and the permission catalogue.
  *
  * Two API surfaces, with different gates, both decided by the server:
- * - roles and access (`backend/app/modules/users_roles/router.py`) need `users:manage` and an
- *   organisation; tenant comes from the session. Rate limited at 20 requests a minute per session.
+ * - staff, roles and access (`backend/app/modules/users_roles/router.py`) need `users:manage`
+ *   and an organisation; tenant comes from the session. Rate limited at 20 requests a minute per
+ *   session.
  * - accounts (`backend/app/api/routes/users.py`, the frozen template layer) are platform-wide and
  *   superuser-only.
  */
@@ -63,6 +65,28 @@ export const userPermissionsQuery = (userId: string) =>
         .data,
     ...ADMIN_READ,
   })
+
+export const STAFF_PAGE_SIZE = 50
+
+/** `GET /users/staff`: the organisation's own accounts and the roles each holds. */
+export const staffQuery = (page: number) =>
+  queryOptions({
+    queryKey: ["admin", "staff", page],
+    queryFn: async () =>
+      (
+        await UsersService.listStaff({
+          query: { skip: page * STAFF_PAGE_SIZE, limit: STAFF_PAGE_SIZE },
+        })
+      ).data,
+    ...ADMIN_READ,
+  })
+
+/**
+ * `POST /users/staff`: create the account in the caller's organisation with these roles and email
+ * the person a link to choose their own password. Nothing here names a tenant or a password.
+ */
+export const inviteStaff = async (body: StaffInvite) =>
+  (await UsersService.inviteStaff({ body })).data
 
 export const ACCOUNTS_PAGE_SIZE = 50
 
@@ -153,6 +177,11 @@ export function applyAccessChange(
     })
   void queryClient.invalidateQueries({
     queryKey: userPermissionsQuery(userId).queryKey,
+  })
+  // The Staff list shows each account's roles: mark it stale, read it again only when it is shown.
+  void queryClient.invalidateQueries({
+    queryKey: ["admin", "staff"],
+    refetchType: "none",
   })
   if (queryClient.getQueryData(currentUserQuery.queryKey)?.id === userId)
     void queryClient.invalidateQueries({ queryKey: ["session", "permissions"] })
@@ -267,6 +296,10 @@ export function describeAccessError(error: unknown): string | undefined {
   const code = refusalCode(error)
   if (code === "GRANT_EXCEEDS_ACTOR")
     return "The server refused this grant: the role includes permissions your own roles don't. Ask someone who holds them to grant it."
+  if (code === "EMAIL_UNAVAILABLE")
+    return "This address can't be invited. It may already have an account, here or at another clinic."
+  if (code === "EMAIL_NOT_CONFIGURED")
+    return "Invitations can't be sent because outgoing email isn't set up on this server. Nothing was created."
   if (code === "LAST_ADMINISTRATOR")
     return "This is the organisation's last account that can manage users. Give another account an administrator role before revoking this one."
   return undefined

@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto"
-import type { APIRequestContext } from "@playwright/test"
 import { expect, test } from "./fixtures"
+import { emailedPath, waitForEmailHtml } from "./mail"
 
 /**
  * The signed-out account flows: organisation signup, password recovery and reset.
@@ -15,35 +15,9 @@ import { expect, test } from "./fixtures"
  * the limit; that is the control working, not a defect.
  */
 
-const MAILPIT = process.env.MAILPIT_HOST ?? "http://localhost:8025"
-
 const run = () => randomBytes(4).toString("hex")
 const newEmail = (prefix: string) => `${prefix}-${run()}@e2e.example.com`
 const newPassword = () => `E2e-${randomBytes(9).toString("base64url")}`
-
-/** The newest email Mailpit caught for `to`, as HTML. Polls: delivery is asynchronous. */
-const waitForEmailHtml = async (request: APIRequestContext, to: string) => {
-  let html: string | undefined
-  await expect
-    .poll(
-      async () => {
-        const search = await request.get(`${MAILPIT}/api/v1/search`, {
-          params: { query: `to:"${to}"`, limit: 1 },
-        })
-        if (!search.ok()) return false
-        const { messages } = (await search.json()) as {
-          messages: { ID: string }[]
-        }
-        if (!messages[0]) return false
-        const view = await request.get(`${MAILPIT}/view/${messages[0].ID}.html`)
-        html = await view.text()
-        return view.ok()
-      },
-      { timeout: 10_000, message: `no email reached ${to}` },
-    )
-    .toBe(true)
-  return html!
-}
 
 test.describe("organisation signup", () => {
   test("registering a clinic creates the organisation and signs its owner in", async ({
@@ -204,9 +178,7 @@ test.describe("password recovery", () => {
     // The backend builds `{FRONTEND_HOST}/reset-password?token=...`; follow its path here so the
     // test holds wherever FRONTEND_HOST points.
     const html = await waitForEmailHtml(request, email)
-    const link = html.match(/\/reset-password\?token=[^"'<\s]+/)?.[0]
-    expect(link, "reset link in the email").toBeTruthy()
-    await page.goto(link!.replace(/&amp;/g, "&"))
+    await page.goto(emailedPath(html, "/reset-password"))
 
     const fresh = newPassword()
     await page.getByLabel("New password", { exact: true }).fill(fresh)

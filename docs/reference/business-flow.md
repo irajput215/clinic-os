@@ -95,10 +95,10 @@ therapeutic good and a patient.** It is the screen worth demonstrating.
 
 | # | Actor | Action | Feature | Today |
 |:---:|---|---|---|---|
-| 1 | Clinic owner | Signs up with a clinic name and their email | 01, 02 | **Not built** |
+| 1 | Clinic owner | Signs up with a clinic name and their email | 01, 02 | Built: `POST /users/signup`, `/signup` |
 | 2 | System | Creates the `tenants` row: slug, legal name, `ACTIVE`, `ap-southeast-2` | 01 | Table exists |
-| 3 | System | Makes the signer that tenant's administrator | 03 | **Not built** |
-| 4 | Administrator | Adds staff and assigns roles | 03 | Admin screen exists, not tenant-bound |
+| 3 | System | Makes the signer that tenant's administrator | 03 | Built: Practice Owner, same transaction |
+| 4 | Administrator | Adds staff and assigns roles | 03 | Built: invite by email (`POST /users/staff`), Administration > Staff; the person sets their own password |
 
 One signup creates **one organisation**. That is what makes self-registration safe: a new account can
 only ever see the tenant it created.

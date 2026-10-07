@@ -37,6 +37,17 @@ export const resetPassword = async (token: string, newPassword: string) => {
   })
 }
 
+/**
+ * `POST /users/invitations/accept`: spends the emailed invitation token to set the invitee's own
+ * password. Answers with the account's email, so the page can sign the person straight in.
+ */
+export const acceptInvitation = async (token: string, newPassword: string) =>
+  (
+    await UsersService.acceptInvitation({
+      body: { token, new_password: newPassword },
+    })
+  ).data
+
 /** The signed-in account's own settings (`/users/me`). Each acts on the caller only. */
 export const updateMe = async (body: UserUpdateMe) =>
   (await UsersService.updateUserMe({ body })).data

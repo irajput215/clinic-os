@@ -20,6 +20,12 @@ test("a practice owner sees every role against the 21-permission catalogue", asy
   await expect(
     page.getByRole("heading", { name: "Administration", level: 1 }),
   ).toBeVisible()
+  // An organisation's administrator starts on its Staff; the matrix is one tab along.
+  await expect(page.getByRole("tab", { name: "Staff" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  )
+  await page.getByRole("tab", { name: "Roles and permissions" }).click()
   await expect(
     page.getByRole("tab", { name: "Roles and permissions" }),
   ).toHaveAttribute("aria-selected", "true")

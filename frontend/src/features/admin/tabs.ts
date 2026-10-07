@@ -1,5 +1,6 @@
 /** The administration tabs. Its own module so the route can validate `?tab=` without the page. */
 export const ADMIN_TABS = {
+  staff: "Staff",
   roles: "Roles and permissions",
   access: "User access",
   accounts: "Accounts",
