@@ -77,3 +77,76 @@ class Tenant(SQLModel, table=True):
     # module's tables"). SQLAlchemy resolves the string against the class registry at mapper
     # configuration.
     users: list["User"] = Relationship(back_populates="tenant")  # noqa: UP037
+
+
+# The operations a step-up grant can authorise. Closed, like every vocabulary that gates an action:
+# `docs/features/02-authentication/03-design.md` "Step-up for the five named high-risk operations"
+# binds a token to one operation, and only the two prescription operations have a route that consumes
+# one today. A third operation is added here, in the check constraint and in the route that spends it.
+STEP_UP_OPERATIONS: tuple[str, ...] = ("prescription.sign", "prescription.dispatch")
+_STEP_UP_OPERATION_SQL = ", ".join(f"'{operation}'" for operation in STEP_UP_OPERATIONS)
+
+# The longest a grant may live, enforced by the database as well as by the service. Two minutes is
+# the step-up window `02-authentication/03-design.md` gives sign and dispatch ("2 min, single use");
+# OPEN-5 there records doc 06's 2 minutes against D-003 Option B's 5, and the shorter is the fail-safe.
+STEP_UP_MAX_LIFETIME_SECONDS: int = 120
+
+
+class StepUpGrant(SQLModel, table=True):
+    """One fresh-factor proof: single use, short-lived, bound to user + operation + resource.
+
+    The interim step-up of ADR-F002 (password re-entry; D-003 is open) done **server-side**: the
+    factor is checked by `POST /api/v1/auth/step-up`, which stores only the SHA-256 of the opaque
+    token it hands back, and the operation's own transaction spends the row with one conditional
+    `UPDATE ... WHERE consumed_at IS NULL AND expires_at > now()`. Spent, expired, for another user,
+    another operation or another resource: the update matches nothing and the operation is refused.
+
+    The token itself is SECRET (`02-authentication/05-data-and-audit.md`) and is never stored: a
+    reader of this table cannot replay a grant.
+    """
+
+    __tablename__ = "step_up_grants"
+    __table_args__ = (
+        sa.CheckConstraint(
+            f"operation IN ({_STEP_UP_OPERATION_SQL})", name="operation"
+        ),
+        sa.CheckConstraint("expires_at > issued_at", name="window"),
+        sa.CheckConstraint(
+            f"expires_at <= issued_at + interval '{STEP_UP_MAX_LIFETIME_SECONDS} seconds'",
+            name="max_lifetime",
+        ),
+        sa.CheckConstraint("token_hash ~ '^[0-9a-f]{64}$'", name="token_hash"),
+        sa.CheckConstraint(
+            "consumed_at IS NULL OR consumed_at >= issued_at",
+            name="consumed_after_issue",
+        ),
+        sa.UniqueConstraint("token_hash", name="uq_step_up_grants_token_hash"),
+        sa.Index(
+            "ix_step_up_grants_tenant_user_issued",
+            "tenant_id",
+            "user_id",
+            "issued_at",
+        ),
+    )
+
+    id: uuid.UUID = Field(
+        default_factory=uuid.uuid4,
+        primary_key=True,
+        sa_column_kwargs={"server_default": sa.text("gen_random_uuid()")},
+    )
+    # CASCADE, unlike the clinical tables: a grant is a two-minute credential, not a record, and it
+    # must never be the reason an organisation or an account cannot be removed.
+    tenant_id: uuid.UUID = Field(
+        foreign_key="tenants.id", ondelete="CASCADE", nullable=False
+    )
+    user_id: uuid.UUID = Field(
+        foreign_key="user.id", ondelete="CASCADE", nullable=False
+    )
+    operation: str
+    resource_id: uuid.UUID = Field(nullable=False)
+    token_hash: str
+    issued_at: datetime = Field(sa_type=sa.DateTime(timezone=True))
+    expires_at: datetime = Field(sa_type=sa.DateTime(timezone=True))
+    consumed_at: datetime | None = Field(
+        default=None, sa_type=sa.DateTime(timezone=True)
+    )

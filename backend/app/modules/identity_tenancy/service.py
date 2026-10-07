@@ -11,15 +11,31 @@ registration is one transaction, owned by the route, so the tenant, the account 
 Owner grant either all exist or none does (see `app/api/routes/users.py`, `POST /users/signup`).
 """
 
+import hashlib
 import re
+import secrets
 import uuid
 from collections.abc import Iterator
 from itertools import islice
+from typing import Final
 
+from sqlalchemy import func, insert, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
-from app.modules.identity_tenancy.models import Tenant
+from app.core.db import tenant_transaction
+from app.core.security import verify_password
+from app.crud import DUMMY_HASH
+from app.models import User
+
+# The audit module is reached through its service facade (`docs/reference/build-contract.md` §7).
+from app.modules.audit import service as audit
+from app.modules.identity_tenancy.models import (
+    STEP_UP_MAX_LIFETIME_SECONDS,
+    StepUpGrant,
+    Tenant,
+)
+from app.modules.identity_tenancy.schemas import StepUpGrantRead
 
 # `retention_profile` names a retention schedule — none exists yet (open item L2,
 # retention by state and territory), so both paths use a placeholder.
@@ -170,3 +186,191 @@ def seed_demo_tenant(session: Session) -> Tenant:
     session.commit()
     session.refresh(tenant)
     return tenant
+
+
+# --------------------------------------------------------------------------------------------
+# Step-up: a fresh factor for one operation on one resource (interim, ADR-F002)
+# --------------------------------------------------------------------------------------------
+#
+# `docs/features/02-authentication/03-design.md` "Step-up for the five named high-risk operations":
+# *"A step-up token is bound to user + session + operation + resource id, consumed on use, refused on
+# a different resource, and a failure is audited."* D-003 (the identity model: MFA, sessions) is open,
+# so the factor here is the interim ADR-F002 names - re-entering the account password - and the
+# server, not the browser, checks it. What D-003 changes is the factor (`_factor_verified`); the
+# grant, its binding and its consumption stay.
+#
+# Two deliberate deviations, recorded in the PR:
+#
+# - **Not bound to a session.** The platform issues stateless access tokens with no session record
+#   (D-003), so there is no session id to bind to. The grant is bound to the user, the operation and
+#   the resource, lives two minutes, and is spent once.
+# - **`403 STEP_UP_REQUIRED`, not `401`.** Feature 02 owns step-up and answers `403` with a challenge;
+#   features 10 and 11 write `401 step_up_required`. The client signs out on any `401`
+#   (`app.api.deps.get_current_user`), so a `401` would end the session of a clinician who mistyped a
+#   password. `STEP_UP_REQUIRED` is the code `identity_tenancy.router` already uses for the same refusal.
+
+STEP_UP_ACTION: Final[str] = "auth.step_up"
+STEP_UP_FAILED_ACTION: Final[str] = "auth.step_up_failed"
+STEP_UP_REQUIRED: Final[str] = "STEP_UP_REQUIRED"
+STEP_UP_FAILED: Final[str] = "STEP_UP_FAILED"
+# What the trail records as the factor, so nobody mistakes the interim for MFA (ADR-F002).
+STEP_UP_METHOD: Final[str] = "PASSWORD_REENTRY"
+
+
+def _token_hash(token: str) -> str:
+    """The only form of a step-up token the database ever holds."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _record_step_up(
+    session: Session,
+    *,
+    action: str,
+    result: str,
+    operation: str,
+    resource_id: uuid.UUID,
+    reason: str | None = None,
+) -> None:
+    payload: dict[str, str] = {"operation": operation}
+    if action == STEP_UP_ACTION:
+        payload["mfa_method"] = STEP_UP_METHOD
+    audit.record(
+        session,
+        audit.AuditEvent(
+            action=action,
+            result=result,
+            resource_id=resource_id,
+            reason=reason,
+            payload=payload,
+        ),
+    )
+
+
+def _factor_verified(session: Session, *, user_id: uuid.UUID, password: str) -> bool:
+    """Does `password` verify against this account's current hash? Constant-ish time either way.
+
+    The hash is read by primary key from the session's own account. A rehash suggested by the hasher
+    is **not** written here: a step-up must not change the credential it is checking.
+    """
+    user = session.get(User, user_id)
+    hashed = user.hashed_password if user is not None and user.is_active else None
+    verified, _rehash = verify_password(password, hashed or DUMMY_HASH)
+    return verified and hashed is not None
+
+
+def issue_step_up(
+    *,
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    actor_role: str | None,
+    password: str,
+    operation: str,
+    resource_id: uuid.UUID,
+) -> StepUpGrantRead | None:
+    """Check the factor and, on success, store a grant and return its token. `None` is a refusal.
+
+    Both outcomes are audited on the transaction that decides them: `auth.step_up` with the method,
+    or `auth.step_up_failed` with the operation. The refusal commits (it is returned, not raised), so
+    a guessing attack leaves its trail even though the caller is told nothing beyond "not verified".
+    """
+    with tenant_transaction(
+        tenant_id=tenant_id, actor_id=user_id, actor_role=actor_role
+    ) as session:
+        if not _factor_verified(session, user_id=user_id, password=password):
+            _record_step_up(
+                session,
+                action=STEP_UP_FAILED_ACTION,
+                result="DENIED",
+                operation=operation,
+                resource_id=resource_id,
+                reason=STEP_UP_FAILED,
+            )
+            return None
+        token = secrets.token_urlsafe(32)
+        table = StepUpGrant.metadata.tables[StepUpGrant.__tablename__]
+        expires_at = (
+            session.connection()
+            .execute(
+                insert(table)
+                .values(
+                    tenant_id=tenant_id,
+                    user_id=user_id,
+                    operation=operation,
+                    resource_id=resource_id,
+                    token_hash=_token_hash(token),
+                    # The database clock decides both ends, so the window cannot be widened by an
+                    # application instance whose clock is ahead.
+                    issued_at=func.now(),
+                    expires_at=func.now()
+                    + text(f"interval '{STEP_UP_MAX_LIFETIME_SECONDS} seconds'"),
+                )
+                .returning(table.c.expires_at)
+            )
+            .scalar_one()
+        )
+        _record_step_up(
+            session,
+            action=STEP_UP_ACTION,
+            result="SUCCESS",
+            operation=operation,
+            resource_id=resource_id,
+        )
+        return StepUpGrantRead(
+            step_up_token=token,
+            operation=operation,
+            resource_id=resource_id,
+            expires_at=expires_at,
+        )
+
+
+def consume_step_up(
+    session: Session,
+    *,
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    operation: str,
+    resource_id: uuid.UUID,
+    token: str | None,
+) -> bool:
+    """Spend a grant on the **caller's** transaction. `True` exactly once per grant.
+
+    One conditional `UPDATE`: the row must be this tenant's, this user's, for this operation and this
+    resource, unspent, and unexpired by the database clock. Two concurrent spends of one token
+    serialise on the row and the second matches nothing. The spend commits or rolls back with the
+    operation it authorised, so an operation that fails with an error leaves the grant usable for its
+    retry, and one that is refused (a committed refusal) spends it.
+
+    A refusal is audited here, as `auth.step_up_failed` with `STEP_UP_REQUIRED`.
+    """
+    spent = False
+    if token:
+        table = StepUpGrant.metadata.tables[StepUpGrant.__tablename__]
+        spent = (
+            session.connection()
+            .execute(
+                update(table)
+                .where(
+                    table.c.token_hash == _token_hash(token),
+                    table.c.tenant_id == tenant_id,
+                    table.c.user_id == user_id,
+                    table.c.operation == operation,
+                    table.c.resource_id == resource_id,
+                    table.c.consumed_at.is_(None),
+                    table.c.expires_at > func.now(),
+                )
+                .values(consumed_at=func.now())
+                .returning(table.c.id)
+            )
+            .first()
+            is not None
+        )
+    if not spent:
+        _record_step_up(
+            session,
+            action=STEP_UP_FAILED_ACTION,
+            result="DENIED",
+            operation=operation,
+            resource_id=resource_id,
+            reason=STEP_UP_REQUIRED,
+        )
+    return spent

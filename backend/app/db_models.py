@@ -20,8 +20,13 @@ from app.modules.clinical_records.models import (
     ClinicalRecordVersion,
 )
 from app.modules.clinics.models import Clinic
-from app.modules.identity_tenancy.models import Tenant
+from app.modules.identity_tenancy.models import StepUpGrant, Tenant
 from app.modules.patients.models import Patient
+from app.modules.prescriptions.models import (
+    DispatchAttempt,
+    Prescription,
+    PrescriptionEvent,
+)
 from app.modules.tga_approvals.models import TgaApproval, TgaApprovalEvent
 from app.modules.users_roles.models import (
     Permission,
@@ -37,13 +42,17 @@ __all__ = [
     "AppointmentSettings",
     "AuditLogEntry",
     "CareRelationship",
+    "DispatchAttempt",
     "Clinic",
     "ClinicalRecord",
     "ClinicalRecordVersion",
     "Patient",
     "Permission",
+    "Prescription",
+    "PrescriptionEvent",
     "Role",
     "RolePermission",
+    "StepUpGrant",
     "Tenant",
     "TgaApproval",
     "TgaApprovalEvent",

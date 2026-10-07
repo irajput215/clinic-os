@@ -49,7 +49,7 @@ CANDIDATE_CODES = (
 # Two names now stand here, and each is a permission-matrix change and needs the CTO's OPEN-1/OPEN-2
 # reconciliation: `tenant:read` (Feature 01's `GET /api/v1/tenants/current`) and `tga_approval:revoke`
 # (Feature 08's `POST /api/v1/tga-approvals/{id}/revoke`).
-ADDED_CODES = ("tenant:read", "tga_approval:revoke")
+ADDED_CODES = ("tenant:read", "tga_approval:revoke", "prescription:read")
 
 
 def _stored_permission_codes(tenant_id: uuid.UUID) -> set[str]:
