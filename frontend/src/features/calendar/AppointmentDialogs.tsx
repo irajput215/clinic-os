@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router"
 import { Loader2 } from "lucide-react"
 import { type FormEvent, useEffect, useState } from "react"
 import { toast } from "sonner"
+import type { PatientRead } from "@/client/types.gen"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -13,7 +14,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { appointmentsRepo, STATUS_LABEL } from "@/data/appointments"
-import { patientName, patientsQuery } from "@/data/patients"
+import {
+  patientName,
+  patientQuickFindQuery,
+  useSearchTerm,
+} from "@/data/patients"
 import {
   APPOINTMENT_TRANSITIONS,
   APPOINTMENT_TYPES,
@@ -25,7 +30,7 @@ import {
 import { ErrorState, Field } from "@/design/primitives"
 import { AppointmentStatusPill } from "@/features/shared/pills"
 import { clinicInstant } from "@/lib/clinic-time"
-import { formatLongDay, formatTime } from "@/lib/format"
+import { formatDate, formatLongDay, formatTime } from "@/lib/format"
 import { describeError } from "@/lib/http"
 
 const invalidateSchedule = (queryClient: ReturnType<typeof useQueryClient>) =>
@@ -52,8 +57,13 @@ export function NewAppointmentDialog({
   prefill: SlotPrefill
 }) {
   const queryClient = useQueryClient()
-  const patients = useQuery({ ...patientsQuery, enabled: open })
-  const [patientId, setPatientId] = useState("")
+  // The picker asks the server (`POST /patients/search`), so every patient is reachable, not only
+  // the first page; with nothing typed it offers the first few by name.
+  const [search, setSearch] = useState("")
+  const term = useSearchTerm(search)
+  const matches = useQuery({ ...patientQuickFindQuery(term), enabled: open })
+  const [patient, setPatient] = useState<PatientRead | null>(null)
+  const patientId = patient?.id ?? ""
   const [practitionerId, setPractitionerId] = useState(prefill.practitionerId)
   const [date, setDate] = useState(prefill.date)
   const [time, setTime] = useState(prefill.time)
@@ -68,7 +78,8 @@ export function NewAppointmentDialog({
       setPractitionerId(prefill.practitionerId)
       setDate(prefill.date)
       setTime(prefill.time)
-      setPatientId("")
+      setPatient(null)
+      setSearch("")
     }
   }, [open, prefill])
 
@@ -112,27 +123,67 @@ export function NewAppointmentDialog({
           </DialogHeader>
 
           <Field label="Patient" htmlFor="appt-patient">
-            {patients.isError ? (
-              <ErrorState error={patients.error} />
+            {patient ? (
+              <div className="flex items-center justify-between gap-3 rounded-btn border border-line bg-paper px-3 py-2 text-sm">
+                <span className="truncate font-medium">
+                  {patientName(patient)}
+                </span>
+                <button
+                  type="button"
+                  className="shrink-0 text-[13px] font-medium text-clay hover:underline"
+                  onClick={() => setPatient(null)}
+                >
+                  Change
+                </button>
+              </div>
             ) : (
-              <select
-                id="appt-patient"
-                className="field-input"
-                value={patientId}
-                onChange={(e) => setPatientId(e.target.value)}
-                required
-              >
-                <option value="" disabled>
-                  {patients.isPending
-                    ? "Loading patients…"
-                    : "Choose a patient"}
-                </option>
-                {patients.data?.data.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {patientName(p)}
-                  </option>
-                ))}
-              </select>
+              <>
+                <input
+                  id="appt-patient"
+                  className="field-input"
+                  placeholder="Search by name, date of birth or PT- reference"
+                  autoComplete="off"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  aria-controls="appt-patient-results"
+                />
+                {matches.isError ? (
+                  <div className="mt-2">
+                    <ErrorState error={matches.error} />
+                  </div>
+                ) : (
+                  <ul
+                    id="appt-patient-results"
+                    aria-label="Matching patients"
+                    className="mt-1.5 max-h-48 overflow-y-auto rounded-btn border border-line bg-paper"
+                  >
+                    {matches.isPending ? (
+                      <li className="px-3 py-2 text-[13px] text-stone">
+                        Searching…
+                      </li>
+                    ) : matches.data.data.length === 0 ? (
+                      <li className="px-3 py-2 text-[13px] text-stone">
+                        No patient matches “{term}”.
+                      </li>
+                    ) : (
+                      matches.data.data.map((p) => (
+                        <li key={p.id}>
+                          <button
+                            type="button"
+                            className="flex w-full items-baseline justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-oat focus-visible:bg-oat"
+                            onClick={() => setPatient(p)}
+                          >
+                            <span className="truncate">{patientName(p)}</span>
+                            <span className="shrink-0 font-mono text-[11px] text-stone">
+                              {formatDate(p.date_of_birth)}
+                            </span>
+                          </button>
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                )}
+              </>
             )}
           </Field>
 

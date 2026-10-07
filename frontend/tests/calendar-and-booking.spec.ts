@@ -27,7 +27,14 @@ test("a practitioner cannot be double-booked, and a booking moves through its st
   const book = async (patient: string, time: string) => {
     await page.getByRole("button", { name: "New appointment" }).click()
     const dialog = page.getByRole("dialog")
-    await dialog.getByLabel("Patient").selectOption({ label: patient })
+    // The picker searches the server, so it reaches every patient, not only the first page.
+    await dialog
+      .getByLabel("Patient", { exact: true })
+      .fill(patient.split(" ")[1])
+    await dialog
+      .getByRole("list", { name: "Matching patients" })
+      .getByRole("button", { name: new RegExp(`^${patient}`) })
+      .click()
     await dialog.getByLabel("With").selectOption({ label: "Dr Sarah Okafor" })
     await dialog.getByLabel("Type").selectOption("FOLLOW_UP")
     await dialog.getByLabel("Date").fill(date)
