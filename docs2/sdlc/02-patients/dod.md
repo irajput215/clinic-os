@@ -7,6 +7,6 @@
 | Keyboard and screen-reader reachable; labels on every control | done |
 | No PHI in URLs; no `dangerouslySetInnerHTML` | done |
 | End-to-end tests in `tests/` pass against a real backend | done |
-| Server-side search (beyond 25 patients) | open: backend |
+| Server-side search and keyset paging: every patient reachable (`POST /patients/search`, `GET /patients?cursor=`) | done |
 
 Platform DoD: [`docs/reference/definition-of-done.md`](../../../docs/reference/definition-of-done.md).

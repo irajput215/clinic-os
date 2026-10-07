@@ -170,7 +170,14 @@ PAYLOAD_ALLOW_LIST: Final[MappingProxyType[str, frozenset[str]]] = MappingProxyT
         # The same table: `resource_id`, `changed_fields` (names only) and `reason`.
         "patient.update": frozenset({"changed_fields", "reason"}),
         # `05-patients/05-data-and-audit.md` names `resource_id`, `care_relationship_id`, `purpose`.
-        "patient.read": frozenset({"care_relationship_id", "purpose"}),
+        # A list or search read has no single `resource_id`, so it records how many patients the page
+        # returned (`result_count`) and which *kinds* of search term were used (`query_filters`, e.g.
+        # `["name_prefix"]`) - the same two keys `audit.read` carries for the same reason, and never
+        # the term itself (05-patients US-7: "the search term itself is never written to the audit
+        # payload").
+        "patient.read": frozenset(
+            {"care_relationship_id", "purpose", "result_count", "query_filters"}
+        ),
         # `04-audit-log/05-data-and-audit.md`: `audit.read` carries `query_filters` and `result_count`.
         "audit.read": frozenset({"query_filters", "result_count"}),
         # `06-clinical-records/05-data-and-audit.md` maps its four story labels onto the two

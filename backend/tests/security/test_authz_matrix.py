@@ -77,6 +77,7 @@ def test_unauthenticated_requests_are_refused_401(client: TestClient) -> None:
     unknown = uuid.uuid4()
     assert client.post(PATIENTS_URL, json=DEFAULT_PATIENT).status_code == 401
     assert client.get(PATIENTS_URL).status_code == 401
+    assert client.post(f"{PATIENTS_URL}/search", json={"q": "ada"}).status_code == 401
     assert client.get(f"{PATIENTS_URL}/{unknown}").status_code == 401
     assert (
         client.patch(
@@ -122,6 +123,14 @@ def test_role_endpoint_matrix(matrix: Matrix) -> None:
         )
         if not can_read:
             assert response.json()["detail"]["code"] == "PERMISSION_NOT_HELD"
+
+        # POST /patients/search - patient:read
+        response = matrix.api.client.post(
+            f"{PATIENTS_URL}/search", json={"q": "synthetic"}, headers=actor.headers
+        )
+        assert response.status_code == (200 if can_read else 403), (
+            f"{role}: {response.text}"
+        )
 
         # GET /patients/{id} — patient:read
         response = matrix.api.client.get(

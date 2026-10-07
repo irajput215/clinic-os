@@ -141,7 +141,48 @@ class PatientRead(SQLModel):
 
 
 class PatientsPublic(SQLModel):
-    """A bounded page of patients plus the caller's total, following `UsersPublic`."""
+    """One keyset page of patients, the total that matches, and the cursor for the next page.
+
+    `count` is the number of live patients that match the request - the tenant's whole list for
+    `GET /patients`, the matches for a search - not the length of this page. `next_cursor` is `null`
+    on the last page. The cursor is opaque: it names the last row of this page by its internal id,
+    never by a name, so it carries nothing a URL or a log line must not hold.
+    """
 
     data: list[PatientRead]
     count: int
+    next_cursor: str | None = None
+
+
+# The bounds of a search. The query floor is an open item (`01-requirements.md` OPEN-2, open question
+# O3: "≥ 3 characters is the draft's engineering floor, not a source requirement"), so the floor is one
+# visible character: the whole list is already reachable page by page through `GET /patients`, so a
+# longer floor would protect nothing and would stop a clinician finding "Li" or "Ng".
+SEARCH_QUERY_MAX_LENGTH = 100
+# The server-side maximum for one page, list or search. A client may ask for fewer; asking for more is
+# a `422` rather than a silently truncated result (T1-35: "the result cap is 25 on the patient list").
+MAX_PATIENTS_PAGE_SIZE = 25
+SEARCH_MAX_TERMS = 6
+# A cursor is a short signed token around one UUID; the bound keeps a hostile value from the decoder.
+MAX_CURSOR_LENGTH = 256
+
+
+class PatientSearch(SQLModel):
+    """The body of `POST /api/v1/patients/search`.
+
+    The term travels in the body, never in a URL (`01-requirements.md` R12), so it reaches no access
+    log, proxy log or browser history. It is never logged or audited either: the audit event records
+    which *kinds* of term were used (`query_filters`), not what they were (`02-user-stories.md` US-7).
+    """
+
+    model_config = SQLModelConfig(extra="forbid", str_strip_whitespace=True)
+
+    q: str = Field(min_length=1, max_length=SEARCH_QUERY_MAX_LENGTH)
+    cursor: str | None = Field(default=None, max_length=MAX_CURSOR_LENGTH)
+    limit: int = Field(default=MAX_PATIENTS_PAGE_SIZE, ge=1, le=MAX_PATIENTS_PAGE_SIZE)
+
+    @model_validator(mode="after")
+    def _bound_the_number_of_terms(self) -> Self:
+        if len(self.q.split()) > SEARCH_MAX_TERMS:
+            raise ValueError(f"q may hold at most {SEARCH_MAX_TERMS} words")
+        return self

@@ -86,7 +86,7 @@ The UI hides, disables and explains. It never decides. In particular:
 | Clickjacking | The host sends the headers (browsers ignore `frame-ancestors` in a meta policy): every backend response, including the app's HTML at `/` and `/docs`, carries `Content-Security-Policy: frame-ancestors 'none'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and `Strict-Transport-Security`. **Closed 2026-10-07** | `backend/app/core/security_headers.py`, `tests/security/test_security_headers.py` |
 | Token exposure | Token in `sessionStorage` (one tab, cleared on close), never in URLs or logs. 15-minute lifetime is server-enforced | `lib/session.ts`, ADR-F002 |
 | Open redirect | `redirect` accepted only as a same-origin path | `lib/search.ts` |
-| PHI in URLs | No identifiers or names in query strings. Patient search filters in memory | `shell/GlobalSearch.tsx` |
+| PHI in URLs | No identifiers or names in query strings. Patient search sends the term in a `POST /patients/search` body and keeps it in component state, never the route | `shell/GlobalSearch.tsx`, `features/patients/PatientsPage.tsx` |
 | PHI in error UI | Errors render the API's sentence or a fixed one, never request data | `lib/http.ts` |
 | Referrer leakage | `<meta name="referrer" content="no-referrer">` | `index.html` |
 | Session scope | Sign-out clears the token, the query cache and the preview store | `shell/AppShell.tsx` |

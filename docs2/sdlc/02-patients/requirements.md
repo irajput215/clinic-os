@@ -10,7 +10,7 @@
 
 ## Functional requirements
 
-- R1 The list shows the API's page (at most 25), filterable in memory, and says when the limit is reached.
+- R1 The list pages through every patient (25 at a time, "Load more") and searches the server by name prefix, date of birth or PT- reference. The search term stays out of every URL.
 - R2 Add and edit validate before submit: names required, DOB not in the future, AU mobile shape, 4-digit postcode, valid email. The server re-validates.
 - R3 Sex at birth uses the backend's closed vocabulary (FEMALE, MALE, INTERSEX, UNKNOWN).
 - R4 After create the app navigates to the new record. After edit the record and list refresh.
@@ -24,5 +24,4 @@
 
 ## Out of scope (this phase)
 
-- Server-side search and paging (API backlog).
 - Medicare/IHI capture (needs field-level encryption, feature 05 design).

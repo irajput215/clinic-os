@@ -103,9 +103,53 @@ class PatientsApi:
             f"{PATIENTS_URL}/{patient_id}", json=body, headers=session.headers
         )
 
-    def list(self, session: TenantSession, *, limit: int | None = None) -> Response:
-        params = {} if limit is None else {"limit": limit}
+    def list(
+        self,
+        session: TenantSession,
+        *,
+        limit: int | None = None,
+        cursor: str | None = None,
+    ) -> Response:
+        params: dict[str, Any] = {}
+        if limit is not None:
+            params["limit"] = limit
+        if cursor is not None:
+            params["cursor"] = cursor
         return self._client.get(PATIENTS_URL, params=params, headers=session.headers)
+
+    def search(
+        self,
+        session: TenantSession,
+        q: str,
+        *,
+        limit: int | None = None,
+        cursor: str | None = None,
+    ) -> Response:
+        body: dict[str, Any] = {"q": q}
+        if limit is not None:
+            body["limit"] = limit
+        if cursor is not None:
+            body["cursor"] = cursor
+        return self._client.post(
+            f"{PATIENTS_URL}/search", json=body, headers=session.headers
+        )
+
+    def patient_reads(self, tenant_id: uuid.UUID | None) -> list[dict[str, Any]]:
+        """The tenant's `patient.read` audit events, oldest first, read as the owner."""
+        with engine.connect() as conn:
+            rows = (
+                conn.execute(
+                    text(
+                        "SELECT result, reason, resource_id, actor_id, metadata"
+                        " FROM audit_log WHERE tenant_id = :tenant_id"
+                        " AND action = 'patient.read' ORDER BY timestamp, event_id"
+                    ),
+                    {"tenant_id": tenant_id},
+                )
+                .mappings()
+                .all()
+            )
+        return [dict(row) for row in rows]
 
     def patient_count(self, tenant_id: uuid.UUID | None) -> int:
         """Count the tenant's rows on the owner connection, which bypasses RLS.
