@@ -13,6 +13,7 @@ from app.api.deps import (
 )
 from app.core.config import settings
 from app.core.db import tenant_transaction
+from app.core.rate_limit import signup_rate_limit
 from app.core.security import get_password_hash, verify_password
 from app.models import (
     Message,
@@ -167,7 +168,11 @@ def delete_user_me(session: SessionDep, current_user: ActiveTenantUser) -> Any:
     return _deactivate(session, current_user)
 
 
-@router.post("/signup", response_model=UserPublic)
+@router.post(
+    "/signup",
+    response_model=UserPublic,
+    dependencies=[Depends(signup_rate_limit)],
+)
 def register_user(session: SessionDep, user_in: UserRegister) -> Any:
     """
     Register an organisation, or a plain account.
@@ -186,6 +191,15 @@ def register_user(session: SessionDep, user_in: UserRegister) -> Any:
     one `tenant_transaction` session, which is also what makes the role provisioning's
     forced-RLS inserts legal (`app.tenant_id` is set inside that transaction). The tenant
     id is drawn before the transaction opens so the context can name it.
+
+    **A taken email is answered explicitly (`400`), which discloses that the address has an
+    account.** That is a recorded residual risk, not an oversight (`docs/progress.md` §2). No
+    feature document requires signup to be non-enumerating (T-AUTH.9 covers sign-in), and a uniform
+    answer would not remove the signal while signup signs its owner straight in: whoever posts a
+    new address can sign in with the password they chose, and whoever posts a taken one cannot. Removing it needs email verification before the
+    first sign-in, which changes the product flow (`docs2/sdlc/01-auth-and-shell` R10) and makes
+    signup depend on outbound mail in production. Until that is decided, the 20/min signup limit
+    (`app/core/rate_limit.py`) bounds the rate at which the answer can be harvested.
     """
     if not settings.USERS_OPEN_REGISTRATION:
         raise HTTPException(

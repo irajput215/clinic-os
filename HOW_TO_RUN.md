@@ -28,6 +28,10 @@ Replace every `REPLACE_ME` in `.env`. Generate each value with
   created, so set it before step 3.
 - `DOMAIN` - only used by `compose.deploy.yml`; leave it for local work.
 
+`FRONTEND_HOST` (default `http://localhost:8000`) is the URL that serves the app: the only CORS
+origin and the base of emailed links. Leave it for local work against `:8000`; see step 6 for the
+dev server.
+
 Keep `USERS_OPEN_REGISTRATION=true` locally: it is what lets you create a clinic from the signup
 page. Never commit `.env`.
 
@@ -171,7 +175,9 @@ Pushing to `main` (or running it from the Actions tab) runs `.github/workflows/d
 the app, runs `prestart.sh` against the production database and deploys to FastAPI Cloud, then
 waits for the readiness probe. Secrets live in two places only: GitHub repository secrets
 (`DATABASE_URL`, `SECRET_KEY`, `FIRST_SUPERUSER_PASSWORD`, `FASTAPI_CLOUD_TOKEN`,
-`FASTAPI_CLOUD_APP_ID`) and the FastAPI Cloud application environment. A local `.env.cloud` is for
+`FASTAPI_CLOUD_APP_ID`) and the FastAPI Cloud application environment, which is what the running app
+reads (`fastapi deploy` ships code, never configuration). Set `FRONTEND_HOST` there to the app's
+public URL, or CORS and every emailed link point at `http://localhost:8000`. A local `.env.cloud` is for
 your own use, is gitignored and must never be committed. Details: [deployment.md](deployment.md).
 
 ## 10. Troubleshooting
@@ -181,8 +187,9 @@ your own use, is gitignored and must never be committed. Details: [deployment.md
 - **Port already in use** (`5432`, `8000`, `5174`, `8025`) - find the owner with
   `lsof -nP -iTCP:8000 -sTCP:LISTEN` and stop it. The dev server uses a fixed port (`strictPort`)
   and fails rather than moving.
-- **429 Too Many Requests in e2e runs** - login is limited to 20/min and password recovery to
-  5/min per client, per backend process. Restart the backend to clear the window, or start the
+- **429 Too Many Requests in e2e runs** - login and signup are limited to 20/min and password
+  recovery to 5/min per client address, per backend process, and one full run spends most of the
+  login budget. Wait a minute between runs, restart the backend to clear the window, or start the
   test backend with `RATE_LIMIT_ENABLED=false`.
 - **`{"detail":"Not Found"}` on `http://127.0.0.1:8000/`** - the app is not built: `bun run build`,
   then restart the backend if it started before the first build.

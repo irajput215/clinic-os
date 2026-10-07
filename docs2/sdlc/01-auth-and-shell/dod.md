@@ -15,7 +15,8 @@
 
 `GET /api/v1/users/me/permissions` is served by `backend/app/modules/users_roles/router.py`
 (`read_own_permissions`) and tested in `backend/tests/users/test_own_permissions.py`. It is the
-design's `GET /api/v1/auth/capabilities` row
+design's self-permissions row (named `GET /api/v1/auth/capabilities` until the owner settled the path
+on 2026-10-07)
 ([`docs/features/03-users-and-roles/03-design.md`](../../../docs/features/03-users-and-roles/03-design.md),
 "Endpoints": valid session, advisory UI data only, never a control). It writes no audit event: the
 closed action catalogue in

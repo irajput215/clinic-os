@@ -66,7 +66,7 @@ services:
     environment:
       FASTAPI_ENV: "development"
       # The backend serves the app at `/`, so emailed links (password reset) point back at it.
-      FRONTEND_HOST: "http://localhost:8000"
+      FRONTEND_HOST: ${FRONTEND_HOST:-http://localhost:8000}
       SMTP_HOST: "mailpit"
       SMTP_PORT: "1025"
       SMTP_TLS: "false"

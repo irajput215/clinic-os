@@ -1,8 +1,8 @@
 """`GET /api/v1/users/me/permissions` - the caller's own effective permission codes.
 
 Contract: `docs2/sdlc/01-auth-and-shell/api.md` (`{permissions: string[]}`), which is the design's
-`GET /api/v1/auth/capabilities` row in `docs/features/03-users-and-roles/03-design.md` ("valid
-session", "advisory UI data only; never a control"). Any authenticated, active account of an active
+self-permissions row in `docs/features/03-users-and-roles/03-design.md` ("valid session", "advisory
+UI data only; never a control"; path decided by the owner on 2026-10-07). Any authenticated, active account of an active
 organisation may call it; it is not gated by `users:manage`.
 
 The denial path is asserted first (`docs/reference/definition-of-done.md` §9): no session, a dead

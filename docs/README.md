@@ -96,11 +96,20 @@ CI security pipeline. Work that does depend on them is marked `Blocked by:` in e
 1. ~~**The root `.env` is tracked in git** and holds `SECRET_KEY`, `FIRST_SUPERUSER_PASSWORD` and
    `POSTGRES_PASSWORD`, all at the template default `changethis`. `SECRET_KEY=changethis` signs JWTs.~~
    **CLOSED 2026-10-05 (#11):** `.env` is untracked, ignored and replaced by `.env.example`. The values
-   themselves remain in git history, so rotation is still outstanding.
-2. **CI has no security scanning** — no SAST, SCA, container or secret scanning across all 15 workflows.
-   Still open, and Dependabot alerts are disabled on the repository.
+   remain in git history, and **the repository is public** (owner confirmed 2026-10-07), so that
+   history is public. What it exposes is the template default `changethis`, never a production
+   secret: production values live only in GitHub repository secrets and the FastAPI Cloud application
+   environment, and the owner reports them set to generated values (2026-10-07). Any environment still
+   running a value that was ever committed must be treated as compromised and rotated. A full-history
+   gitleaks scan (2026-10-07, 1,585 commits, every ref) found three hits, all false positives: example
+   Jupyter tokens in a 2019 upstream-template README.
+2. **CI security scanning is partial.** Secret scanning (gitleaks) and dependency scanning
+   (pip-audit) run in [`security-scanning.yml`](../.github/workflows/security-scanning.yml) and fail
+   the build on a finding; SAST and container scanning do not exist yet. Repository-side GitHub secret
+   scanning, push protection and Dependabot alerts are settings, not code, and are the owner's to turn
+   on.
 
-Both were Phase 0 exit tasks. The first is done; the second is not.
+The first is done; the second is in progress.
 
 ---
 

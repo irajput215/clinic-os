@@ -60,7 +60,7 @@ member cannot reach patient data.
 ## Doctor
 **US-7** As a Doctor I want to see the permissions my account currently holds, so that I can tell why an
 action is refused.
-- Acceptance: `GET /api/v1/auth/capabilities` returns my effective permission set; the response is
+- Acceptance: `GET /api/v1/users/me/permissions` returns my effective permission set; the response is
   advisory only and never substitutes for a server-side check.
 - S: the capability list is computed from my roles, never from the request.
 - A: none beyond session access logging.

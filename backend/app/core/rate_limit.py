@@ -9,10 +9,12 @@ Two things limit how much it buys, and they are recorded here rather than hidden
 - **It is per instance.** More than one worker or replica means each keeps its own
   window, so the effective limit is multiplied. Move to a shared store when that
   matters.
-- **It keys on the address in the ASGI scope.** Behind a proxy that does not rewrite
-  it, every request shares one bucket. Uvicorn only trusts `X-Forwarded-For` from
-  `--forwarded-allow-ips`, so a deployment behind a load balancer must configure that
-  or the limit becomes global rather than per client.
+- **Without a session it keys on the address in the ASGI scope.** A request whose bearer
+  token verifies spends its session's budget (`client_key`); every other request spends its
+  address's. Behind a proxy that does not rewrite the address, every unauthenticated request
+  shares one bucket. Uvicorn only trusts `X-Forwarded-For` from `--forwarded-allow-ips`, so a
+  deployment behind a load balancer must configure that or the unauthenticated limit becomes
+  global rather than per client.
 
 Account lockout (task T1-28) is the control for attacks on one account; this is the
 control for volume from one source.
@@ -24,8 +26,11 @@ from collections.abc import Callable
 from threading import Lock
 from time import monotonic
 
+import jwt
 from fastapi import HTTPException, Request, status
+from jwt.exceptions import InvalidTokenError
 
+from app.core import security
 from app.core.config import settings
 
 
@@ -80,6 +85,32 @@ class SlidingWindowLimiter:
 limiter = SlidingWindowLimiter()
 
 
+def client_key(request: Request) -> str:
+    """Whose budget this request spends: its session's, else its address's.
+
+    The design limits per session (`03-users-and-roles/04-threat-model.md` T-03.11,
+    `01-tenancy-and-clinics/04-threat-model.md` T-TEN-10), so a bearer token that verifies keys the
+    budget on its subject: staff behind one clinic address do not share one administrator's budget.
+    Anything that does not verify - no token, a forged one, an expired one - keys on the address, so
+    rotating junk tokens buys nothing and an unauthenticated flood is bounded per client as before.
+    Verifying is the same HMAC check `app.api.deps.get_current_user` makes next; the limiter decides
+    nothing beyond which bucket to count in, and authentication still runs after it.
+    """
+    authorization = request.headers.get("Authorization", "")
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() == "bearer" and token:
+        try:
+            payload = jwt.decode(
+                token, settings.SECRET_KEY, algorithms=[security.ALGORITHM]
+            )
+        except InvalidTokenError:
+            payload = {}
+        subject = payload.get("sub")
+        if isinstance(subject, str) and subject:
+            return f"session:{subject}"
+    return f"address:{request.client.host if request.client else 'unknown'}"
+
+
 def rate_limit(
     *, scope: str, limit: int, window_seconds: int = 60
 ) -> Callable[[Request], None]:
@@ -89,9 +120,8 @@ def rate_limit(
         if not settings.RATE_LIMIT_ENABLED:
             return
 
-        client = request.client.host if request.client else "unknown"
         retry_after = limiter.hit(
-            f"{scope}:{client}", limit=limit, window_seconds=window_seconds
+            f"{scope}:{client_key(request)}", limit=limit, window_seconds=window_seconds
         )
         if retry_after is not None:
             raise HTTPException(
@@ -111,8 +141,16 @@ login_rate_limit = rate_limit(scope="login", limit=20, window_seconds=60)
 # `POST /reset-password/` share the `password-recovery` scope, so 5/min caps the flow rather than
 # each step of it. Spending a reset token is the step that grants a session, so it is limited too.
 password_recovery_rate_limit = rate_limit(scope="password-recovery", limit=5)
-# The administrative class: users, roles and permission grants. 20/min is the value in
-# `docs/features/03-users-and-roles/04-threat-model.md` T-03.11. The design says "per session"; this
-# limiter keys on the connection address, which is the only key the in-process implementation has
-# (see the module docstring). Declared, not hidden.
+# The administrative class: users, roles and permission grants. 20/min per session is the value in
+# `docs/features/03-users-and-roles/04-threat-model.md` T-03.11 (see `client_key`).
 admin_rate_limit = rate_limit(scope="admin", limit=20, window_seconds=60)
+# The single-resource read class: 300/min, the value `docs/features/01-tenancy-and-clinics/
+# 01-requirements.md` R15 and `06-clinical-records/04-threat-model.md` T-CLIN-13 give for one
+# resource read by id. A read of the caller's own tenant is one of these, not administration: the app
+# shell asks for it on every page load, and in the administrative class it spent the budget an
+# administrator needs for the administration screen itself.
+read_rate_limit = rate_limit(scope="read", limit=300, window_seconds=60)
+# Organisation signup. Unauthenticated, and every success creates a tenant, so it is limited like
+# login (20/min): the explicit "already exists" answer is a deliberate usability trade (the form says
+# which field to fix), and this limit is what bounds how fast that answer can be harvested.
+signup_rate_limit = rate_limit(scope="signup", limit=20, window_seconds=60)

@@ -83,7 +83,7 @@ The UI hides, disables and explains. It never decides. In particular:
 |---|---|---|
 | XSS | No `dangerouslySetInnerHTML`. All text rendered as React text. | everywhere |
 | Script injection | Strict CSP injected at build: `script-src 'self'` (no `unsafe-eval`; zod runs `jitless`), `connect-src` only self + API origin, `object-src 'none'`, `base-uri 'none'` | `vite.config.ts`, `lib/zod.ts` |
-| Clickjacking | **Host must send headers**: `Content-Security-Policy: frame-ancestors 'none'` and `X-Frame-Options: DENY` (browsers ignore `frame-ancestors` in a meta policy). **Open:** the backend now serves the app and sends neither header | deployment (`backend/app/main.py`) |
+| Clickjacking | The host sends the headers (browsers ignore `frame-ancestors` in a meta policy): every backend response, including the app's HTML at `/` and `/docs`, carries `Content-Security-Policy: frame-ancestors 'none'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and `Strict-Transport-Security`. **Closed 2026-10-07** | `backend/app/core/security_headers.py`, `tests/security/test_security_headers.py` |
 | Token exposure | Token in `sessionStorage` (one tab, cleared on close), never in URLs or logs. 15-minute lifetime is server-enforced | `lib/session.ts`, ADR-F002 |
 | Open redirect | `redirect` accepted only as a same-origin path | `lib/search.ts` |
 | PHI in URLs | No identifiers or names in query strings. Patient search filters in memory | `shell/GlobalSearch.tsx` |

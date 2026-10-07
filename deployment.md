@@ -16,7 +16,7 @@ Add these required [environment variables](https://fastapicloud.com/docs/builds-
 
 * `PROJECT_NAME`: The name of the project, used in the API documentation and emails.
 * `FIRST_SUPERUSER`: The email address of the first superuser.
-* `FRONTEND_HOST`: The public URL of the application, such as the generated `https://your-app.fastapicloud.dev` URL or a custom domain.
+* `FRONTEND_HOST`: The public URL of the application, such as the generated `https://your-app.fastapicloud.dev` URL or a custom domain. It is the only CORS origin and the base of every emailed link; unset, it falls back to `http://localhost:8000`. `fastapi deploy` ships code only, so this value lives in the FastAPI Cloud environment, never in the workflow.
 
 To enable emails, add these optional environment variables with values from your email provider:
 

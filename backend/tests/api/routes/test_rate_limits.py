@@ -62,6 +62,26 @@ def test_reset_password_is_rate_limited(client: TestClient) -> None:
     assert int(blocked.headers["Retry-After"]) >= 1
 
 
+def test_signup_is_rate_limited(client: TestClient) -> None:
+    """Signup is unauthenticated, creates a tenant and answers a taken email explicitly, so it is
+    limited like login: the twenty-first attempt in a minute is refused before it runs."""
+    payload = {
+        "email": settings.FIRST_SUPERUSER,
+        "password": "correct-horse-battery-staple",
+        "full_name": "Rate Limited",
+    }
+
+    for _ in range(20):
+        response = client.post(f"{settings.API_V1_STR}/users/signup", json=payload)
+        assert response.status_code == 400
+
+    blocked = client.post(f"{settings.API_V1_STR}/users/signup", json=payload)
+
+    assert blocked.status_code == 429
+    assert blocked.json()["detail"] == "Too many requests"
+    assert int(blocked.headers["Retry-After"]) >= 1
+
+
 def test_the_limit_is_per_client_not_per_instance(client: TestClient) -> None:
     """An exhausted window on one address must not deny service to another."""
     for _ in range(6):

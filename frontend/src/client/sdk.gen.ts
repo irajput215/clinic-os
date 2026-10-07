@@ -229,6 +229,15 @@ export class UsersService {
      * one `tenant_transaction` session, which is also what makes the role provisioning's
      * forced-RLS inserts legal (`app.tenant_id` is set inside that transaction). The tenant
      * id is drawn before the transaction opens so the context can name it.
+     *
+     * **A taken email is answered explicitly (`400`), which discloses that the address has an
+     * account.** That is a recorded residual risk, not an oversight (`docs/progress.md` §2). No
+     * feature document requires signup to be non-enumerating (T-AUTH.9 covers sign-in), and a uniform
+     * answer would not remove the signal while signup signs its owner straight in: whoever posts a
+     * new address can sign in with the password they chose, and whoever posts a taken one cannot. Removing it needs email verification before the
+     * first sign-in, which changes the product flow (`docs2/sdlc/01-auth-and-shell` R10) and makes
+     * signup depend on outbound mail in production. Until that is decided, the 20/min signup limit
+     * (`app/core/rate_limit.py`) bounds the rate at which the answer can be harvested.
      */
     public static registerUser<ThrowOnError extends boolean = true>(options: Options<usersRegisterUserData, ThrowOnError>) {
         return (options.client ?? client).post<usersRegisterUserResponses, usersRegisterUserErrors, ThrowOnError>({
