@@ -431,7 +431,7 @@ function ActivityTab({ patientId }: { patientId: string }) {
               <th className="pl-5">When</th>
               <th>Action</th>
               <th className="max-sm:hidden">Role</th>
-              <th>Result</th>
+              <th className="max-md:pr-5">Result</th>
               <th className="pr-5 max-md:hidden">Hash</th>
             </tr>
           </thead>
@@ -445,7 +445,7 @@ function ActivityTab({ patientId }: { patientId: string }) {
                 <td className="text-stone max-sm:hidden">
                   {e.actor_role ?? "-"}
                 </td>
-                <td>
+                <td className="max-md:pr-5">
                   <span
                     className={
                       e.result === "SUCCESS" ? "text-ok-deep" : "text-danger"

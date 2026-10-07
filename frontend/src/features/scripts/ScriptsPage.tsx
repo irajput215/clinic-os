@@ -92,7 +92,7 @@ export function ScriptsPage() {
                   <th className="pl-5">Patient</th>
                   <th>Product</th>
                   <th className="max-md:hidden">Prescriber</th>
-                  <th>Status</th>
+                  <th className="max-md:pr-5">Status</th>
                   <th className="max-lg:hidden">Token</th>
                   <th className="pr-5 max-md:hidden">Routed to</th>
                 </tr>
@@ -108,7 +108,7 @@ export function ScriptsPage() {
                     </td>
                     <td>{s.product_name}</td>
                     <td className="max-md:hidden">{s.prescriber_name}</td>
-                    <td>
+                    <td className="max-md:pr-5">
                       <ScriptStatePill state={s.state} />
                     </td>
                     <td className="max-lg:hidden">

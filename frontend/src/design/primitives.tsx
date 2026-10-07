@@ -53,7 +53,7 @@ export function Card({
       )}
     >
       {title || action ? (
-        <div className="mb-3.5 flex items-baseline justify-between gap-3">
+        <div className="mb-3.5 flex items-center justify-between gap-3">
           {title ? (
             <h2 className="text-base font-semibold text-ink">{title}</h2>
           ) : (
