@@ -33,7 +33,7 @@
 | audit_log_resource_type_not_null | n | NOT NULL resource_type |
 | audit_log_result_not_null | n | NOT NULL result |
 | audit_log_timestamp_not_null | n | NOT NULL "timestamp" |
-| ck_audit_log_resource_type | CHECK | CHECK (((resource_type)::text = ANY ((ARRAY['PATIENT'::character varying, 'CLINICAL_RECORD'::character varying, 'PRESCRIPTION'::character varying, 'TGA_APPROVAL'::character varying, 'TGA_DOCUMENT'::character varying, 'USER'::character varying, 'TENANT'::character varying, 'SESSION'::character varying, 'AUDIT'::character varying, 'REPORT'::character varying, 'INTEGRATION'::character varying, 'EXPORT'::character varying])::text[]))) |
+| ck_audit_log_resource_type | CHECK | CHECK (((resource_type)::text = ANY ((ARRAY['PATIENT'::character varying, 'CLINICAL_RECORD'::character varying, 'PRESCRIPTION'::character varying, 'TGA_APPROVAL'::character varying, 'TGA_DOCUMENT'::character varying, 'USER'::character varying, 'TENANT'::character varying, 'SESSION'::character varying, 'AUDIT'::character varying, 'REPORT'::character varying, 'INTEGRATION'::character varying, 'EXPORT'::character varying, 'APPOINTMENT'::character varying])::text[]))) |
 | ck_audit_log_result | CHECK | CHECK (((result)::text = ANY ((ARRAY['SUCCESS'::character varying, 'DENIED'::character varying, 'FAILED'::character varying, 'UNKNOWN'::character varying])::text[]))) |
 | pk_audit_log | PRIMARY KEY | PRIMARY KEY (event_id, "timestamp") |
 

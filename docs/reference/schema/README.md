@@ -4,6 +4,8 @@
 
 | Name | Columns | Comment | Type |
 | ---- | ------- | ------- | ---- |
+| [public.appointment_settings](public.appointment_settings.md) | 6 |  | BASE TABLE |
+| [public.appointments](public.appointments.md) | 13 |  | BASE TABLE |
 | [public.audit_log](public.audit_log.md) | 16 |  | BASE TABLE |
 | [public.care_relationships](public.care_relationships.md) | 10 |  | BASE TABLE |
 | [public.clinical_record_versions](public.clinical_record_versions.md) | 12 |  | BASE TABLE |
@@ -23,6 +25,8 @@
 
 | Name | ReturnType | Arguments | Type |
 | ---- | ------- | ------- | ---- |
+| public.appointment_during | trigger |  | FUNCTION |
+| public.appointment_status_guard | trigger |  | FUNCTION |
 | public.cash_dist | money | money, money | FUNCTION |
 | public.clinos_clinical_record_versions_immutable | trigger |  | FUNCTION |
 | public.date_dist | int4 | date, date | FUNCTION |
@@ -254,6 +258,9 @@
 ```mermaid
 erDiagram
 
+"public.appointment_settings" |o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.appointments" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.appointments" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
 "public.care_relationships" }o--|| "public.user" : "FOREIGN KEY (practitioner_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
 "public.care_relationships" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.care_relationships" }o--|| "public.patients" : "FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE RESTRICT"
@@ -282,6 +289,29 @@ erDiagram
 "public.user_roles" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.user_roles" }o--|| "public.roles" : "FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE RESTRICT"
 
+"public.appointment_settings" {
+  time_without_time_zone closes_at
+  timestamp_with_time_zone created_at
+  time_without_time_zone opens_at
+  uuid tenant_id FK
+  timestamp_with_time_zone updated_at
+  smallint__ working_days
+}
+"public.appointments" {
+  timestamp_with_time_zone created_at
+  uuid created_by
+  tstzrange during
+  timestamp_with_time_zone ends_at
+  uuid id
+  uuid patient_id FK
+  uuid practitioner_id
+  varchar source
+  timestamp_with_time_zone starts_at
+  varchar status
+  uuid tenant_id FK
+  varchar type
+  timestamp_with_time_zone updated_at
+}
 "public.audit_log" {
   varchar_128_ action
   uuid actor_id
