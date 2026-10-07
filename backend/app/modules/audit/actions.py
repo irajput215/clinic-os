@@ -105,6 +105,7 @@ ACTION_CATALOGUE: Final[tuple[tuple[str, tuple[str, ...]], ...]] = (
             "tga_approval.state_change",
             "tga_approval.match",
             "tga_approval.verify",
+            "tga_approval.read",
         ),
     ),
     ("TGA_DOCUMENT", ("tga_document.ingest", "tga_document.extract")),
@@ -219,6 +220,12 @@ PAYLOAD_ALLOW_LIST: Final[MappingProxyType[str, frozenset[str]]] = MappingProxyT
         "appointment.create": frozenset({"patient_id", "source"}),
         # A status change (R4): the two **codes** of the transition, never free text.
         "appointment.state_change": frozenset({"from_state", "to_state"}),
+        # `08-tga-approvals/05-data-and-audit.md` names `approval.read` ("patient-level read:
+        # actor, role, patient_id, count"), registered in doc 07 section 1 as `tga_approval.read`
+        # on 2026-10-07 (owner decision, M2 phase 2A). A patient-level read carries `patient_id`
+        # and `result_count`; the practice-wide register carries `query_filters` (state codes and
+        # a day count, never a value from a record) and `result_count`.
+        "tga_approval.read": frozenset({"patient_id", "query_filters", "result_count"}),
     }
 )
 

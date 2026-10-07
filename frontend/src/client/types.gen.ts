@@ -1387,6 +1387,147 @@ export type TgaApprovalRead = {
 };
 
 /**
+ * TgaApprovalRegister
+ *
+ * One keyset page of the practice-wide register, plus the practice's totals.
+ */
+export type TgaApprovalRegister = {
+    /**
+     * Data
+     */
+    data: Array<TgaApprovalRegisterRow>;
+    /**
+     * Count
+     */
+    count: number;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+    counts: TgaApprovalRegisterCounts;
+};
+
+/**
+ * TgaApprovalRegisterCounts
+ *
+ * The practice's totals, independent of the page and of the filter the caller asked for.
+ *
+ * The register's filter chips show a count each (`docs2/sdlc/05-approvals/requirements.md` R7),
+ * and those counts cannot be derived from one page of one filter.
+ */
+export type TgaApprovalRegisterCounts = {
+    /**
+     * By State
+     */
+    by_state: {
+        [key: string]: number;
+    };
+    /**
+     * Expiring
+     */
+    expiring: number;
+    /**
+     * Expiring Within Days
+     */
+    expiring_within_days: number;
+};
+
+/**
+ * TgaApprovalRegisterRow
+ *
+ * One register row: the approval and the name of the patient it belongs to.
+ *
+ * `patient_display_name` is `None` when the patient is no longer readable (soft-deleted), so the
+ * row is still listed rather than silently dropped from a regulatory register.
+ */
+export type TgaApprovalRegisterRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Tenant Id
+     */
+    tenant_id: string;
+    /**
+     * Patient Id
+     */
+    patient_id: string;
+    /**
+     * Tga Category
+     */
+    tga_category: string;
+    /**
+     * Dosage Form
+     */
+    dosage_form: string;
+    /**
+     * Approval Reference
+     */
+    approval_reference: string;
+    /**
+     * Valid From
+     */
+    valid_from: string;
+    /**
+     * Valid To
+     */
+    valid_to: string;
+    /**
+     * State
+     */
+    state: string;
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Created By
+     */
+    created_by: string;
+    /**
+     * Verified By
+     */
+    verified_by: string | null;
+    /**
+     * Verified At
+     */
+    verified_at: string | null;
+    /**
+     * Revoked By
+     */
+    revoked_by: string | null;
+    /**
+     * Revoked At
+     */
+    revoked_at: string | null;
+    /**
+     * Revoked Reason Code
+     */
+    revoked_reason_code: string | null;
+    /**
+     * Superseded By Id
+     */
+    superseded_by_id: string | null;
+    /**
+     * Supersedes Id
+     */
+    supersedes_id: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+    /**
+     * Patient Display Name
+     */
+    patient_display_name: string | null;
+};
+
+/**
  * TgaApprovalRevoke
  *
  * `POST /api/v1/tga-approvals/{id}/revoke` — a mandatory reason **code** (R9, T2-14).
@@ -3017,6 +3158,48 @@ export type clinicalRecordsSignClinicalRecordResponses = {
 };
 
 export type clinicalRecordsSignClinicalRecordResponse = clinicalRecordsSignClinicalRecordResponses[keyof clinicalRecordsSignClinicalRecordResponses];
+
+export type tgaApprovalsListTgaApprovalsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * State
+         */
+        state?: Array<'PENDING' | 'ACTIVE' | 'EXPIRED' | 'REJECTED' | 'REVOKED' | 'SUPERSEDED'> | null;
+        /**
+         * Expiring Within Days
+         */
+        expiring_within_days?: number | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+    };
+    url: '/api/v1/tga-approvals';
+};
+
+export type tgaApprovalsListTgaApprovalsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type tgaApprovalsListTgaApprovalsError = tgaApprovalsListTgaApprovalsErrors[keyof tgaApprovalsListTgaApprovalsErrors];
+
+export type tgaApprovalsListTgaApprovalsResponses = {
+    /**
+     * Successful Response
+     */
+    200: TgaApprovalRegister;
+};
+
+export type tgaApprovalsListTgaApprovalsResponse = tgaApprovalsListTgaApprovalsResponses[keyof tgaApprovalsListTgaApprovalsResponses];
 
 export type tgaApprovalsCreateTgaApprovalData = {
     body: TgaApprovalCreate;

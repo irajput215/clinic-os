@@ -26,17 +26,19 @@ browser history (T2-29; `app.core.errors` says the same about `instance`).
 | Method and path | Authentication | Permission | Tenant scope | Input schema | Output schema | Audit | Step-up |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `POST /api/v1/tga-approvals` | yes | `tga_approval:create` | session | `TgaApprovalCreate` | `TgaApprovalRead` | `tga_approval.create` (same transaction) | deferred — see below |
-| `GET /api/v1/patients/{patient_id}/tga-approvals` | yes | `tga_approval:read` | session + patient match | `limit`, `cursor` | `TgaApprovalsPublic` | deferred — see below | no |
-| `GET /api/v1/tga-approvals/{id}` | yes | `tga_approval:read` | session + resource match | path UUID | `TgaApprovalDetail` | deferred — see below | no |
+| `GET /api/v1/tga-approvals` | yes | `tga_approval:read` | session (a client `tenant_id` is ignored and audited) | `state`, `expiring_within_days`, `limit`, `cursor` | `TgaApprovalRegister` | `tga_approval.read` (same transaction) | no |
+| `GET /api/v1/patients/{patient_id}/tga-approvals` | yes | `tga_approval:read` | session + patient match | `limit`, `cursor` | `TgaApprovalsPublic` | `tga_approval.read` (same transaction) | no |
+| `GET /api/v1/tga-approvals/{id}` | yes | `tga_approval:read` | session + resource match | path UUID | `TgaApprovalDetail` | `tga_approval.read` (same transaction) | no |
 | `POST /api/v1/tga-approvals/{id}/verify` | yes | `tga_approval:verify` | session + resource match | `TgaApprovalVerify` | `TgaApprovalRead` | `tga_approval.verify` (same transaction) | deferred — see below |
 | `POST /api/v1/tga-approvals/{id}/revoke` | yes | `tga_approval:revoke` | session + resource match | `TgaApprovalRevoke` | `TgaApprovalRead` | `tga_approval.state_change` (same transaction) | deferred — see below |
 | `POST /api/v1/tga-approvals/{id}/supersede` | yes | `tga_approval:create` | session + resource match | `TgaApprovalSupersede` | `TgaApprovalRead` (201) | `tga_approval.create` (same transaction) | deferred — see below |
 | `POST /api/v1/tga-approvals/match` | yes | `tga_approval:read` | session | `TgaMatchRequest` | `TgaMatchResponse` | `tga_approval.match` (same transaction) | no |
 
-**Read auditing is deferred, and it is a real gap.** `05-data-and-audit.md` names `approval.read` for
-a patient-level read, and the platform's audit catalogue is **closed**: it has no TGA read action, so
-`audit.service.record` would refuse that name at runtime. Feature 04's catalogue owns the vocabulary
-and adding to it is that module's change, not this one's — recorded in the PR body. Error responses
+**Reads are audited as `tga_approval.read`.** `05-data-and-audit.md` names `approval.read` for a
+patient-level read; the platform's closed catalogue had no TGA read action until it was registered
+there as `tga_approval.read` on 2026-10-07 (owner decision, M2 phase 2A, recorded in
+`docs/features/04-audit-log/05-data-and-audit.md`). Every read writes one event, a permission or
+tenant refusal included. Error responses
 are `401` (unauthenticated), `403` (`PERMISSION_NOT_HELD`, `VERIFIER_CANNOT_BE_CREATOR`, no
 organisation), `404` (absent or another tenant's — never `403`), `409` (`ILLEGAL_STATE_TRANSITION`,
 `DUPLICATE_APPROVAL_GRAIN`, `TGA_OVERLAPPING_ACTIVE_APPROVAL`), `422` (strict-schema and
@@ -55,15 +57,17 @@ like a control and be none.
 import uuid
 from typing import Annotated, NoReturn
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 
 from app.api.deps import ActorDep
 from app.modules.patients import service as patients_service
 from app.modules.tga_approvals import service
 from app.modules.tga_approvals.schemas import (
+    ApprovalStateCode,
     TgaApprovalCreate,
     TgaApprovalDetail,
     TgaApprovalRead,
+    TgaApprovalRegister,
     TgaApprovalRevoke,
     TgaApprovalsPublic,
     TgaApprovalSupersede,
@@ -127,32 +131,36 @@ def _authorize(
     enforce(decision)
 
 
-def _enforce(
-    actor: Actor, permission: str, resource: ResourceRef | None = None
+def _patient_exists(
+    actor: Actor, patient_id: uuid.UUID, *, audit_action: str | None = None
 ) -> None:
-    """Apply the policy decision for a **read**, without a denial event.
-
-    The platform's audit catalogue has no TGA read action (`app/modules/audit/actions.py` is a closed
-    vocabulary and `approval.read` is not in it), so a read refusal cannot be written down without
-    inventing a name the writer would refuse at runtime. The refusal still happens — it is simply not
-    audited, and that gap is recorded in the PR body rather than papered over with a
-    `tga_approval.create` event that would describe the wrong thing in the trail.
-    """
-    enforce(can(actor, permission, resource))
-
-
-def _patient_exists(actor: Actor, patient_id: uuid.UUID) -> None:
     """`404` unless the patient is one of the caller's own, resolved through the patients service.
 
     This module never reads the `patients` table — it reaches the patient through the other module's
     facade (`docs/reference/build-contract.md` §7), and `None` is that facade's answer for "absent"
-    and "another tenant's" alike, so the refusal discloses nothing (R8).
+    and "another tenant's" alike, so the refusal discloses nothing (R8). With `audit_action`, the
+    refusal is written down first as `CROSS_TENANT`, the way a read of a missing approval is.
     """
     if (
         patients_service.get_patient(tenant_id=actor.tenant_id, patient_id=patient_id)
         is None
     ):
+        if audit_action is not None:
+            service.audit_denial(
+                tenant_id=actor.tenant_id,
+                actor_id=actor.user_id,
+                actor_role=actor.actor_role,
+                action=audit_action,
+                reason=service.CROSS_TENANT,
+            )
         raise _not_found()
+
+
+def _invalid_cursor(error: service.InvalidCursor) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail={"code": "INVALID_CURSOR", "message": str(error)},
+    )
 
 
 @router.post("", response_model=TgaApprovalRead, status_code=status.HTTP_201_CREATED)
@@ -188,20 +196,55 @@ def list_patient_tga_approvals(
     cursor: str | None = None,
 ) -> TgaApprovalsPublic:
     """A patient's approvals, keyset-paginated, tenant-scoped by RLS (F15, US-2)."""
-    _enforce(actor, TGA_APPROVAL_READ)
-    _patient_exists(actor, patient_id)
+    _authorize(actor, TGA_APPROVAL_READ, action=service.APPROVAL_READ)
+    _patient_exists(actor, patient_id, audit_action=service.APPROVAL_READ)
     try:
         return service.list_approvals(
             tenant_id=actor.tenant_id,
             patient_id=patient_id,
             limit=limit,
             cursor=cursor,
+            actor_id=actor.user_id,
+            actor_role=actor.actor_role,
         )
     except service.InvalidCursor as error:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail={"code": "INVALID_CURSOR", "message": str(error)},
-        ) from error
+        raise _invalid_cursor(error) from error
+
+
+@router.get("", response_model=TgaApprovalRegister)
+def list_tga_approvals(
+    *,
+    actor: ActorDep,
+    request: Request,
+    state: Annotated[list[ApprovalStateCode] | None, Query()] = None,
+    expiring_within_days: Annotated[
+        int | None, Query(ge=0, le=service.MAX_EXPIRING_WITHIN_DAYS)
+    ] = None,
+    limit: Annotated[
+        int, Query(ge=1, le=service.MAX_PAGE_SIZE)
+    ] = service.DEFAULT_PAGE_SIZE,
+    cursor: Annotated[str | None, Query(max_length=512)] = None,
+) -> TgaApprovalRegister:
+    """The practice-wide register: every approval in the caller's practice, newest first.
+
+    `state` (repeatable) and `expiring_within_days` are two selectors, and a row matches when it
+    matches either; neither lists everything. `counts` is the practice's totals whatever the
+    filter, for the register's filter chips. Contract: `docs2/sdlc/05-approvals/api.md`.
+    """
+    _authorize(actor, TGA_APPROVAL_READ, action=service.APPROVAL_READ)
+    try:
+        return service.list_register(
+            tenant_id=actor.tenant_id,
+            actor_id=actor.user_id,
+            actor_role=actor.actor_role,
+            states=state or (),
+            expiring_within_days=expiring_within_days,
+            limit=limit,
+            cursor=cursor,
+            client_tenant_id_supplied="tenant_id" in request.query_params,
+        )
+    except service.InvalidCursor as error:
+        raise _invalid_cursor(error) from error
 
 
 @router.post("/match", response_model=TgaMatchResponse)
@@ -224,8 +267,13 @@ def match_tga_approval(
 @router.get("/{approval_id}", response_model=TgaApprovalDetail)
 def read_tga_approval(*, actor: ActorDep, approval_id: uuid.UUID) -> TgaApprovalDetail:
     """One approval and its supersede chain. Another tenant's id is `404`, never `403` (R8, S1)."""
-    _enforce(actor, TGA_APPROVAL_READ)
-    detail = service.get_approval(tenant_id=actor.tenant_id, approval_id=approval_id)
+    _authorize(actor, TGA_APPROVAL_READ, action=service.APPROVAL_READ)
+    detail = service.get_approval(
+        tenant_id=actor.tenant_id,
+        approval_id=approval_id,
+        actor_id=actor.user_id,
+        actor_role=actor.actor_role,
+    )
     if detail is None:
         raise _not_found()
     return detail

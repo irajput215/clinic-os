@@ -52,15 +52,15 @@ import base64
 import hashlib
 import json
 import uuid
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
 from hmac import compare_digest
 from typing import Final
 
 from fastapi import status
-from sqlalchemy import and_, or_
+from sqlalchemy import ColumnElement, and_, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select, text
 
@@ -70,7 +70,9 @@ from app.core.db import tenant_transaction
 # The audit module is reached through its service facade (`docs/reference/build-contract.md` §7). The
 # import is one-way — `audit` knows nothing about `tga_approvals` — so there is no cycle.
 from app.modules.audit import service as audit
+from app.modules.patients import service as patients_service
 from app.modules.tga_approvals.models import (
+    APPROVAL_STATES,
     LEGAL_TRANSITIONS,
     TgaApproval,
     TgaApprovalEvent,
@@ -80,6 +82,9 @@ from app.modules.tga_approvals.schemas import (
     TgaApprovalCreate,
     TgaApprovalDetail,
     TgaApprovalRead,
+    TgaApprovalRegister,
+    TgaApprovalRegisterCounts,
+    TgaApprovalRegisterRow,
     TgaApprovalsPublic,
     TgaApprovalSupersede,
     TgaMatchResponse,
@@ -90,6 +95,7 @@ __all__ = [
     "APPLICATION_NUMBER_MISMATCH",
     "APPROVAL_CREATE",
     "APPROVAL_MATCH",
+    "APPROVAL_READ",
     "APPROVAL_STATE_CHANGE",
     "APPROVAL_VERIFY",
     "CROSS_TENANT",
@@ -108,7 +114,9 @@ __all__ = [
     "evaluated_timezone",
     "expire_due_approvals",
     "get_approval",
+    "last_expiring_valid_to",
     "list_approvals",
+    "list_register",
     "match_approval",
     "revoke_approval",
     "service_date_today",
@@ -125,6 +133,10 @@ APPROVAL_CREATE: Final[str] = "tga_approval.create"
 APPROVAL_VERIFY: Final[str] = "tga_approval.verify"
 APPROVAL_STATE_CHANGE: Final[str] = "tga_approval.state_change"
 APPROVAL_MATCH: Final[str] = "tga_approval.match"
+# `08-tga-approvals/05-data-and-audit.md`'s `approval.read`, registered in doc 07 section 1 under the
+# catalogue's lowercase dotted form on 2026-10-07 (owner decision). One event per list page or detail
+# read, never one per row (US-2), refusals included.
+APPROVAL_READ: Final[str] = "tga_approval.read"
 
 # The refusal codes. Each is the code a document names, and each maps to exactly one status:
 # `01-requirements.md`'s negative decision matrix, T2-3, T2-8 and T2-13.
@@ -144,6 +156,16 @@ SYDNEY_TIMEZONE: Final[str] = "Australia/Sydney"
 # The read path's page ceiling (T-04.12: *"pagination ceiling (`limit <= 100`)"*).
 MAX_PAGE_SIZE: Final[int] = 100
 DEFAULT_PAGE_SIZE: Final[int] = 25
+
+# The register's expiry window. 30 days is the register's "Needs action" window
+# (`docs2/sdlc/05-approvals/requirements.md`); the ceiling is the longest window an approval can
+# have (R3, two years), beyond which "expiring within" selects every active approval.
+DEFAULT_EXPIRING_WITHIN_DAYS: Final[int] = 30
+MAX_EXPIRING_WITHIN_DAYS: Final[int] = 731
+
+# The reason a `tga_approval.read` event carries when the client sent a `tenant_id`: it is ignored,
+# and the attempt is written down (INV-1). The code `users_roles` already audits for the same thing.
+CLIENT_TENANT_ID_IGNORED: Final[str] = "CLIENT_TENANT_ID_IGNORED"
 
 # The cursor is signed with the application secret, exactly as the audit read path's is: a cursor
 # carries no privilege, but one that could be forged could name a position in a list the caller is
@@ -239,6 +261,19 @@ def within_validity_window(
     return valid_from <= date_of_service < valid_to
 
 
+def last_expiring_valid_to(*, today: date, within_days: int) -> date:
+    """The latest `valid_to` whose **last covered day** is at most `within_days` after `today`.
+
+    "Expiring within N days" is a statement about the last day an approval still authorises, and
+    which day that is depends on the same D-006 boundary
+    [`within_validity_window`][app.modules.tga_approvals.service.within_validity_window] decides.
+    Under the interim half-open `[valid_from, valid_to)` the last covered day is `valid_to - 1`, so
+    the bound is `today + within_days + 1`. It sits beside the boundary function on purpose: if the
+    Clinical Safety Officer rules the end date inclusive, both change together.
+    """
+    return today + timedelta(days=within_days + 1)
+
+
 def evaluated_timezone() -> str:
     """The zone the boundary is read in — *"evaluate the boundary in a single named timezone
     (`Australia/Sydney`), never the server's local zone"* (D-006 §2)."""
@@ -276,6 +311,7 @@ def _record(
     resource_id: uuid.UUID | None,
     result: str = "SUCCESS",
     reason: str | None = None,
+    payload: dict[str, object] | None = None,
 ) -> None:
     """Write one platform audit event on the caller's transaction, payload-free.
 
@@ -290,6 +326,7 @@ def _record(
             result=result,
             resource_id=resource_id,
             reason=reason,
+            payload=payload,
         ),
     )
 
@@ -411,15 +448,39 @@ def _chain(
 
 
 def get_approval(
-    *, tenant_id: uuid.UUID, approval_id: uuid.UUID
+    *,
+    tenant_id: uuid.UUID,
+    approval_id: uuid.UUID,
+    actor_id: uuid.UUID | None = None,
+    actor_role: str | None = None,
 ) -> TgaApprovalDetail | None:
-    """One approval and its supersede chain, or `None` for absent/cross-tenant (T2-12)."""
-    with tenant_transaction(tenant_id=tenant_id) as session:
+    """One approval and its supersede chain, or `None` for absent/cross-tenant (T2-12).
+
+    The read is audited on its own transaction (US-7, *"every auditor read is logged"*), and so is
+    the `None`: absent and another tenant's are the same answer, and a substituted identifier is the
+    attempt the trail exists to hold.
+    """
+    with tenant_transaction(
+        tenant_id=tenant_id, actor_id=actor_id, actor_role=actor_role
+    ) as session:
         row = _load(session, tenant_id=tenant_id, approval_id=approval_id)
         if row is None:
+            _record(
+                session,
+                action=APPROVAL_READ,
+                resource_id=approval_id,
+                result="DENIED",
+                reason=CROSS_TENANT,
+            )
             return None
         detail = TgaApprovalDetail.model_validate(row)
         detail.supersede_chain = _chain(session, tenant_id=tenant_id, row=row)
+        _record(
+            session,
+            action=APPROVAL_READ,
+            resource_id=row.id,
+            payload={"patient_id": str(row.patient_id), "result_count": 1},
+        )
         return detail
 
 
@@ -462,51 +523,212 @@ def decode_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
     return created_at, approval_id
 
 
+def _check_limit(limit: int) -> None:
+    if limit < 1 or limit > MAX_PAGE_SIZE:
+        raise ValueError(f"limit must be between 1 and {MAX_PAGE_SIZE}")
+
+
+def _keyset_page(
+    session: Session,
+    *,
+    conditions: list[ColumnElement[bool]],
+    limit: int,
+    cursor: tuple[datetime, uuid.UUID] | None,
+) -> tuple[Sequence[TgaApproval], str | None]:
+    """One newest-first page on the `(created_at, id)` keyset, and the cursor that continues it.
+
+    Keyset and never `OFFSET`: an approval landing while a clinician pages must not make the next
+    page skip or repeat a row, and a skipped clinical record is the failure mode that matters. The
+    page asks for one row more than the caller wanted; that row proves whether a next page exists.
+    The patient list and the register share this, so the two cannot page differently.
+    """
+    if cursor is not None:
+        created_at, approval_id = cursor
+        conditions = [
+            *conditions,
+            or_(
+                col(TgaApproval.created_at) < created_at,
+                and_(
+                    col(TgaApproval.created_at) == created_at,
+                    col(TgaApproval.id) < approval_id,
+                ),
+            ),
+        ]
+    rows: Sequence[TgaApproval] = session.exec(
+        select(TgaApproval)
+        .where(*conditions)
+        .order_by(col(TgaApproval.created_at).desc(), col(TgaApproval.id).desc())
+        .limit(limit + 1)
+    ).all()
+    page, overflow = rows[:limit], rows[limit:]
+    return page, None if not overflow else encode_cursor(page[-1])
+
+
 def list_approvals(
     *,
     tenant_id: uuid.UUID,
     patient_id: uuid.UUID,
     limit: int = DEFAULT_PAGE_SIZE,
     cursor: str | None = None,
+    actor_id: uuid.UUID | None = None,
+    actor_role: str | None = None,
 ) -> TgaApprovalsPublic:
     """One keyset page of a patient's approvals, newest first, tenant-scoped by RLS (T2-12, F15).
 
-    Keyset and never `OFFSET`: an approval landing while a clinician pages must not make the next
-    page skip or repeat a row, and a skipped clinical record is the failure mode that matters.
+    Audited as one `tga_approval.read` per page with the patient and the row count, never one per
+    row (US-2: *"`approval.read` once per patient-level access, not per row"*).
     """
-    if limit < 1 or limit > MAX_PAGE_SIZE:
-        raise ValueError(f"limit must be between 1 and {MAX_PAGE_SIZE}")
-
+    _check_limit(limit)
     decoded = None if cursor is None else decode_cursor(cursor)
-    with tenant_transaction(tenant_id=tenant_id) as session:
-        conditions = [
-            col(TgaApproval.tenant_id) == tenant_id,
-            col(TgaApproval.patient_id) == patient_id,
-        ]
-        if decoded is not None:
-            created_at, approval_id = decoded
-            conditions.append(
-                or_(
-                    col(TgaApproval.created_at) < created_at,
-                    and_(
-                        col(TgaApproval.created_at) == created_at,
-                        col(TgaApproval.id) < approval_id,
-                    ),
-                )
-            )
-        rows: Sequence[TgaApproval] = session.exec(
-            select(TgaApproval)
-            .where(*conditions)
-            .order_by(col(TgaApproval.created_at).desc(), col(TgaApproval.id).desc())
-            .limit(limit + 1)
-        ).all()
-        page, overflow = rows[:limit], rows[limit:]
-        data = [_read(row) for row in page]
-        return TgaApprovalsPublic(
-            data=data,
-            count=len(data),
-            next_cursor=None if not overflow else encode_cursor(page[-1]),
+    with tenant_transaction(
+        tenant_id=tenant_id, actor_id=actor_id, actor_role=actor_role
+    ) as session:
+        page, next_cursor = _keyset_page(
+            session,
+            conditions=[
+                col(TgaApproval.tenant_id) == tenant_id,
+                col(TgaApproval.patient_id) == patient_id,
+            ],
+            limit=limit,
+            cursor=decoded,
         )
+        data = [_read(row) for row in page]
+        _record(
+            session,
+            action=APPROVAL_READ,
+            resource_id=None,
+            payload={"patient_id": str(patient_id), "result_count": len(data)},
+        )
+        return TgaApprovalsPublic(data=data, count=len(data), next_cursor=next_cursor)
+
+
+def _expiring(bound: date) -> ColumnElement[bool]:
+    """`ACTIVE` and lapsing on or before `bound` (see `last_expiring_valid_to`)."""
+    return and_(
+        col(TgaApproval.state) == "ACTIVE",
+        col(TgaApproval.valid_to) <= bound,
+    )
+
+
+def list_register(
+    *,
+    tenant_id: uuid.UUID,
+    actor_id: uuid.UUID | None,
+    actor_role: str | None,
+    states: Collection[str] = (),
+    expiring_within_days: int | None = None,
+    limit: int = DEFAULT_PAGE_SIZE,
+    cursor: str | None = None,
+    client_tenant_id_supplied: bool = False,
+) -> TgaApprovalRegister:
+    """One keyset page of the practice-wide register, with the practice's totals.
+
+    The contract is `docs2/sdlc/05-approvals/api.md` (agreed 2026-10-07). Two selectors, and a row
+    is listed when it matches **either**: `states` (the approval is in one of them) and
+    `expiring_within_days` (the approval is `ACTIVE` and its last covered day is at most that many
+    days from today, already-lapsed ones the expiry job has not reached included). Neither given
+    lists every approval. The union is what lets the register's "Needs action" filter - pending, or
+    active and expiring within 30 days - be one keyset over one query instead of two pages merged in
+    the client.
+
+    "Today" is the database clock in `Australia/Sydney` (T2-10, D-006 section 2), never the
+    application's. Page order and cursor are the patient list's, so a cursor continues only the
+    filter it was issued for; a cursor carries no privilege, and RLS and the tenant predicate still
+    bound every row.
+
+    One `tga_approval.read` event per page, with the filters (state codes and a day count, never a
+    value from a record) and the row count. A `tenant_id` the client sent is ignored and written down
+    on that same event as `CLIENT_TENANT_ID_IGNORED` (INV-1).
+
+    Patient names come from the patients facade on the same transaction, so a page and its names are
+    one snapshot: this module never reads the `patients` table itself
+    (`docs/reference/build-contract.md` section 7).
+    """
+    _check_limit(limit)
+    if expiring_within_days is not None and not (
+        0 <= expiring_within_days <= MAX_EXPIRING_WITHIN_DAYS
+    ):
+        raise ValueError(
+            f"expiring_within_days must be between 0 and {MAX_EXPIRING_WITHIN_DAYS}"
+        )
+    wanted_states = sorted(set(states))
+    decoded = None if cursor is None else decode_cursor(cursor)
+    with tenant_transaction(
+        tenant_id=tenant_id, actor_id=actor_id, actor_role=actor_role
+    ) as session:
+        today = service_date_today(session)
+        window = (
+            DEFAULT_EXPIRING_WITHIN_DAYS
+            if expiring_within_days is None
+            else expiring_within_days
+        )
+        bound = last_expiring_valid_to(today=today, within_days=window)
+
+        selectors: list[ColumnElement[bool]] = []
+        if wanted_states:
+            selectors.append(col(TgaApproval.state).in_(wanted_states))
+        if expiring_within_days is not None:
+            selectors.append(_expiring(bound))
+        conditions: list[ColumnElement[bool]] = [
+            col(TgaApproval.tenant_id) == tenant_id
+        ]
+        if selectors:
+            conditions.append(or_(*selectors))
+        page, next_cursor = _keyset_page(
+            session, conditions=conditions, limit=limit, cursor=decoded
+        )
+        rows = [_read(row) for row in page]
+
+        by_state = dict.fromkeys(APPROVAL_STATES, 0)
+        for state, total in session.exec(
+            select(col(TgaApproval.state), func.count())
+            .where(col(TgaApproval.tenant_id) == tenant_id)
+            .group_by(col(TgaApproval.state))
+        ).all():
+            by_state[state] = total
+        expiring = session.exec(
+            select(func.count())
+            .select_from(TgaApproval)
+            .where(col(TgaApproval.tenant_id) == tenant_id, _expiring(bound))
+        ).one()
+
+        query_filters: dict[str, object] = {}
+        if wanted_states:
+            query_filters["state"] = wanted_states
+        if expiring_within_days is not None:
+            query_filters["expiring_within_days"] = expiring_within_days
+        if decoded is not None:
+            query_filters["cursor"] = True
+        _record(
+            session,
+            action=APPROVAL_READ,
+            resource_id=None,
+            reason=CLIENT_TENANT_ID_IGNORED if client_tenant_id_supplied else None,
+            payload={"query_filters": query_filters, "result_count": len(rows)},
+        )
+        names = patients_service.display_names(
+            session,
+            tenant_id=tenant_id,
+            patient_ids=[row.patient_id for row in rows],
+        )
+
+    return TgaApprovalRegister(
+        data=[
+            TgaApprovalRegisterRow(
+                **row.model_dump(), patient_display_name=names.get(row.patient_id)
+            )
+            for row in rows
+        ],
+        count=len(rows),
+        next_cursor=next_cursor,
+        counts=TgaApprovalRegisterCounts.model_validate(
+            {
+                "by_state": by_state,
+                "expiring": expiring,
+                "expiring_within_days": window,
+            }
+        ),
+    )
 
 
 # --------------------------------------------------------------------------------------------

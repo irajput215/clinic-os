@@ -218,6 +218,49 @@ class TgaApprovalsPublic(BaseModel):
     next_cursor: str | None
 
 
+#: The approval states a register filter may name. Kept equal to `models.APPROVAL_STATES` (a test
+#: asserts it): a `Literal` rather than the tuple so the OpenAPI schema, and with it the generated
+#: client, carries the closed list and FastAPI refuses an unknown state with a `422`.
+ApprovalStateCode = Literal[
+    "PENDING", "ACTIVE", "EXPIRED", "REJECTED", "REVOKED", "SUPERSEDED"
+]
+
+
+class TgaApprovalRegisterRow(TgaApprovalRead):
+    """One register row: the approval and the name of the patient it belongs to.
+
+    `patient_display_name` is `None` when the patient is no longer readable (soft-deleted), so the
+    row is still listed rather than silently dropped from a regulatory register.
+    """
+
+    patient_display_name: str | None
+
+
+class TgaApprovalRegisterCounts(BaseModel):
+    """The practice's totals, independent of the page and of the filter the caller asked for.
+
+    The register's filter chips show a count each (`docs2/sdlc/05-approvals/requirements.md` R7),
+    and those counts cannot be derived from one page of one filter.
+    """
+
+    #: Every approval state, zero included.
+    by_state: dict[ApprovalStateCode, int]
+    #: `ACTIVE` approvals whose last covered day falls within `expiring_within_days` of today
+    #: (Australia/Sydney), already-lapsed ones the expiry job has not reached yet included.
+    expiring: int
+    #: The window `expiring` was counted over: the request's, or the register's default of 30.
+    expiring_within_days: int
+
+
+class TgaApprovalRegister(BaseModel):
+    """One keyset page of the practice-wide register, plus the practice's totals."""
+
+    data: list[TgaApprovalRegisterRow]
+    count: int
+    next_cursor: str | None
+    counts: TgaApprovalRegisterCounts
+
+
 class TgaMatchResponse(BaseModel):
     """The gate's answer (T2-27).
 
