@@ -124,8 +124,61 @@ so the literal `me` segment is never captured by `/users/{user_id}/permissions` 
 - Errors: `401` (unauthenticated), `403` (`PERMISSION_NOT_HELD`, or no organisation on the account), `404` (absent account, role or assignment, or another tenant's), `409` (`LAST_ADMINISTRATOR` — R8: removing it would leave the organisation with nobody holding `users:manage`), `422` (malformed UUID), `429`; fails closed = yes
 - Step-up: deferred — feature 02's step-up is not built and is blocked by D-003; the design requires a fresh, single-use, 5-minute passkey/hardware-key step-up for this route
 
-Out of scope for this slice, and why: the user-lifecycle routes (`GET`/`POST /users`,
-`POST /users/{id}/deactivate`) belong to T1-03, blocked by D-003; `PUT /roles/{id}/permissions`
+#### `GET /api/v1/users/staff`
+- Authentication: Yes
+- Permission: `users:manage`
+- Tenant scope: session - the organisation is the session's; a `tenant_id` query parameter is never
+  read (there is no `user.*` read action in the closed audit catalogue to record it under, so it is
+  ignored without an event)
+- Ownership rule: every returned account's `tenant_id` equals the session's tenant; another tenant's
+  accounts are absent, not denied
+- Input schema: `skip` (>= 0, default 0) and `limit` (1 to 100, default 50) query parameters
+- Output schema: `StaffPublic` - `{data: [{id, email, full_name, is_active, created_at, roles:
+  [{role_id, code, name}]}], count}`, ordered by name, then email, then id
+- Audit: none - the closed action catalogue names no event for a user read (as for the role reads)
+- Rate limit: the administrative class, 20/min per client address
+- Errors: `401`, `403` (`PERMISSION_NOT_HELD`, `NO_ORGANISATION`, `TENANT_NOT_ACTIVE`), `422`, `429`;
+  fails closed = yes
+- Step-up: no
+
+#### `POST /api/v1/users/staff`
+- Authentication: Yes
+- Permission: `users:manage`, plus R3 over the union of the requested roles' bundles
+- Tenant scope: session - the account is created in the session's tenant. A body `tenant_id` (or a
+  `tenant_id` query parameter) is **ignored and audited** (INV-1) as `user.create` `DENIED`
+  `CLIENT_TENANT_ID_IGNORED`, in the same transaction as the invitation
+- Ownership rule: every role id must be the session's tenant's, otherwise `404`
+- Input schema: `StaffInvite` - `{email, full_name, role_ids[1..7]}`; any other key is `422`. No
+  password: the invitee sets their own through the emailed link
+- Output schema: `StaffMemberRead`, `201`
+- Audit: `user.create` (`SUCCESS`, target user id and role codes) and one `user.permission_change`
+  `GRANT` per role, on the creating transaction; a refusal after authorisation writes `user.create`
+  `DENIED` with `PERMISSION_NOT_HELD`, `GRANT_EXCEEDS_ACTOR` or `EMAIL_UNAVAILABLE`
+- Rate limit: the administrative class, 20/min per client address
+- Errors: `401`, `403` (`PERMISSION_NOT_HELD`, `GRANT_EXCEEDS_ACTOR`, `NO_ORGANISATION`,
+  `TENANT_NOT_ACTIVE`), `404` (a role absent or another tenant's), `409` (`EMAIL_UNAVAILABLE`, the
+  same answer whichever organisation holds the address), `422`, `429`, `503`
+  (`EMAIL_NOT_CONFIGURED`: no outgoing mail, so nothing is created); fails closed = yes
+- Step-up: deferred, as for the role grant - blocked by D-003
+
+#### `POST /api/v1/users/invitations/accept`
+- Authentication: No - the emailed token is the credential. It is purpose-bound, expires after
+  `STAFF_INVITATION_EXPIRE_HOURS` and is single use (`invitations.py`)
+- Permission: none; Tenant scope: the account the token names, and the write runs in its tenant
+- Input schema: `InvitationAccept` - `{token, new_password}` (8 to 128 characters)
+- Output schema: `InvitationAccepted` - `{email}`, so the app can sign the person in
+- Audit: none - the closed catalogue has no credential event (password reset writes none either);
+  the onboarding itself is the `user.create` event above. Reported as an open question
+- Rate limit: 5/min per client address (`invitation-accept`), like password reset: the token is a
+  bearer credential
+- Errors: `400` (`INVITATION_INVALID`: tampered, expired, already used, or the account is gone or
+  deactivated - one answer for all), `422`, `429`; fails closed = yes
+
+The staff routes are mounted before the legacy `/users/{user_id}` router so the literal `staff` and
+`invitations` segments are never captured as an account id.
+
+Out of scope for this slice, and why: `POST /users/{id}/deactivate` belongs to T1-03, blocked by
+D-003 (the platform superuser's legacy `DELETE /users/{id}` deactivates today); `PUT /roles/{id}/permissions`
 changes the fixed permission matrix and needs the step-up mechanism, so it is deferred; `GET
 /auth/capabilities` belongs to feature 02 (its permission half is served here as
 `GET /users/me/permissions`, the path the frontend contract names). The grant and the revoke emit their audit events as of
@@ -140,18 +193,30 @@ granting role from an account.
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 
 from app.api.deps import ActorDep
-from app.core.rate_limit import admin_rate_limit
+from app.core.config import settings
+from app.core.rate_limit import admin_rate_limit, rate_limit
 from app.modules.users_roles import service
-from app.modules.users_roles.catalog import LAST_ADMINISTRATOR, USERS_ROLES_PERMISSIONS
+from app.modules.users_roles.catalog import (
+    EMAIL_NOT_CONFIGURED,
+    EMAIL_UNAVAILABLE,
+    INVITATION_INVALID,
+    LAST_ADMINISTRATOR,
+    USERS_ROLES_PERMISSIONS,
+)
 from app.modules.users_roles.schemas import (
+    InvitationAccept,
+    InvitationAccepted,
     OwnPermissionsRead,
     PermissionsPublic,
     RoleAssignmentCreate,
     RoleRead,
     RolesPublic,
+    StaffInvite,
+    StaffMemberRead,
+    StaffPublic,
     UserPermissionsRead,
     UserRolesPublic,
 )
@@ -173,6 +238,21 @@ user_roles_router = APIRouter(
 # The caller's own surface. Not administrative, so it carries neither the `users:manage` check nor
 # the administrative rate limit. It must be mounted before `user_roles_router` (see the declaration).
 current_user_router = APIRouter(prefix="/users", tags=["users"])
+# The organisation's staff directory and onboarding. Administrative, so the same limit applies. It
+# must be mounted before the legacy `/users/{user_id}` routes (see the declarations).
+staff_router = APIRouter(
+    prefix="/users/staff", tags=["users"], dependencies=_ADMIN_DEPENDENCIES
+)
+# Spending an invitation link. Unauthenticated: the token is the credential, so it is limited like
+# password reset (5/min per client address), in a window of its own.
+invitation_accept_rate_limit = rate_limit(scope="invitation-accept", limit=5)
+invitations_router = APIRouter(
+    prefix="/users/invitations",
+    tags=["users"],
+    dependencies=[Depends(invitation_accept_rate_limit)],
+)
+
+MAX_STAFF_PAGE_SIZE = 100
 
 
 def _not_found(what: str) -> HTTPException:
@@ -301,3 +381,104 @@ def revoke_role(*, actor: ActorDep, user_id: uuid.UUID, role_id: uuid.UUID) -> R
     if outcome is not service.RevokeOutcome.REVOKED:
         raise _not_found("Role assignment")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@staff_router.get("", response_model=StaffPublic)
+def list_staff(
+    *,
+    actor: ActorDep,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=MAX_STAFF_PAGE_SIZE),
+) -> StaffPublic:
+    """List the caller's organisation's accounts and the roles each holds."""
+    service.authorize(actor, USERS_ROLES_PERMISSIONS["list_staff"])
+    return service.list_staff(tenant_id=actor.tenant_id, skip=skip, limit=limit)
+
+
+@staff_router.post(
+    "",
+    response_model=StaffMemberRead,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        status.HTTP_404_NOT_FOUND: {
+            "description": "A role is absent, or belongs to another organisation"
+        },
+        status.HTTP_409_CONFLICT: {
+            "description": (
+                "Refused: the address already has an account. The same answer whichever "
+                "organisation holds it, so no organisation is disclosed."
+            )
+        },
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "description": "Outgoing mail is not configured, so no invitation can be sent"
+        },
+    },
+)
+def invite_staff(
+    *, actor: ActorDep, invite: StaffInvite, request: Request
+) -> StaffMemberRead:
+    """Onboard a staff member: create the account in the caller's organisation with the chosen
+    roles, and email them a link to set their own password.
+
+    The caller can grant only roles whose permissions they hold (R3, `403 GRANT_EXCEEDS_ACTOR`).
+    """
+    decision = service.can(actor, USERS_ROLES_PERMISSIONS["invite_staff"])
+    if not decision.allowed:
+        service.record_invitation_denial(actor=actor, reason=decision.code.value)
+        service.enforce(decision)
+    if not settings.emails_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": EMAIL_NOT_CONFIGURED,
+                "message": "Outgoing email is not configured, so invitations can't be sent.",
+            },
+        )
+    result = service.invite_staff(
+        actor=actor,
+        invite=invite,
+        client_tenant_id_supplied=(
+            invite.client_tenant_id_supplied or "tenant_id" in request.query_params
+        ),
+    )
+    if result.outcome is service.InvitationOutcome.ROLE_NOT_FOUND:
+        raise _not_found("Role")
+    if result.denial is not None:
+        service.enforce(
+            result.denial
+        )  # R3: the policy layer's own `403 GRANT_EXCEEDS_ACTOR`
+    if result.outcome is service.InvitationOutcome.EMAIL_UNAVAILABLE:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": EMAIL_UNAVAILABLE,
+                "message": "This email address can't be invited. It may already have an account.",
+            },
+        )
+    assert result.member is not None
+    return result.member
+
+
+@invitations_router.post(
+    "/accept",
+    response_model=InvitationAccepted,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {
+            "description": "The link is invalid, expired or already used"
+        }
+    },
+)
+def accept_invitation(*, body: InvitationAccept) -> InvitationAccepted:
+    """Spend an emailed invitation link: the invitee chooses their own password."""
+    accepted = service.accept_invitation(
+        token=body.token, new_password=body.new_password
+    )
+    if accepted is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": INVITATION_INVALID,
+                "message": "This invitation link is invalid, has expired or was already used.",
+            },
+        )
+    return accepted

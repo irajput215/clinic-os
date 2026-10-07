@@ -21,8 +21,10 @@ SQLModel annotates `model_config` as its own type, so a plain `ConfigDict` is re
 
 import uuid
 from datetime import datetime
+from typing import Any
 
-from sqlmodel import SQLModel
+from pydantic import EmailStr, ModelWrapValidatorHandler, PrivateAttr, model_validator
+from sqlmodel import Field, SQLModel
 
 # PRIVATE API, deliberately; see the module docstring.
 from sqlmodel._compat import SQLModelConfig
@@ -128,3 +130,94 @@ class OwnPermissionsRead(SQLModel):
     model_config = SQLModelConfig(extra="forbid")
 
     permissions: list[str]
+
+
+class StaffRoleRead(SQLModel):
+    """One role a staff member holds: enough to show and to address it, not its bundle."""
+
+    model_config = SQLModelConfig(extra="forbid")
+
+    role_id: uuid.UUID
+    code: str
+    name: str
+
+
+class StaffMemberRead(SQLModel):
+    """One account of the caller's organisation (`GET`/`POST /api/v1/users/staff`).
+
+    No `tenant_id` (the caller's own), no `is_superuser` (a platform attribute an organisation does
+    not administer) and no credential material.
+    """
+
+    model_config = SQLModelConfig(extra="forbid")
+
+    id: uuid.UUID
+    email: str
+    full_name: str | None
+    is_active: bool
+    created_at: datetime | None
+    roles: list[StaffRoleRead]
+
+
+class StaffPublic(SQLModel):
+    """One page of the organisation's staff, plus the organisation's total."""
+
+    data: list[StaffMemberRead]
+    count: int
+
+
+class StaffInvite(SQLModel):
+    """The body of `POST /api/v1/users/staff`: who to invite and the role(s) they start with.
+
+    Strict (`extra="forbid"`) for every key but one. **A `tenant_id` is ignored and audited** rather
+    than refused (INV-1: *"a `tenant_id` from a body, header or query parameter is ignored and audited
+    as a cross-tenant attempt"*): the wrap validator drops it before validation and records that it
+    was there, and the service writes the audit event in the invitation's own transaction. The
+    invitation always lands in the session's tenant. There is no password field: the invitee
+    chooses their own through the emailed link.
+    """
+
+    model_config = SQLModelConfig(extra="forbid", str_strip_whitespace=True)
+
+    email: EmailStr = Field(max_length=255)
+    full_name: str = Field(min_length=1, max_length=255)
+    role_ids: list[uuid.UUID] = Field(min_length=1, max_length=7)
+
+    _client_tenant_id_supplied: bool = PrivateAttr(default=False)
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def _ignore_client_tenant_id(
+        cls, data: Any, handler: ModelWrapValidatorHandler[StaffInvite]
+    ) -> StaffInvite:
+        supplied = isinstance(data, dict) and "tenant_id" in data
+        if supplied:
+            data = {key: value for key, value in data.items() if key != "tenant_id"}
+        invite = handler(data)
+        invite._client_tenant_id_supplied = supplied
+        return invite
+
+    @property
+    def client_tenant_id_supplied(self) -> bool:
+        """Whether the request body carried a `tenant_id` (which was ignored)."""
+        return self._client_tenant_id_supplied
+
+
+class InvitationAccept(SQLModel):
+    """The body of `POST /api/v1/users/invitations/accept`: the emailed token and a new password.
+
+    The password bounds are the API's own (`UserRegister`, `NewPassword`): 8 to 128 characters.
+    """
+
+    model_config = SQLModelConfig(extra="forbid")
+
+    token: str = Field(min_length=1, max_length=2048)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class InvitationAccepted(SQLModel):
+    """The account the invitation belonged to, so the app can sign the person straight in."""
+
+    model_config = SQLModelConfig(extra="forbid")
+
+    email: str

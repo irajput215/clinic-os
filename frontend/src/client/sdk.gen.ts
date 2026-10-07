@@ -2,7 +2,7 @@
 
 import { type Client, type Options as Options2, type TDataShape, urlSearchParamsBodySerializer } from './client';
 import { client } from './client.gen';
-import type { auditListAuditEventsData, auditListAuditEventsErrors, auditListAuditEventsResponses, auditReadAuditEventData, auditReadAuditEventErrors, auditReadAuditEventResponses, clinicalRecordsAmendClinicalRecordData, clinicalRecordsAmendClinicalRecordErrors, clinicalRecordsAmendClinicalRecordResponses, clinicalRecordsAppendClinicalRecordVersionData, clinicalRecordsAppendClinicalRecordVersionErrors, clinicalRecordsAppendClinicalRecordVersionResponses, clinicalRecordsCreateClinicalRecordData, clinicalRecordsCreateClinicalRecordErrors, clinicalRecordsCreateClinicalRecordResponses, clinicalRecordsListPatientClinicalRecordsData, clinicalRecordsListPatientClinicalRecordsErrors, clinicalRecordsListPatientClinicalRecordsResponses, clinicalRecordsReadClinicalRecordData, clinicalRecordsReadClinicalRecordErrors, clinicalRecordsReadClinicalRecordResponses, clinicalRecordsReadClinicalRecordVersionData, clinicalRecordsReadClinicalRecordVersionErrors, clinicalRecordsReadClinicalRecordVersionResponses, clinicalRecordsSignClinicalRecordData, clinicalRecordsSignClinicalRecordErrors, clinicalRecordsSignClinicalRecordResponses, healthReadinessData, healthReadinessErrors, healthReadinessResponses, loginLoginAccessTokenData, loginLoginAccessTokenErrors, loginLoginAccessTokenResponses, loginRecoverPasswordData, loginRecoverPasswordErrors, loginRecoverPasswordResponses, loginResetPasswordData, loginResetPasswordErrors, loginResetPasswordResponses, loginTestTokenData, loginTestTokenResponses, patientsCreatePatientData, patientsCreatePatientErrors, patientsCreatePatientResponses, patientsListPatientsData, patientsListPatientsErrors, patientsListPatientsResponses, patientsReadPatientData, patientsReadPatientErrors, patientsReadPatientResponses, patientsUpdatePatientData, patientsUpdatePatientErrors, patientsUpdatePatientResponses, permissionsListPermissionsData, permissionsListPermissionsResponses, rolesListRolesData, rolesListRolesResponses, tenantsReadCurrentTenantData, tenantsReadCurrentTenantResponses, tenantsUpdateCurrentTenantData, tenantsUpdateCurrentTenantErrors, tenantsUpdateCurrentTenantResponses, tgaApprovalsCreateTgaApprovalData, tgaApprovalsCreateTgaApprovalErrors, tgaApprovalsCreateTgaApprovalResponses, tgaApprovalsListPatientTgaApprovalsData, tgaApprovalsListPatientTgaApprovalsErrors, tgaApprovalsListPatientTgaApprovalsResponses, tgaApprovalsMatchTgaApprovalData, tgaApprovalsMatchTgaApprovalErrors, tgaApprovalsMatchTgaApprovalResponses, tgaApprovalsReadTgaApprovalData, tgaApprovalsReadTgaApprovalErrors, tgaApprovalsReadTgaApprovalResponses, tgaApprovalsRevokeTgaApprovalData, tgaApprovalsRevokeTgaApprovalErrors, tgaApprovalsRevokeTgaApprovalResponses, tgaApprovalsSupersedeTgaApprovalData, tgaApprovalsSupersedeTgaApprovalErrors, tgaApprovalsSupersedeTgaApprovalResponses, tgaApprovalsVerifyTgaApprovalData, tgaApprovalsVerifyTgaApprovalErrors, tgaApprovalsVerifyTgaApprovalResponses, usersAssignRoleData, usersAssignRoleErrors, usersAssignRoleResponses, usersCreateUserData, usersCreateUserErrors, usersCreateUserResponses, usersDeleteUserData, usersDeleteUserErrors, usersDeleteUserMeData, usersDeleteUserMeResponses, usersDeleteUserResponses, usersReadOwnPermissionsData, usersReadOwnPermissionsResponses, usersReadUserByIdData, usersReadUserByIdErrors, usersReadUserByIdResponses, usersReadUserMeData, usersReadUserMeResponses, usersReadUserPermissionsData, usersReadUserPermissionsErrors, usersReadUserPermissionsResponses, usersReadUserRolesData, usersReadUserRolesErrors, usersReadUserRolesResponses, usersReadUsersData, usersReadUsersErrors, usersReadUsersResponses, usersRegisterUserData, usersRegisterUserErrors, usersRegisterUserResponses, usersRevokeRoleData, usersRevokeRoleErrors, usersRevokeRoleResponses, usersUpdatePasswordMeData, usersUpdatePasswordMeErrors, usersUpdatePasswordMeResponses, usersUpdateUserData, usersUpdateUserErrors, usersUpdateUserMeData, usersUpdateUserMeErrors, usersUpdateUserMeResponses, usersUpdateUserResponses, utilsHealthCheckData, utilsHealthCheckResponses, utilsTestEmailData, utilsTestEmailErrors, utilsTestEmailResponses } from './types.gen';
+import type { auditListAuditEventsData, auditListAuditEventsErrors, auditListAuditEventsResponses, auditReadAuditEventData, auditReadAuditEventErrors, auditReadAuditEventResponses, clinicalRecordsAmendClinicalRecordData, clinicalRecordsAmendClinicalRecordErrors, clinicalRecordsAmendClinicalRecordResponses, clinicalRecordsAppendClinicalRecordVersionData, clinicalRecordsAppendClinicalRecordVersionErrors, clinicalRecordsAppendClinicalRecordVersionResponses, clinicalRecordsCreateClinicalRecordData, clinicalRecordsCreateClinicalRecordErrors, clinicalRecordsCreateClinicalRecordResponses, clinicalRecordsListPatientClinicalRecordsData, clinicalRecordsListPatientClinicalRecordsErrors, clinicalRecordsListPatientClinicalRecordsResponses, clinicalRecordsReadClinicalRecordData, clinicalRecordsReadClinicalRecordErrors, clinicalRecordsReadClinicalRecordResponses, clinicalRecordsReadClinicalRecordVersionData, clinicalRecordsReadClinicalRecordVersionErrors, clinicalRecordsReadClinicalRecordVersionResponses, clinicalRecordsSignClinicalRecordData, clinicalRecordsSignClinicalRecordErrors, clinicalRecordsSignClinicalRecordResponses, healthReadinessData, healthReadinessErrors, healthReadinessResponses, loginLoginAccessTokenData, loginLoginAccessTokenErrors, loginLoginAccessTokenResponses, loginRecoverPasswordData, loginRecoverPasswordErrors, loginRecoverPasswordResponses, loginResetPasswordData, loginResetPasswordErrors, loginResetPasswordResponses, loginTestTokenData, loginTestTokenResponses, patientsCreatePatientData, patientsCreatePatientErrors, patientsCreatePatientResponses, patientsListPatientsData, patientsListPatientsErrors, patientsListPatientsResponses, patientsReadPatientData, patientsReadPatientErrors, patientsReadPatientResponses, patientsUpdatePatientData, patientsUpdatePatientErrors, patientsUpdatePatientResponses, permissionsListPermissionsData, permissionsListPermissionsResponses, rolesListRolesData, rolesListRolesResponses, tenantsReadCurrentTenantData, tenantsReadCurrentTenantResponses, tenantsUpdateCurrentTenantData, tenantsUpdateCurrentTenantErrors, tenantsUpdateCurrentTenantResponses, tgaApprovalsCreateTgaApprovalData, tgaApprovalsCreateTgaApprovalErrors, tgaApprovalsCreateTgaApprovalResponses, tgaApprovalsListPatientTgaApprovalsData, tgaApprovalsListPatientTgaApprovalsErrors, tgaApprovalsListPatientTgaApprovalsResponses, tgaApprovalsMatchTgaApprovalData, tgaApprovalsMatchTgaApprovalErrors, tgaApprovalsMatchTgaApprovalResponses, tgaApprovalsReadTgaApprovalData, tgaApprovalsReadTgaApprovalErrors, tgaApprovalsReadTgaApprovalResponses, tgaApprovalsRevokeTgaApprovalData, tgaApprovalsRevokeTgaApprovalErrors, tgaApprovalsRevokeTgaApprovalResponses, tgaApprovalsSupersedeTgaApprovalData, tgaApprovalsSupersedeTgaApprovalErrors, tgaApprovalsSupersedeTgaApprovalResponses, tgaApprovalsVerifyTgaApprovalData, tgaApprovalsVerifyTgaApprovalErrors, tgaApprovalsVerifyTgaApprovalResponses, usersAcceptInvitationData, usersAcceptInvitationErrors, usersAcceptInvitationResponses, usersAssignRoleData, usersAssignRoleErrors, usersAssignRoleResponses, usersCreateUserData, usersCreateUserErrors, usersCreateUserResponses, usersDeleteUserData, usersDeleteUserErrors, usersDeleteUserMeData, usersDeleteUserMeResponses, usersDeleteUserResponses, usersInviteStaffData, usersInviteStaffErrors, usersInviteStaffResponses, usersListStaffData, usersListStaffErrors, usersListStaffResponses, usersReadOwnPermissionsData, usersReadOwnPermissionsResponses, usersReadUserByIdData, usersReadUserByIdErrors, usersReadUserByIdResponses, usersReadUserMeData, usersReadUserMeResponses, usersReadUserPermissionsData, usersReadUserPermissionsErrors, usersReadUserPermissionsResponses, usersReadUserRolesData, usersReadUserRolesErrors, usersReadUserRolesResponses, usersReadUsersData, usersReadUsersErrors, usersReadUsersResponses, usersRegisterUserData, usersRegisterUserErrors, usersRegisterUserResponses, usersRevokeRoleData, usersRevokeRoleErrors, usersRevokeRoleResponses, usersUpdatePasswordMeData, usersUpdatePasswordMeErrors, usersUpdatePasswordMeResponses, usersUpdateUserData, usersUpdateUserErrors, usersUpdateUserMeData, usersUpdateUserMeErrors, usersUpdateUserMeResponses, usersUpdateUserResponses, utilsHealthCheckData, utilsHealthCheckResponses, utilsTestEmailData, utilsTestEmailErrors, utilsTestEmailResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -111,6 +111,58 @@ export class LoginService {
 }
 
 export class UsersService {
+    /**
+     * List Staff
+     *
+     * List the caller's organisation's accounts and the roles each holds.
+     */
+    public static listStaff<ThrowOnError extends boolean = true>(options?: Options<usersListStaffData, ThrowOnError>) {
+        return (options?.client ?? client).get<usersListStaffResponses, usersListStaffErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/users/staff',
+            ...options
+        });
+    }
+    
+    /**
+     * Invite Staff
+     *
+     * Onboard a staff member: create the account in the caller's organisation with the chosen
+     * roles, and email them a link to set their own password.
+     *
+     * The caller can grant only roles whose permissions they hold (R3, `403 GRANT_EXCEEDS_ACTOR`).
+     */
+    public static inviteStaff<ThrowOnError extends boolean = true>(options: Options<usersInviteStaffData, ThrowOnError>) {
+        return (options.client ?? client).post<usersInviteStaffResponses, usersInviteStaffErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/users/staff',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * Accept Invitation
+     *
+     * Spend an emailed invitation link: the invitee chooses their own password.
+     */
+    public static acceptInvitation<ThrowOnError extends boolean = true>(options: Options<usersAcceptInvitationData, ThrowOnError>) {
+        return (options.client ?? client).post<usersAcceptInvitationResponses, usersAcceptInvitationErrors, ThrowOnError>({
+            responseType: 'json',
+            url: '/api/v1/users/invitations/accept',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
     /**
      * Read Users
      *

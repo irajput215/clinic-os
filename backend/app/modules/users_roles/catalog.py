@@ -230,6 +230,8 @@ USERS_ROLES_PERMISSIONS: Final[dict[str, str]] = {
     "read_user_permissions": ADMINISTRATION_PERMISSION,
     "assign_role": ADMINISTRATION_PERMISSION,
     "revoke_role": ADMINISTRATION_PERMISSION,
+    "list_staff": ADMINISTRATION_PERMISSION,
+    "invite_staff": ADMINISTRATION_PERMISSION,
 }
 
 # R8's refusal reason. `01-requirements.md` R8 fixes the rule and the status (`409`); it does not name
@@ -281,3 +283,22 @@ TGA_APPROVAL_PERMISSIONS: Final[dict[str, str]] = {
 # happened is in the payload's `change` key (`GRANT`, `REVOKE`, `NONE`), and this is recorded as a
 # decision in the PR rather than left implicit.
 USER_PERMISSION_CHANGE: Final[str] = "user.permission_change"
+
+# The audit action a staff invitation emits: doc 07 §1's `user.create`, the closed catalogue's name
+# for `05-data-and-audit.md`'s `USER_CREATED` row (the same OPEN-1 naming decision as above). A
+# refused invitation writes it with `result = DENIED` and one of the reason codes below.
+USER_CREATE: Final[str] = "user.create"
+
+# Refusal reasons for a staff invitation, in the same `{code, message}` envelope as every other denial.
+# `EMAIL_UNAVAILABLE` is the one answer for an address that already has an account, in this
+# organisation or in any other: it never says which, so the refusal discloses no tenant
+# (`docs/features/03-users-and-roles/04-threat-model.md` T-03.8).
+EMAIL_UNAVAILABLE: Final[str] = "EMAIL_UNAVAILABLE"
+# Recorded (never returned) when a client put a `tenant_id` in the request: it is ignored, the
+# invitation lands in the session's tenant, and the attempt is audited (INV-1).
+CLIENT_TENANT_ID_IGNORED: Final[str] = "CLIENT_TENANT_ID_IGNORED"
+# The one answer for an invitation link that is unknown, tampered with, expired or already used.
+INVITATION_INVALID: Final[str] = "INVITATION_INVALID"
+# Inviting needs outgoing mail: the invitee sets their own password through the emailed link, so an
+# invitation that cannot be sent is refused before anything is written.
+EMAIL_NOT_CONFIGURED: Final[str] = "EMAIL_NOT_CONFIGURED"

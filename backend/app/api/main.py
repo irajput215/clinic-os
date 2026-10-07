@@ -11,14 +11,20 @@ from app.modules.tga_approvals.router import (
 from app.modules.tga_approvals.router import router as tga_approvals_router
 from app.modules.users_roles.router import (
     current_user_router,
+    invitations_router,
     permissions_router,
     roles_router,
+    staff_router,
     user_roles_router,
 )
 
 api_router = APIRouter()
 api_router.include_router(health.router)
 api_router.include_router(login.router)
+# Before the legacy `users.router`: its `/users/{user_id}` would otherwise capture the literal
+# `staff` segment (and answer `422` for a non-UUID id). `test_staff.py` pins the order.
+api_router.include_router(staff_router)
+api_router.include_router(invitations_router)
 api_router.include_router(users.router)
 api_router.include_router(utils.router)
 api_router.include_router(patients_router)
