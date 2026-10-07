@@ -59,6 +59,10 @@
 
 Click the **Use this template** button at the top of this page to create a new repository.
 
+## Run It Locally
+
+Start here: [HOW_TO_RUN.md](./HOW_TO_RUN.md) - prerequisites, configuration, running the backend and the app, tests, and troubleshooting.
+
 ## Backend Development
 
 Backend docs: [backend/README.md](./backend/README.md).
