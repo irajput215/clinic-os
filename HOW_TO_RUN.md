@@ -85,7 +85,25 @@ clinic member.
 
 Password reset: "Forgot password" on the sign-in page sends the email to Mailpit
 (<http://localhost:8025>). Its link uses `FRONTEND_HOST` (default `http://localhost:8000`); add
-`FRONTEND_HOST=http://127.0.0.1:5174` to `.env` if you work on the dev server.
+`FRONTEND_HOST=http://127.0.0.1:5174` to `.env` if you work on the dev server. A reset link works
+once: after it has set a password it is refused like an expired one.
+
+### Add staff to your clinic
+
+1. Signed in as the clinic's owner (or an administrator), open **Administration**. It starts on
+   **Staff**, the people in your organisation.
+2. **Invite staff member**: enter their full name and email and tick one or more roles. You can only
+   offer roles whose permissions you hold yourself. **Send invitation** adds them to the list.
+3. Open Mailpit at <http://localhost:8025>: the invitation email is there. Its link
+   (`{FRONTEND_HOST}/accept-invite?token=...`) is valid for 72 hours (`STAFF_INVITATION_EXPIRE_HOURS`)
+   and works once.
+4. Open the link (a private window keeps your own session): **Join your clinic** asks the invitee
+   to choose a password. **Set password and sign in** signs them straight into your clinic with the
+   invited roles.
+5. From then on they sign in at `/login` with that email and password.
+
+With no outgoing mail configured, **Send invitation** is refused (`503 EMAIL_NOT_CONFIGURED`) and
+nothing is created.
 
 ## 7. Checks
 
@@ -177,7 +195,18 @@ waits for the readiness probe. Secrets live in two places only: GitHub repositor
 (`DATABASE_URL`, `SECRET_KEY`, `FIRST_SUPERUSER_PASSWORD`, `FASTAPI_CLOUD_TOKEN`,
 `FASTAPI_CLOUD_APP_ID`) and the FastAPI Cloud application environment, which is what the running app
 reads (`fastapi deploy` ships code, never configuration). Set `FRONTEND_HOST` there to the app's
-public URL, or CORS and every emailed link point at `http://localhost:8000`. A local `.env.cloud` is for
+public URL, or CORS and every emailed link point at `http://localhost:8000`. Two more settings there
+decide whether the deployment is safe and complete:
+
+- **Outgoing mail (`SMTP_*`).** Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` (a
+  secret), `SMTP_TLS`/`SMTP_SSL` and `EMAILS_FROM_EMAIL` from your mail provider. Without them, staff
+  invitations are refused with `503 EMAIL_NOT_CONFIGURED` and password-recovery emails are never
+  sent (the page still says one was). Production has none of these set today.
+- **Never set `FASTAPI_ENV`.** `FASTAPI_ENV=development` turns the refusal to start with a
+  `changethis` secret into a warning, labels logs as `development` and turns Sentry off. It is for local work only;
+  production currently has `FASTAPI_ENV=development` and it must be removed.
+
+A local `.env.cloud` is for
 your own use, is gitignored and must never be committed. Details: [deployment.md](deployment.md).
 
 ## 10. Troubleshooting

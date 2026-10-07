@@ -18,11 +18,17 @@ Add these required [environment variables](https://fastapicloud.com/docs/builds-
 * `FIRST_SUPERUSER`: The email address of the first superuser.
 * `FRONTEND_HOST`: The public URL of the application, such as the generated `https://your-app.fastapicloud.dev` URL or a custom domain. It is the only CORS origin and the base of every emailed link; unset, it falls back to `http://localhost:8000`. `fastapi deploy` ships code only, so this value lives in the FastAPI Cloud environment, never in the workflow.
 
-To enable emails, add these optional environment variables with values from your email provider:
+Outgoing email is required: staff invitations and password recovery are both emailed links. Add these environment variables with values from your email provider:
 
 * `SMTP_HOST`
+* `SMTP_PORT` (default `587`)
 * `SMTP_USER`
+* `SMTP_TLS` / `SMTP_SSL` (default STARTTLS)
 * `EMAILS_FROM_EMAIL`
+
+Without `SMTP_HOST` and `EMAILS_FROM_EMAIL`, inviting staff is refused with `503 EMAIL_NOT_CONFIGURED` and no password-recovery email is ever sent, although the recovery page still says one was. The production application has none of these set today.
+
+Do **not** set `FASTAPI_ENV`. `FASTAPI_ENV=development` is for local work only: it downgrades the refusal to start with a `changethis` value for `SECRET_KEY`, `FIRST_SUPERUSER_PASSWORD` or a database password to a warning, labels logs as `development` and turns Sentry off. The production application currently has `FASTAPI_ENV=development` and it must be removed.
 
 To enable Sentry, configure `SENTRY_DSN`.
 
@@ -34,7 +40,7 @@ Add these required values and mark them as secrets:
 * `FIRST_SUPERUSER_PASSWORD`: The password of the first superuser.
 * `DATABASE_URL`: The PostgreSQL connection URL, configured automatically when using a database integration.
 
-To enable emails with an authenticated provider, add `SMTP_PASSWORD` as a secret.
+Add `SMTP_PASSWORD` (the email provider's password) as a secret.
 
 You can generate secure values for `SECRET_KEY` and `FIRST_SUPERUSER_PASSWORD` with:
 
