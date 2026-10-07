@@ -488,10 +488,14 @@ def test_the_pg_advisory_lock_is_transaction_scoped(api: AuditApi) -> None:
         _three_events(api)
         assert session is not None
 
+    # `pg_locks` is cluster-wide: scope it to this database, or a suite running against a sibling
+    # database in the same cluster (parallel branches, CI shards) holds a lock this test counts.
     with engine.connect() as conn:
         held = conn.execute(
             text(
                 "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND granted"
+                " AND database = (SELECT oid FROM pg_database"
+                " WHERE datname = current_database())"
             )
         ).scalar_one()
     assert held == 0, (
