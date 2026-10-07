@@ -34,3 +34,13 @@ dedicated endpoint whose proof the sign call requires server-side. The UI change
 - A tab close ends the session. That's acceptable for clinical workstations, and arguably desirable.
 - The interim step-up proves the password, not a second factor. It is recorded here as not
   meeting the MFA requirement, so nobody mistakes it for that.
+
+## Update 2026-10-07: the interim step-up is server-side
+
+Decision 3 no longer re-runs `POST /login/access-token` in the browser. The password is re-proved by
+`POST /api/v1/auth/step-up` (`backend/app/modules/identity_tenancy`), which stores only the SHA-256 of
+a random token bound to the user, the operation (`prescription.sign` or `prescription.dispatch`) and
+the script id, valid two minutes. The sign and dispatch transactions spend it once with a conditional
+`UPDATE`; a missing, spent, expired or mismatched grant is `403 STEP_UP_REQUIRED` and audited
+`auth.step_up_failed`. When D-003 lands, only the factor checked by that endpoint changes. It is still
+not MFA (audited `mfa_method = PASSWORD_REENTRY`).

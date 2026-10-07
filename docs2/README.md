@@ -60,5 +60,5 @@ with a `clinic_name` (open registration is on in development). The public bookin
 | 04 | [Calendar and booking](sdlc/04-calendar-and-booking/) | Calendar day/week, patient Appointments tab, public booking page | API (appointments module) |
 | 05 | [TGA approvals](sdlc/05-approvals/) | Approvals register, patient approvals tab | API: patient tab (#46) and register (`GET /tga-approvals`, M2 phase 2A) |
 | 06 | [Patient activity](sdlc/06-patient-activity/) | Patient record → Activity | API (audit log, #42) |
-| 07 | [Script queue](sdlc/07-script-queue/) | Script queue, review and sign, patient scripts tab | Preview (contract proposed) |
+| 07 | [Script queue](sdlc/07-script-queue/) | Script queue, review and sign, patient scripts tab | API (contract agreed 2026-10-07; dispatch queues, no pharmacy transport) |
 | 08 | [Today](sdlc/08-today/) | Today's clinic dashboard | Preview (contract proposed) |

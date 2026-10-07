@@ -48,7 +48,9 @@ CANDIDATE_CODES = (
 # The seeded codes that are **not** in the 19 of `01-requirements.md`, with the route that needs each.
 # Two names now stand here, and each is a permission-matrix change and needs the CTO's OPEN-1/OPEN-2
 # reconciliation: `tenant:read` (Feature 01's `GET /api/v1/tenants/current`) and `tga_approval:revoke`
-# (Feature 08's `POST /api/v1/tga-approvals/{id}/revoke`).
+# (Feature 08's `POST /api/v1/tga-approvals/{id}/revoke`). A third, `prescription:read`, is the script
+# queue's read (`GET /api/v1/prescriptions`, Milestone 2 phase 2D): a candidate code of
+# `01-requirements.md`, granted to the four roles that hold any prescription code.
 ADDED_CODES = ("tenant:read", "tga_approval:revoke", "prescription:read")
 
 
