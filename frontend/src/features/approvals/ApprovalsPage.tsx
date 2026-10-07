@@ -1,64 +1,55 @@
-import { useQuery } from "@tanstack/react-query"
+import { useInfiniteQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
-import { ArrowRight, Plus, Unplug } from "lucide-react"
-import { useMemo, useState } from "react"
+import { Loader2, Plus } from "lucide-react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { approvalsQuery, REGISTER_NOT_AVAILABLE } from "@/data/approvals"
-import { patientName, patientsQuery } from "@/data/patients"
-import type { TgaApproval } from "@/data/types"
+import {
+  EXPIRING_WINDOW_DAYS,
+  REGISTER_FILTER_KEYS,
+  REGISTER_FILTERS,
+  type RegisterFilter,
+  registerQuery,
+} from "@/data/approvals"
 import {
   Card,
   EmptyState,
   ErrorState,
-  Mono,
   PageHeader,
   SkeletonRows,
 } from "@/design/primitives"
-import { clinicToday, daysBetween, lastCoveredDay } from "@/lib/format"
-import { Refusal } from "@/lib/http"
+import { isForbidden } from "@/lib/http"
 import { cn } from "@/lib/utils"
 import { RecordApprovalDialog } from "./ApprovalDialogs"
 import { ApprovalsTable } from "./ApprovalsTable"
 
-const FILTERS = {
+const EMPTY: Record<RegisterFilter, { title: string; body?: string }> = {
   attention: {
-    label: "Needs action",
-    test: (a: TgaApproval, today: string) =>
-      a.state === "PENDING" ||
-      (a.state === "ACTIVE" &&
-        daysBetween(today, lastCoveredDay(a.valid_to)) <= 30),
+    title: "Nothing needs action.",
+    body: `No approvals are pending verification or expiring within ${EXPIRING_WINDOW_DAYS} days.`,
   },
-  active: { label: "Active", test: (a: TgaApproval) => a.state === "ACTIVE" },
-  pending: {
-    label: "Pending",
-    test: (a: TgaApproval) => a.state === "PENDING",
+  active: { title: "No active approvals." },
+  pending: { title: "No approvals are waiting for verification." },
+  inactive: { title: "No expired or revoked approvals." },
+  all: {
+    title: "No TGA approvals on file yet.",
+    body: "Record one from the TGA letter. A second clinician then verifies it before it can authorise a script.",
   },
-  inactive: {
-    label: "Expired & revoked",
-    test: (a: TgaApproval) => !["ACTIVE", "PENDING"].includes(a.state),
-  },
-  all: { label: "All", test: () => true },
-} as const
-type FilterKey = keyof typeof FILTERS
+}
 
-const registerUnavailable = (error: unknown) =>
-  error instanceof Refusal && error.code === REGISTER_NOT_AVAILABLE
-
-export function ApprovalsPage() {
-  const approvals = useQuery(approvalsQuery)
-  const patients = useQuery(patientsQuery)
-  const [filter, setFilter] = useState<FilterKey>("attention")
+/**
+ * The practice-wide register: `GET /api/v1/tga-approvals`, one filter at a time, newest first, a
+ * keyset page at a time. The chip counts are the practice's totals from the same response, so they
+ * are right whatever has been loaded.
+ */
+export function ApprovalsPage({ filter }: { filter: RegisterFilter }) {
+  const register = useInfiniteQuery(registerQuery(filter))
   const [recording, setRecording] = useState(false)
-  const today = clinicToday()
 
-  const names = useMemo(
-    () =>
-      new Map((patients.data?.data ?? []).map((p) => [p.id, patientName(p)])),
-    [patients.data],
-  )
-  const rows = (approvals.data ?? [])
-    .filter((a) => FILTERS[filter].test(a, today))
-    .sort((a, b) => a.valid_to.localeCompare(b.valid_to))
+  const pages = register.data?.pages ?? []
+  const rows = pages.flatMap((p) => p.data)
+  const counts = pages[0]?.counts
+  const total = counts ? REGISTER_FILTERS[filter].count(counts) : undefined
+  const forbidden = register.isError && isForbidden(register.error)
 
   return (
     <>
@@ -72,111 +63,89 @@ export function ApprovalsPage() {
         }
       />
 
-      {registerUnavailable(approvals.error) ? (
-        <RegisterUnavailable />
-      ) : (
-        <>
-          <div
-            className="mb-4 flex flex-wrap gap-1.5"
-            role="tablist"
-            aria-label="Filter approvals"
-          >
-            {(Object.keys(FILTERS) as FilterKey[]).map((key) => {
-              const count = (approvals.data ?? []).filter((a) =>
-                FILTERS[key].test(a, today),
-              ).length
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  role="tab"
-                  aria-selected={filter === key}
-                  onClick={() => setFilter(key)}
-                  className={cn(
-                    "rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-colors",
-                    filter === key
-                      ? "border-clay bg-clay-tint text-clay-deep"
-                      : "border-line bg-paper text-stone hover:text-ink",
-                  )}
-                >
-                  {FILTERS[key].label}
-                  <span className="ml-1.5 font-mono text-[11px] opacity-70">
-                    {count}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
+      {forbidden ? null : (
+        <nav
+          className="mb-4 flex flex-wrap gap-1.5"
+          aria-label="Filter approvals"
+        >
+          {REGISTER_FILTER_KEYS.map((key) => (
+            <Link
+              key={key}
+              to="/approvals"
+              search={{ filter: key }}
+              aria-current={filter === key ? "page" : undefined}
+              className={cn(
+                "rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-colors",
+                filter === key
+                  ? "border-clay bg-clay-tint text-clay-deep"
+                  : "border-line bg-paper text-stone hover:text-ink",
+              )}
+            >
+              {REGISTER_FILTERS[key].label}
+              <span className="ml-1.5 inline-block min-w-[1ch] font-mono text-[11px] opacity-70">
+                {counts ? REGISTER_FILTERS[key].count(counts) : ""}
+              </span>
+            </Link>
+          ))}
+        </nav>
+      )}
 
-          <Card bodyClassName="-mx-5 -my-[18px]">
-            {approvals.isPending ? (
-              <div className="p-5">
-                <SkeletonRows rows={5} />
-              </div>
-            ) : approvals.isError ? (
-              <div className="p-5">
+      <Card bodyClassName="-mx-5 -my-[18px]">
+        {register.isPending ? (
+          <div className="p-5">
+            <SkeletonRows rows={5} />
+          </div>
+        ) : register.isError && rows.length === 0 ? (
+          <div className="p-5">
+            <ErrorState
+              error={register.error}
+              onRetry={() => register.refetch()}
+            />
+          </div>
+        ) : rows.length === 0 ? (
+          <EmptyState title={EMPTY[filter].title} body={EMPTY[filter].body} />
+        ) : (
+          <>
+            <ApprovalsTable approvals={rows} showPatient />
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line-faint px-5 py-3 text-[13px] text-stone">
+              <span aria-live="polite">
+                Showing{" "}
+                <span className="font-mono text-ink">{rows.length}</span>
+                {total !== undefined ? (
+                  <>
+                    {" "}
+                    of <span className="font-mono text-ink">{total}</span>
+                  </>
+                ) : null}
+                , newest first
+              </span>
+              {register.hasNextPage ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={register.isFetchingNextPage}
+                  onClick={() => register.fetchNextPage()}
+                >
+                  {register.isFetchingNextPage ? (
+                    <Loader2 className="animate-spin" />
+                  ) : null}
+                  Show more
+                </Button>
+              ) : null}
+            </div>
+            {register.isFetchNextPageError ? (
+              <div className="px-5 pb-4">
                 <ErrorState
-                  error={approvals.error}
-                  onRetry={() => approvals.refetch()}
+                  error={register.error}
+                  onRetry={() => register.fetchNextPage()}
                 />
               </div>
-            ) : rows.length === 0 ? (
-              <EmptyState
-                title={
-                  filter === "attention"
-                    ? "Nothing needs action."
-                    : "No approvals here."
-                }
-                body={
-                  filter === "attention"
-                    ? "No approvals are pending verification or expiring within 30 days."
-                    : undefined
-                }
-              />
-            ) : (
-              <ApprovalsTable approvals={rows} patientNames={names} />
-            )}
-          </Card>
-        </>
-      )}
+            ) : null}
+          </>
+        )}
+      </Card>
 
       <RecordApprovalDialog open={recording} onOpenChange={setRecording} />
     </>
-  )
-}
-
-/**
- * The register's designed refusal. Listing every approval in the practice needs
- * `GET /api/v1/tga-approvals` (proposed in docs2/sdlc/05-approvals/api.md), which the API does not
- * serve. Rather than show sample data, the page says what is missing and where the live data is.
- */
-function RegisterUnavailable() {
-  return (
-    <Card>
-      <div
-        role="status"
-        className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between"
-      >
-        <div className="flex items-start gap-3">
-          <Unplug className="mt-0.5 size-4 shrink-0 text-stone" />
-          <div className="space-y-1 text-sm">
-            <p className="font-semibold text-ink">
-              The practice-wide register isn't available yet.
-            </p>
-            <p className="max-w-[620px] text-stone">
-              Listing every approval in the practice needs{" "}
-              <Mono className="text-ink">GET /api/v1/tga-approvals</Mono>, which
-              the API doesn't serve yet. Each patient's approvals are live: open
-              a patient to record, verify or revoke them.
-            </p>
-          </div>
-        </div>
-        <Button asChild variant="outline" className="ml-7 shrink-0 sm:ml-0">
-          <Link to="/patients">
-            Open patients <ArrowRight />
-          </Link>
-        </Button>
-      </div>
-    </Card>
   )
 }

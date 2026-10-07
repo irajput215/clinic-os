@@ -15,11 +15,11 @@ import { RevokeApprovalDialog, VerifyApprovalDialog } from "./ApprovalDialogs"
 
 export function ApprovalsTable({
   approvals,
-  patientNames,
+  showPatient = false,
 }: {
-  approvals: TgaApproval[]
-  /** When given, a Patient column links each row to the record. */
-  patientNames?: Map<string, string>
+  approvals: (TgaApproval & { patient_display_name?: string | null })[]
+  /** The register's Patient column: each row links to the record by the name the API returned. */
+  showPatient?: boolean
 }) {
   const [verifying, setVerifying] = useState<TgaApproval | null>(null)
   const [revoking, setRevoking] = useState<TgaApproval | null>(null)
@@ -27,12 +27,14 @@ export function ApprovalsTable({
 
   return (
     <>
-      <div className="overflow-x-auto">
+      {/* `relative`: the header's sr-only label is absolutely positioned, and without a positioned
+          scroller it escapes the clip and scrolls the whole page sideways at phone width. */}
+      <div className="relative overflow-x-auto">
         <table className="data-table">
           <thead>
             <tr>
-              {patientNames ? <th className="pl-5">Patient</th> : null}
-              <th className={patientNames ? "" : "pl-5"}>Reference</th>
+              {showPatient ? <th className="pl-5">Patient</th> : null}
+              <th className={showPatient ? "" : "pl-5"}>Reference</th>
               <th>Grain</th>
               <th title="As printed on the TGA letter. The end date itself is not covered (D-006).">
                 Valid (letter)
@@ -48,19 +50,27 @@ export function ApprovalsTable({
               const daysLeft = daysBetween(today, lastCoveredDay(a.valid_to))
               return (
                 <tr key={a.id}>
-                  {patientNames ? (
+                  {showPatient ? (
                     <td className="pl-5">
-                      <Link
-                        to="/patients/$patientId"
-                        params={{ patientId: a.patient_id }}
-                        search={{ tab: "approvals" }}
-                        className="font-semibold whitespace-nowrap hover:text-clay"
-                      >
-                        {patientNames.get(a.patient_id) ?? "Patient"}
-                      </Link>
+                      {a.patient_display_name ? (
+                        <Link
+                          to="/patients/$patientId"
+                          params={{ patientId: a.patient_id }}
+                          search={{ tab: "approvals" }}
+                          className="font-semibold whitespace-nowrap hover:text-clay"
+                        >
+                          {a.patient_display_name}
+                        </Link>
+                      ) : (
+                        // The patient's record is no longer readable; the approval is still
+                        // regulatory history, so the row stays, unlinked.
+                        <span className="whitespace-nowrap text-stone italic">
+                          Record removed
+                        </span>
+                      )}
                     </td>
                   ) : null}
-                  <td className={patientNames ? "" : "pl-5"}>
+                  <td className={showPatient ? "" : "pl-5"}>
                     <Mono>{a.approval_reference}</Mono>
                   </td>
                   <td className="whitespace-nowrap">

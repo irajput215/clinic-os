@@ -82,7 +82,7 @@ export function RolesMatrix() {
       </p>
 
       <Card bodyClassName="-mx-5 -my-[18px]">
-        <div className="overflow-x-auto rounded-card">
+        <div className="relative overflow-x-auto rounded-card">
           <table className="data-table" data-testid="permission-matrix">
             <caption className="sr-only">
               Which permissions each role includes

@@ -2,8 +2,8 @@ import { AxiosError } from "axios"
 
 /**
  * A refusal decided in the browser, carrying a machine-readable `code` like the API's `detail.code`,
- * so screens handle both identically. Raised by the preview store (src/data/preview) and by an API
- * adapter that knows a route does not exist yet (`NOT_AVAILABLE`).
+ * so screens handle both identically. Raised by the preview store (src/data/preview) and its
+ * repositories.
  */
 export class Refusal extends Error {
   constructor(

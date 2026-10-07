@@ -26,8 +26,7 @@ const DEFAULTS: Record<Capability, Source> = {
   patients: "api",
   audit: "api",
   clinicalRecords: "api",
-  // The per-patient tab and every write are live. The practice-wide register needs
-  // GET /tga-approvals, which does not exist yet, so it shows a designed refusal (not preview data).
+  // The practice-wide register (GET /tga-approvals), the per-patient tab and every write are live.
   tgaApprovals: "api",
   // backend/app/modules/appointments (docs2/sdlc/04-calendar-and-booking/api.md).
   appointments: "api",

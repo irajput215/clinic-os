@@ -37,6 +37,10 @@ catalogue's names, and the from-state/to-state detail the feature asks for is ca
 The reconciliation is recorded in the PR body: it is a defect in the document set (two closed
 vocabularies that disagree), not a judgement call taken silently here.
 
+The one exception is `tga_approval.read` (the feature's `approval.read`, registered 2026-10-07): a read
+changes nothing, so there is no domain row to carry its detail, and the allow-list gives it
+`patient_id`, `query_filters` and `result_count` - identifiers, codes and counts, never a value.
+
 ## The validity boundary is one function (D-006 §2)
 
 [`within_validity_window`][app.modules.tga_approvals.service.within_validity_window] is the single
@@ -313,11 +317,12 @@ def _record(
     reason: str | None = None,
     payload: dict[str, object] | None = None,
 ) -> None:
-    """Write one platform audit event on the caller's transaction, payload-free.
+    """Write one platform audit event on the caller's transaction.
 
-    The action catalogue allows no metadata for a TGA approval action (see the module docstring), so
+    The action catalogue allows no metadata for a TGA approval write (see the module docstring), so
     the envelope carries the whole record: actor, tenant, role, request and correlation identifiers,
-    `resource_id`, `result` and `reason`. The domain detail is in `tga_approval_events`.
+    `resource_id`, `result` and `reason`. The domain detail is in `tga_approval_events`. Only
+    `tga_approval.read` passes a `payload`, and the writer refuses any key its allow-list lacks.
     """
     audit.record(
         session,

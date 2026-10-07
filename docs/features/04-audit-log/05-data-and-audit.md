@@ -72,7 +72,7 @@ This list is closed:
 | `PATIENT` | `patient.read`, `patient.create`, `patient.update`, `patient.export` |
 | `CLINICAL_RECORD` | `clinical_record.read`, `clinical_record.write` |
 | `PRESCRIPTION` | `prescription.create`, `prescription.modify`, `prescription.sign`, `prescription.dispatch`, `prescription.dispatch_blocked`, `prescription.reject`, `prescription.dispatch_failed` |
-| `TGA_APPROVAL` | `tga_approval.create`, `tga_approval.modify`, `tga_approval.state_change`, `tga_approval.match`, `tga_approval.verify` |
+| `TGA_APPROVAL` | `tga_approval.create`, `tga_approval.modify`, `tga_approval.state_change`, `tga_approval.match`, `tga_approval.verify`, `tga_approval.read` |
 | `TGA_DOCUMENT` | `tga_document.ingest`, `tga_document.extract` |
 | `USER` | `user.permission_change`, `user.create`, `user.deactivate` |
 | `TENANT` | `tenant.security_config_change` |
@@ -81,7 +81,15 @@ This list is closed:
 | `APPOINTMENT` | `appointment.create`, `appointment.state_change` |
 
 **No new action name may be invented.** A new action must be registered in doc 07 §1 first, by a change
-to the source contract, before any code emits it. A missing mandatory event is a defect, and an event
+to the source contract, before any code emits it.
+
+**Registered 2026-10-07 (owner decision, M2 phase 2A): `tga_approval.read`.** Feature 08 names
+`approval.read` ("patient-level read: actor, role, patient_id, count") and the catalogue had no TGA read
+action, so TGA reads and read refusals went unaudited. It is registered in the catalogue's lowercase
+dotted form, the same mapping already applied to `approval.created` -> `tga_approval.create`. It may
+carry `patient_id` and `result_count` (a patient-level read) or `query_filters` and `result_count` (the
+practice-wide register, `GET /api/v1/tga-approvals`), and nothing else
+(`backend/app/modules/audit/actions.py`). A missing mandatory event is a defect, and an event
 coverage test asserts the list.
 
 `APPOINTMENT` and its two actions were registered on 2026-10-07 by the owner, with the appointments

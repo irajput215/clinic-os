@@ -1,8 +1,8 @@
 import { expect, test } from "./fixtures"
 
 /**
- * TGA approvals against the real tga_approvals module (`tgaApprovals: "api"`). The patient's tab is
- * live end to end. The practice-wide register is a designed refusal until GET /tga-approvals exists.
+ * TGA approvals against the real tga_approvals module (`tgaApprovals: "api"`): the patient's tab and
+ * the practice-wide register (GET /api/v1/tga-approvals) are live end to end.
  */
 test("an approval is recorded, refused four-eyes, and revoked on the patient's tab", async ({
   signedIn: page,
@@ -59,30 +59,111 @@ test("an approval is recorded, refused four-eyes, and revoked on the patient's t
   ).toBeVisible()
 })
 
-test("the practice-wide register says which endpoint it is waiting for", async ({
+test("the practice-wide register lists, filters and counts the practice's approvals", async ({
   signedIn: page,
 }) => {
-  const registerReads: string[] = []
+  const registerReads: URL[] = []
   page.on("request", (r) => {
-    if (r.method() === "GET" && r.url().endsWith("/api/v1/tga-approvals"))
-      registerReads.push(r.url())
+    const url = new URL(r.url())
+    if (r.method() === "GET" && url.pathname === "/api/v1/tga-approvals")
+      registerReads.push(url)
   })
+
   await page.goto("/approvals")
-
-  const refusal = page.getByRole("status").filter({
-    hasText: "The practice-wide register isn't available yet.",
-  })
-  await expect(refusal).toBeVisible()
-  await expect(refusal).toContainText("GET /api/v1/tga-approvals")
-  // No sample rows, no filter counts that would read as "zero approvals".
-  await expect(page.getByText("Preview data.")).toHaveCount(0)
+  const filters = page.getByRole("navigation", { name: "Filter approvals" })
   await expect(
-    page.getByRole("tablist", { name: "Filter approvals" }),
-  ).toHaveCount(0)
-  await expect(page.getByRole("table")).toHaveCount(0)
-  // The refusal is decided in the client: nothing asks the API for a route it doesn't serve.
-  expect(registerReads).toHaveLength(0)
+    filters.getByRole("link", { name: /Needs action/ }),
+  ).toHaveAttribute("aria-current", "page")
+  await expect(page.getByText("Preview data.")).toHaveCount(0)
+  await expect(page.getByText("isn't available yet")).toHaveCount(0)
 
-  await refusal.getByRole("link", { name: "Open patients" }).click()
-  await expect(page).toHaveURL(/\/patients$/)
+  // Record from the register: it lands pending, so it needs action.
+  await page.getByRole("button", { name: "Record approval" }).click()
+  const record = page.getByRole("dialog")
+  await record.getByLabel("Patient").selectOption({ label: "Willem Barker" })
+  await record.getByLabel("TGA category").selectOption("CATEGORY_1")
+  await record.getByLabel("Dosage form").selectOption("ORAL_LIQUID")
+  await record.getByLabel("TGA reference").fill("SAS-B 2026-660123")
+  await record.getByLabel("Valid to (as on the letter)").fill("2027-08-31")
+  await record.getByRole("button", { name: "Record approval" }).click()
+  await expect(record).toBeHidden()
+
+  const row = page.getByRole("row", { name: /SAS-B 2026-660123/ })
+  await expect(row).toContainText("Willem Barker")
+  await expect(row).toContainText("Pending verification")
+  await expect(
+    page.getByText(/^Showing \d+ of \d+, newest first$/),
+  ).toBeVisible()
+
+  // "Needs action" is one server query: pending, or active and expiring within 30 days.
+  expect(
+    registerReads.some(
+      (u) =>
+        u.searchParams.getAll("state").join() === "PENDING" &&
+        u.searchParams.get("expiring_within_days") === "30",
+    ),
+  ).toBe(true)
+  // No patient identifier and no tenant ever travels in the register's URL.
+  for (const u of registerReads) {
+    expect(u.searchParams.has("tenant_id")).toBe(false)
+    expect(u.searchParams.has("patient_id")).toBe(false)
+  }
+
+  // The filter is in the page URL and every chip carries the practice's count.
+  await filters.getByRole("link", { name: /^Pending/ }).click()
+  await expect(page).toHaveURL(/\/approvals\?filter=pending$/)
+  await expect(
+    page.getByRole("row", { name: /SAS-B 2026-660123/ }),
+  ).toBeVisible()
+  for (const name of [
+    /Needs action \d+/,
+    /Active \d+/,
+    /Pending \d+/,
+    /All \d+/,
+  ])
+    await expect(filters.getByRole("link", { name })).toBeVisible()
+
+  // Revoked, it leaves Pending and is under Expired & revoked.
+  await page
+    .getByRole("row", { name: /SAS-B 2026-660123/ })
+    .getByRole("button", { name: "Revoke" })
+    .click()
+  const revoke = page.getByRole("dialog")
+  await revoke.getByLabel("Reason").selectOption("ENTERED_IN_ERROR")
+  await revoke.getByRole("button", { name: "Revoke" }).click()
+  await expect(revoke).toBeHidden()
+  await expect(
+    page.getByRole("row", { name: /SAS-B 2026-660123/ }),
+  ).toHaveCount(0)
+
+  await filters.getByRole("link", { name: /Expired & revoked/ }).click()
+  const revoked = page.getByRole("row", { name: /SAS-B 2026-660123/ })
+  await expect(revoked).toContainText("Revoked")
+  await expect(revoked.getByRole("button")).toHaveCount(0)
+
+  // The row links to the patient's own approvals tab.
+  await revoked.getByRole("link", { name: "Willem Barker" }).click()
+  await expect(page).toHaveURL(/\/patients\/[^/]+\?tab=approvals$/)
+  await expect(
+    page.getByRole("row", { name: /SAS-B 2026-660123/ }),
+  ).toContainText("Revoked")
+
+  // Back returns to the filter the user left.
+  await page.goBack()
+  await expect(
+    filters.getByRole("link", { name: /Expired & revoked/ }),
+  ).toHaveAttribute("aria-current", "page")
+})
+
+test("the register never scrolls the page sideways at phone width", async ({
+  signedIn: page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto("/approvals?filter=all")
+  await expect(page.getByText(/newest first|No TGA approvals/)).toBeVisible()
+  // The table scrolls inside its card; the page itself must not.
+  const overflow = await page.evaluate(
+    () => (document.scrollingElement?.scrollWidth ?? 0) - window.innerWidth,
+  )
+  expect(overflow).toBe(0)
 })

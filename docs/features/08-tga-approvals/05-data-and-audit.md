@@ -57,7 +57,7 @@ Source documents stay in the private document store. Any future OCR vendor is OP
 | `approval.verified` | successful verify | actor, approval_id, status before and after |
 | `approval.revoked` | successful revoke | actor, approval_id, reason code |
 | `approval.expired` | system job | approval_id, job_id |
-| `approval.read` | patient-level read | actor, role, patient_id, count |
+| `approval.read` (emitted as `tga_approval.read`, registered 2026-10-07) | patient-level read; detail read; one per register page | actor, role, patient_id, count; for the register `query_filters` and count |
 | `approval.denied` | any refused action | actor, attempted action, denial reason (permission, tenant, validation, transition) |
 | `gate.check` | each gate lookup | approval_id or none, result, caller |
 
