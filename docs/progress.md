@@ -69,6 +69,7 @@ Read this first. **Done** means merged to `main` and verified; **Next** is order
 | D31 | **RBAC Last Administrator Rule (R8)**: Revoking a role refuses with `403 LAST_ADMINISTRATOR` when it would leave a tenant with zero administrators | PR #38 · [`modules/users_roles/service.py`](../backend/app/modules/users_roles/service.py) |
 | D32 | **Session Auth 401 vs 403 Separation**: Only unauthenticated `401` triggers a sign-out; `403 Forbidden` routes to a dedicated access-denied state without destroying the user's session | PR #39 · template `frontend/src/client/core/request.ts` (removed by D33; the same rule is [`frontend/src/lib/http.ts`](../frontend/src/lib/http.ts)) |
 | D33 | **One frontend**: `frontend-features/` is the only app, built into the backend image and served at `/`; the template UI in `frontend/` is deleted, and deploy, Docker, Playwright CI, compose, SDK generation and pre-commit all point at the new app (the app directory was renamed to `frontend/` on 2026-10-07, D34) | [ADR-F005](../docs2/adr/ADR-F005-one-app-served-by-the-backend.md) |
+| D35 | **Milestone 1 defects**: every response sends `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `nosniff`, `no-referrer` and HSTS; rate limits keyed per session as the design says (per address without one); `GET /tenants/current` moved to the 300/min read class; signup limited at 20/min; the self-permissions path settled as `GET /users/me/permissions` | [`security_headers.py`](../backend/app/core/security_headers.py) · [`rate_limit.py`](../backend/app/core/rate_limit.py) · [`test_security_headers.py`](../backend/tests/security/test_security_headers.py) · [`test_rate_limit_keys.py`](../backend/tests/security/test_rate_limit_keys.py) |
 | D34 | **App directory renamed**: `frontend-features/` is now `frontend/` (workspace package `frontend`); every build, CI, compose, hook and doc path follows. Run guide: [`HOW_TO_RUN.md`](../HOW_TO_RUN.md) | [ADR-F005 addendum](../docs2/adr/ADR-F005-one-app-served-by-the-backend.md#addendum-2026-10-07-the-app-directory-is-frontend) |
 
 ---
@@ -135,7 +136,8 @@ Features 06–07, 09, 11–16 · full OIDC provider integration · prescription 
 | Audit log (Feature 04) | **Not started** | All domain routes note `Audit: deferred` |
 | Authentication (Feature 02) | **Template only**, 8-day token lifetime, blocked by D-003 | [`D-003`](reference/decisions/D-003-identity-model.md) |
 | Organisation self-registration | **Operational** — signup registers the clinic, creates the tenant, and makes the signer Practice Owner | `POST /api/v1/users/signup` |
-| Rate limiting | **Built** for login (20/min), password recovery (5/min), and admin API (20/min) | [`backend/app/core/rate_limit.py`](../backend/app/core/rate_limit.py) |
+| Rate limiting | **Built**: login and signup 20/min per address; password recovery and reset 5/min per address; administrative class 20/min and single-resource reads 300/min, per session (per address without one) | [`backend/app/core/rate_limit.py`](../backend/app/core/rate_limit.py) |
+| Repository visibility | **Public** (owner confirmed 2026-10-07). History holds the template's `changethis` defaults, never a production secret; production secrets live in GitHub secrets and the FastAPI Cloud environment. Full-history gitleaks: three upstream-template false positives only | [`README.md`](README.md) "Security findings" |
 | Database migrations | **15 migrations, head `a1f2b3c4d5e6`**, `alembic check` clean | `uv run alembic check` |
 | Tests | **184 passing backend tests, 94%+ coverage**; Playwright E2E suites passing | `uv run pytest` · Playwright CI |
 | Schema diagrams | **Generated and committed**; CI gates against drift | [`docs/reference/schema/`](reference/schema/README.md) |
@@ -151,8 +153,8 @@ Twenty-two routes across public intake, probes, user management, patient records
 |---|---|---|---|
 | `POST` | `/api/v1/login/access-token` | Open | Rate-limited (20/min) |
 | `POST` | `/api/v1/password-recovery/{email}` | Open | Rate-limited (5/min) |
-| `POST` | `/api/v1/reset-password/` | Open | Unauthenticated (**gap: not rate-limited**) |
-| `POST` | `/api/v1/users/signup` | Open | Organisation registration; creates tenant & assigns Practice Owner |
+| `POST` | `/api/v1/reset-password/` | Open | Rate-limited (shares the 5/min recovery window) |
+| `POST` | `/api/v1/users/signup` | Open | Organisation registration; creates tenant & assigns Practice Owner; rate-limited (20/min). A taken email is answered `400`, which discloses that the address has an account: a recorded residual risk (see `register_user` in `backend/app/api/routes/users.py`) |
 | `GET` | `/api/v1/utils/health-check/` | Open | Liveness probe (does not touch database) |
 | `GET` | `/api/v1/health/ready/` | Open | Readiness probe (verifies database connectivity) |
 | `POST` | `/api/v1/login/test-token` | Session | Validates token payload |

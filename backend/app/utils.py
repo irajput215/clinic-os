@@ -1,16 +1,14 @@
 import logging
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import emails
-import jwt
 from jinja2 import Template
-from jwt.exceptions import InvalidTokenError
 
-from app.core import security
 from app.core.config import settings
+from app.core.password_bound_tokens import LinkClaims, PasswordBoundToken
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -102,24 +100,29 @@ def generate_new_account_email(
     return EmailData(html_content=html_content, subject=subject)
 
 
-def generate_password_reset_token(email: str) -> str:
-    delta = timedelta(hours=settings.EMAIL_RESET_TOKEN_EXPIRE_HOURS)
-    now = datetime.now(UTC)
-    expires = now + delta
-    exp = expires.timestamp()
-    encoded_jwt = jwt.encode(
-        {"exp": exp, "nbf": now, "sub": email},
-        settings.SECRET_KEY,
-        algorithm=security.ALGORITHM,
+# Recovery links share the invitation links' mechanism (`app.core.password_bound_tokens`): signed
+# with their own derived key, expiring, and bound to the password hash at issue, so a link sets a
+# password once and any later password change retires it.
+_RESET_LINK = PasswordBoundToken(
+    purpose="password-reset", key_label=b"clinicos/password-reset/v1"
+)
+
+
+def generate_password_reset_token(
+    *, email: str, hashed_password: str, now: datetime | None = None
+) -> str:
+    return _RESET_LINK.issue(
+        subject=email,
+        hashed_password=hashed_password,
+        lifetime=timedelta(hours=settings.EMAIL_RESET_TOKEN_EXPIRE_HOURS),
+        now=now,
     )
-    return encoded_jwt
 
 
-def verify_password_reset_token(token: str) -> str | None:
-    try:
-        decoded_token = jwt.decode(
-            token, settings.SECRET_KEY, algorithms=[security.ALGORITHM]
-        )
-        return str(decoded_token["sub"])
-    except InvalidTokenError:
-        return None
+def verify_password_reset_token(token: str) -> LinkClaims | None:
+    """The claims of a valid, unexpired recovery link. Whether it is spent is the caller's check."""
+    return _RESET_LINK.read(token)
+
+
+def password_reset_token_unspent(claims: LinkClaims, hashed_password: str) -> bool:
+    return _RESET_LINK.still_unspent(claims, hashed_password)

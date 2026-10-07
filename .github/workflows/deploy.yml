@@ -93,3 +93,26 @@ jobs:
           exit 1
         env:
           READINESS_URL: ${{ vars.READINESS_URL || 'https://clinic-os.fastapicloud.dev/api/v1/health/ready/' }}
+      - name: Verify the deployment serves this build of the app
+        # Readiness only proves the API. On 2026-10-07 the job above was green while `/` returned
+        # 404: the image had shipped without backend/app/frontend. Ask for `/` as a browser does and
+        # require the entry script this run built, so a missing UI or a stale deployment fails here.
+        run: |
+          expected=$(grep -oE '/assets/index-[A-Za-z0-9_-]+\.js' backend/app/frontend/index.html | head -1)
+          if [ -z "$expected" ]; then
+            echo "::error::backend/app/frontend/index.html has no entry script; the build step did not run."
+            exit 1
+          fi
+          for attempt in $(seq 1 24); do
+            served=$(curl -sS --max-time 10 -H 'Accept: text/html' "$APP_URL" || true)
+            if printf '%s' "$served" | grep -qF "$expected"; then
+              echo "App OK after ${attempt} attempt(s): $APP_URL serves $expected"
+              exit 0
+            fi
+            echo "attempt ${attempt}: $APP_URL does not serve $expected yet"
+            sleep 5
+          done
+          echo "::error::Deployed, but $APP_URL does not serve this build ($expected). Check that backend/app/frontend reaches the image (.dockerignore, .fastapicloudignore)."
+          exit 1
+        env:
+          APP_URL: ${{ vars.APP_URL || 'https://clinic-os.fastapicloud.dev/' }}

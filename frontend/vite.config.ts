@@ -13,8 +13,8 @@ import { defineConfig, loadEnv, type Plugin } from "vite"
  * the bundle was built for and nothing else.
  *
  * `frame-ancestors` is deliberately absent: browsers ignore it in a <meta> policy. Clickjacking
- * protection must be sent by the host as HTTP headers (`Content-Security-Policy: frame-ancestors
- * 'none'` and `X-Frame-Options: DENY`); see docs2/architecture.md.
+ * protection is sent by the host as HTTP headers (`Content-Security-Policy: frame-ancestors 'none'`
+ * and `X-Frame-Options: DENY`), by `backend/app/core/security_headers.py`; see docs2/architecture.md.
  */
 const contentSecurityPolicy = (apiUrl: string): Plugin => {
   const connect = ["'self'", apiUrl].filter(Boolean).join(" ")

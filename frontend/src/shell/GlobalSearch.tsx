@@ -75,7 +75,7 @@ export function GlobalSearch() {
             setOpen(false)
           }
         }}
-        className="h-[38px] w-[180px] rounded-full border border-line bg-paper pr-3 pl-[34px] text-[14px] outline-none transition-[width,border-color] placeholder:text-stone-faint focus:w-[240px] focus:border-clay sm:w-[214px] sm:focus:w-[280px]"
+        className="h-[38px] w-[150px] rounded-full border border-line bg-paper pr-3 pl-[34px] text-[14px] outline-none transition-[width,border-color] placeholder:text-stone-faint focus:w-[240px] focus:border-clay sm:w-[214px] sm:focus:w-[280px]"
       />
       {open && term.trim() ? (
         <div

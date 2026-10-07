@@ -1,14 +1,15 @@
-import { signInThroughUi, signUp } from "./accounts"
-import { expect, test } from "./fixtures"
+import { signInThroughUi, signInWithApi, signUp } from "./accounts"
+import { expect, openSignedIn, test } from "./fixtures"
 
-// Each test signs up its own account: changing a password or a name must never touch the shared clinic.
+// Changing a password or a name must never touch the shared clinic: the name and phone tests use
+// the setup project's second clinic (`clinic.peer`), and the tests that change a password or
+// deactivate an account sign up an account of their own.
 
 test("a person updates their own name, and the app shows it", async ({
   page,
-  request,
+  clinic,
 }) => {
-  const me = await signUp(request, { clinic: true })
-  await signInThroughUi(page, me)
+  await openSignedIn(page, clinic.peer.token)
 
   const nav = page.getByRole("navigation", { name: "Main" })
   await nav.getByRole("link", { name: "Settings" }).click()
@@ -36,7 +37,7 @@ test("a person changes their password, then signs in with the new one", async ({
   request,
 }) => {
   const me = await signUp(request, { clinic: true })
-  await signInThroughUi(page, me, "/settings")
+  await openSignedIn(page, await signInWithApi(request, me), "/settings")
   await page.getByRole("tab", { name: "Password" }).click()
 
   // A wrong current password is refused by the server, in its own words.
@@ -78,7 +79,7 @@ test("deactivating your own account asks first, then signs you out for good", as
   request,
 }) => {
   const me = await signUp(request, { clinic: false })
-  await signInThroughUi(page, me, "/settings")
+  await openSignedIn(page, await signInWithApi(request, me), "/settings")
   await page.getByRole("tab", { name: "Account" }).click()
 
   await page.getByRole("button", { name: "Deactivate account" }).click()
@@ -100,11 +101,10 @@ test("deactivating your own account asks first, then signs you out for good", as
 
 test("settings and administration fit a phone screen without sideways scrolling", async ({
   page,
-  request,
+  clinic,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 })
-  const me = await signUp(request, { clinic: true })
-  await signInThroughUi(page, me, "/settings")
+  await openSignedIn(page, clinic.peer.token, "/settings")
   for (const path of ["/settings", "/settings?tab=password", "/admin"]) {
     await page.goto(path)
     await expect(page.getByRole("tablist")).toBeVisible()

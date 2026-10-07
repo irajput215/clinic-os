@@ -24,8 +24,8 @@ cd backend && uv run pytest tests/rbac tests/users tests/security/test_users_rba
 | ID | Case | Expected result | Command |
 | --- | --- | --- | --- |
 | **F1** | A user holds one or two roles | Effective permissions are the union of the bundles; a Doctor without `tga_approval:create` is refused `403` | `cd backend && uv run pytest tests/rbac/test_role_bundles.py::test_role_bundle_resolves_to_permission_set -v` |
-| **F2** | Invite a staff member with a role | `201`; user created in the caller's tenant as `INVITED` with only that bundle | `cd backend && uv run pytest tests/users/test_lifecycle.py::test_create_user_in_tenant -v` |
-| **F3** | Accept an invitation after the window | Refused; the invitation cannot be accepted | `cd backend && uv run pytest tests/users/test_invitations.py::test_invitation_expires -v` |
+| **F2** | Invite a staff member with a role | `201`; user created in the caller's tenant with only that bundle (no `INVITED` status column yet: the account cannot sign in until the invitee sets a password) | `cd backend && uv run pytest tests/users/test_staff.py::test_an_invited_person_sets_a_password_once_and_lands_in_the_right_tenant -v` |
+| **F3** | Accept an invitation after the window | Refused; the invitation cannot be accepted | `cd backend && uv run pytest tests/users/test_staff.py::test_a_tampered_expired_or_foreign_token_is_refused -v` |
 | **F4** | Change a permission without a recent step-up | `403 STEP_UP_REQUIRED`; with step-up the change applies and both sets are recorded | `cd backend && uv run pytest tests/users/test_permissions.py::test_permission_change_requires_step_up -v` |
 | **F5** | Remove the last Administrator grant | `409`; the change is refused | `cd backend && uv run pytest tests/users/test_lifecycle.py::test_removing_last_administrator_refused -v` |
 | **F6** | Delete a system role | Refused; system roles are not deletable | `cd backend && uv run pytest tests/rbac/test_roles.py::test_system_role_not_deletable -v` |

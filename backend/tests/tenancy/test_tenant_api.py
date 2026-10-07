@@ -214,17 +214,53 @@ def test_patch_without_the_permission_is_refused(rbac: RbacApi) -> None:
     assert _tenant_row(owner.tenant_id) == before
 
 
-def test_the_tenancy_routes_are_rate_limited(rbac: RbacApi) -> None:
-    """R15/S12: `/api/v1/tenants/*` is the administrative class, 20 per minute, `429` with `Retry-After`."""
+def test_the_tenant_change_is_the_administrative_class(rbac: RbacApi) -> None:
+    """R15/S12: a change under `/api/v1/tenants/*` is the administrative class, 20 per minute,
+    `429` with `Retry-After`."""
     owner = rbac.register_tenant(clinic_name="Rate Limit Clinic")
     assert owner.tenant_id is not None
 
     for _ in range(20):
+        response = rbac.client.patch(TENANTS_URL, json={}, headers=owner.headers)
+        assert response.status_code == 403, response.text
+
+    refused = rbac.client.patch(TENANTS_URL, json={}, headers=owner.headers)
+    assert refused.status_code == 429
+    assert "Retry-After" in refused.headers
+
+
+def test_the_tenant_read_is_the_single_resource_read_class(rbac: RbacApi) -> None:
+    """R15: single-resource reads are limited at 300 per minute, `429` with `Retry-After`.
+
+    `GET /tenants/current` is a single-resource read of the caller's own tenant, so it is limited -
+    just not out of the 20-a-minute administrative budget, which the app shell would otherwise spend
+    on every page load before an administrator ever opened the administration screen.
+    """
+    owner = rbac.register_tenant(clinic_name="Read Limit Clinic")
+    assert owner.tenant_id is not None
+
+    for _ in range(300):
         assert rbac.client.get(TENANTS_URL, headers=owner.headers).status_code == 200
 
     refused = rbac.client.get(TENANTS_URL, headers=owner.headers)
     assert refused.status_code == 429
     assert "Retry-After" in refused.headers
+
+
+def test_tenant_reads_do_not_spend_the_administrative_budget(rbac: RbacApi) -> None:
+    owner = rbac.register_tenant(clinic_name="Budget Clinic")
+    assert owner.tenant_id is not None
+    roles_url = f"{settings.API_V1_STR}/roles"
+
+    for _ in range(25):
+        assert rbac.client.get(TENANTS_URL, headers=owner.headers).status_code == 200
+
+    assert rbac.client.get(roles_url, headers=owner.headers).status_code == 200
+    # And the other way round: an exhausted administrative budget leaves the read alone.
+    for _ in range(20):
+        rbac.client.get(roles_url, headers=owner.headers)
+    assert rbac.client.get(roles_url, headers=owner.headers).status_code == 429
+    assert rbac.client.get(TENANTS_URL, headers=owner.headers).status_code == 200
 
 
 def test_the_tenant_read_returns_none_for_an_unknown_tenant() -> None:

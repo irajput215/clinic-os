@@ -358,6 +358,36 @@ export type HTTPValidationError = {
 };
 
 /**
+ * InvitationAccept
+ *
+ * The body of `POST /api/v1/users/invitations/accept`: the emailed token and a new password.
+ *
+ * The password bounds are the API's own (`UserRegister`, `NewPassword`): 8 to 128 characters.
+ */
+export type InvitationAccept = {
+    /**
+     * Token
+     */
+    token: string;
+    /**
+     * New Password
+     */
+    new_password: string;
+};
+
+/**
+ * InvitationAccepted
+ *
+ * The account the invitation belonged to, so the app can sign the person straight in.
+ */
+export type InvitationAccepted = {
+    /**
+     * Email
+     */
+    email: string;
+};
+
+/**
  * Message
  */
 export type Message = {
@@ -387,8 +417,8 @@ export type NewPassword = {
  * The caller's own effective permission codes, sorted (`GET /api/v1/users/me/permissions`).
  *
  * Advisory UI data: the shell reads it to hide controls a role cannot use. It is the design's
- * `GET /api/v1/auth/capabilities` row (`03-design.md`, "Endpoints": *"advisory UI data only; never a
- * control"*) under the path the frontend contract names. Every route still re-authorises
+ * self-permissions row (`03-design.md`, "Endpoints": *"advisory UI data only; never a
+ * control"*). Every route still re-authorises
  * server-side (INV-3). No user or tenant identifier is echoed back: the caller is the session.
  */
 export type OwnPermissionsRead = {
@@ -737,6 +767,104 @@ export type SoapNote = {
      * Plan
      */
     plan?: string | null;
+};
+
+/**
+ * StaffInvite
+ *
+ * The body of `POST /api/v1/users/staff`: who to invite and the role(s) they start with.
+ *
+ * Strict (`extra="forbid"`) for every key but one. **A `tenant_id` is ignored and audited** rather
+ * than refused (INV-1: *"a `tenant_id` from a body, header or query parameter is ignored and audited
+ * as a cross-tenant attempt"*): the wrap validator drops it before validation and records that it
+ * was there, and the service writes the audit event in the invitation's own transaction. The
+ * invitation always lands in the session's tenant. There is no password field: the invitee
+ * chooses their own through the emailed link.
+ */
+export type StaffInvite = {
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Full Name
+     */
+    full_name: string;
+    /**
+     * Role Ids
+     */
+    role_ids: Array<string>;
+};
+
+/**
+ * StaffMemberRead
+ *
+ * One account of the caller's organisation (`GET`/`POST /api/v1/users/staff`).
+ *
+ * No `tenant_id` (the caller's own), no `is_superuser` (a platform attribute an organisation does
+ * not administer) and no credential material.
+ */
+export type StaffMemberRead = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Full Name
+     */
+    full_name: string | null;
+    /**
+     * Is Active
+     */
+    is_active: boolean;
+    /**
+     * Created At
+     */
+    created_at: string | null;
+    /**
+     * Roles
+     */
+    roles: Array<StaffRoleRead>;
+};
+
+/**
+ * StaffPublic
+ *
+ * One page of the organisation's staff, plus the organisation's total.
+ */
+export type StaffPublic = {
+    /**
+     * Data
+     */
+    data: Array<StaffMemberRead>;
+    /**
+     * Count
+     */
+    count: number;
+};
+
+/**
+ * StaffRoleRead
+ *
+ * One role a staff member holds: enough to show and to address it, not its bundle.
+ */
+export type StaffRoleRead = {
+    /**
+     * Role Id
+     */
+    role_id: string;
+    /**
+     * Code
+     */
+    code: string;
+    /**
+     * Name
+     */
+    name: string;
 };
 
 /**
@@ -1588,6 +1716,106 @@ export type loginResetPasswordResponses = {
 };
 
 export type loginResetPasswordResponse = loginResetPasswordResponses[keyof loginResetPasswordResponses];
+
+export type usersListStaffData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Skip
+         */
+        skip?: number;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/users/staff';
+};
+
+export type usersListStaffErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type usersListStaffError = usersListStaffErrors[keyof usersListStaffErrors];
+
+export type usersListStaffResponses = {
+    /**
+     * Successful Response
+     */
+    200: StaffPublic;
+};
+
+export type usersListStaffResponse = usersListStaffResponses[keyof usersListStaffResponses];
+
+export type usersInviteStaffData = {
+    body: StaffInvite;
+    path?: never;
+    query?: never;
+    url: '/api/v1/users/staff';
+};
+
+export type usersInviteStaffErrors = {
+    /**
+     * A role is absent, or belongs to another organisation
+     */
+    404: unknown;
+    /**
+     * Refused: the address already has an account. The same answer whichever organisation holds it, so no organisation is disclosed.
+     */
+    409: unknown;
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+    /**
+     * Outgoing mail is not configured, so no invitation can be sent
+     */
+    503: unknown;
+};
+
+export type usersInviteStaffError = usersInviteStaffErrors[keyof usersInviteStaffErrors];
+
+export type usersInviteStaffResponses = {
+    /**
+     * Successful Response
+     */
+    201: StaffMemberRead;
+};
+
+export type usersInviteStaffResponse = usersInviteStaffResponses[keyof usersInviteStaffResponses];
+
+export type usersAcceptInvitationData = {
+    body: InvitationAccept;
+    path?: never;
+    query?: never;
+    url: '/api/v1/users/invitations/accept';
+};
+
+export type usersAcceptInvitationErrors = {
+    /**
+     * The link is invalid, expired or already used
+     */
+    400: unknown;
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type usersAcceptInvitationError = usersAcceptInvitationErrors[keyof usersAcceptInvitationErrors];
+
+export type usersAcceptInvitationResponses = {
+    /**
+     * Successful Response
+     */
+    200: InvitationAccepted;
+};
+
+export type usersAcceptInvitationResponse = usersAcceptInvitationResponses[keyof usersAcceptInvitationResponses];
 
 export type usersReadUsersData = {
     body?: never;

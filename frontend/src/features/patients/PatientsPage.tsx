@@ -110,8 +110,10 @@ export function PatientsPage() {
               <thead>
                 <tr>
                   <th className="rounded-tl-card pl-5">Patient</th>
-                  <th>Reference</th>
-                  <th>Date of birth</th>
+                  <th className="max-sm:hidden">Reference</th>
+                  <th className="max-md:rounded-tr-card max-md:pr-5">
+                    Date of birth
+                  </th>
                   <th className="max-md:hidden">Mobile</th>
                   <th className="rounded-tr-card pr-5 max-md:hidden">Suburb</th>
                 </tr>
@@ -144,10 +146,10 @@ export function PatientsPage() {
                         </span>
                       ) : null}
                     </td>
-                    <td>
+                    <td className="max-sm:hidden">
                       <Mono className="text-stone">{patientRef(p.id)}</Mono>
                     </td>
-                    <td>
+                    <td className="max-md:pr-5">
                       {formatDate(p.date_of_birth)}{" "}
                       <span className="text-stone">
                         · {age(p.date_of_birth)}

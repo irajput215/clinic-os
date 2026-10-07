@@ -28,6 +28,10 @@ Replace every `REPLACE_ME` in `.env`. Generate each value with
   created, so set it before step 3.
 - `DOMAIN` - only used by `compose.deploy.yml`; leave it for local work.
 
+`FRONTEND_HOST` (default `http://localhost:8000`) is the URL that serves the app: the only CORS
+origin and the base of emailed links. Leave it for local work against `:8000`; see step 6 for the
+dev server.
+
 Keep `USERS_OPEN_REGISTRATION=true` locally: it is what lets you create a clinic from the signup
 page. Never commit `.env`.
 
@@ -81,7 +85,25 @@ clinic member.
 
 Password reset: "Forgot password" on the sign-in page sends the email to Mailpit
 (<http://localhost:8025>). Its link uses `FRONTEND_HOST` (default `http://localhost:8000`); add
-`FRONTEND_HOST=http://127.0.0.1:5174` to `.env` if you work on the dev server.
+`FRONTEND_HOST=http://127.0.0.1:5174` to `.env` if you work on the dev server. A reset link works
+once: after it has set a password it is refused like an expired one.
+
+### Add staff to your clinic
+
+1. Signed in as the clinic's owner (or an administrator), open **Administration**. It starts on
+   **Staff**, the people in your organisation.
+2. **Invite staff member**: enter their full name and email and tick one or more roles. You can only
+   offer roles whose permissions you hold yourself. **Send invitation** adds them to the list.
+3. Open Mailpit at <http://localhost:8025>: the invitation email is there. Its link
+   (`{FRONTEND_HOST}/accept-invite?token=...`) is valid for 72 hours (`STAFF_INVITATION_EXPIRE_HOURS`)
+   and works once.
+4. Open the link (a private window keeps your own session): **Join your clinic** asks the invitee
+   to choose a password. **Set password and sign in** signs them straight into your clinic with the
+   invited roles.
+5. From then on they sign in at `/login` with that email and password.
+
+With no outgoing mail configured, **Send invitation** is refused (`503 EMAIL_NOT_CONFIGURED`) and
+nothing is created.
 
 ## 7. Checks
 
@@ -171,7 +193,20 @@ Pushing to `main` (or running it from the Actions tab) runs `.github/workflows/d
 the app, runs `prestart.sh` against the production database and deploys to FastAPI Cloud, then
 waits for the readiness probe. Secrets live in two places only: GitHub repository secrets
 (`DATABASE_URL`, `SECRET_KEY`, `FIRST_SUPERUSER_PASSWORD`, `FASTAPI_CLOUD_TOKEN`,
-`FASTAPI_CLOUD_APP_ID`) and the FastAPI Cloud application environment. A local `.env.cloud` is for
+`FASTAPI_CLOUD_APP_ID`) and the FastAPI Cloud application environment, which is what the running app
+reads (`fastapi deploy` ships code, never configuration). Set `FRONTEND_HOST` there to the app's
+public URL, or CORS and every emailed link point at `http://localhost:8000`. Two more settings there
+decide whether the deployment is safe and complete:
+
+- **Outgoing mail (`SMTP_*`).** Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` (a
+  secret), `SMTP_TLS`/`SMTP_SSL` and `EMAILS_FROM_EMAIL` from your mail provider. Without them, staff
+  invitations are refused with `503 EMAIL_NOT_CONFIGURED` and password-recovery emails are never
+  sent (the page still says one was). Production has none of these set today.
+- **Never set `FASTAPI_ENV`.** `FASTAPI_ENV=development` turns the refusal to start with a
+  `changethis` secret into a warning, labels logs as `development` and turns Sentry off. It is for local work only;
+  production currently has `FASTAPI_ENV=development` and it must be removed.
+
+A local `.env.cloud` is for
 your own use, is gitignored and must never be committed. Details: [deployment.md](deployment.md).
 
 ## 10. Troubleshooting
@@ -181,9 +216,12 @@ your own use, is gitignored and must never be committed. Details: [deployment.md
 - **Port already in use** (`5432`, `8000`, `5174`, `8025`) - find the owner with
   `lsof -nP -iTCP:8000 -sTCP:LISTEN` and stop it. The dev server uses a fixed port (`strictPort`)
   and fails rather than moving.
-- **429 Too Many Requests in e2e runs** - login is limited to 20/min and password recovery to
-  5/min per client, per backend process. Restart the backend to clear the window, or start the
-  test backend with `RATE_LIMIT_ENABLED=false`.
+- **429 Too Many Requests in e2e runs** - login and signup are limited to 20/min and password
+  recovery to 5/min per client address, per backend process. One full run spends 18 sign-ins and 4
+  recovery calls, and a run started within a minute of the previous one against the same backend
+  first waits out that minute (it prints `Waiting ...s for the previous run's rate-limit window`).
+  A `429` therefore means something else is spending the budget, such as a dev session signing in
+  repeatedly against the same backend.
 - **`{"detail":"Not Found"}` on `http://127.0.0.1:8000/`** - the app is not built: `bun run build`,
   then restart the backend if it started before the first build.
 - **`ValidationError` for `SECRET_KEY`, `PROJECT_NAME` or `DATABASE_URL` on start** - `.env` is missing:

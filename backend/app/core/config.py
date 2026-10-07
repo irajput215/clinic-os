@@ -3,6 +3,7 @@ from typing import Literal, Self
 
 from pydantic import (
     EmailStr,
+    Field,
     HttpUrl,
     PostgresDsn,
     computed_field,
@@ -79,6 +80,10 @@ class Settings(BaseSettings):
         return self
 
     EMAIL_RESET_TOKEN_EXPIRE_HOURS: int = 48
+    # How long a staff invitation link stays valid (`03-users-and-roles` R10: "Invitations expire if
+    # not accepted inside the configured window"). The design does not fix the window; 72 hours lets
+    # an invitation sent on a Friday be accepted on the Monday.
+    STAFF_INVITATION_EXPIRE_HOURS: int = Field(default=72, ge=1, le=24 * 14)
 
     @computed_field  # type: ignore[prop-decorator]
     @property

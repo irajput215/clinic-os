@@ -64,7 +64,7 @@ The backend Docker image builds the frontend, so the server does not need Bun or
 
 The included `.github/workflows/deploy-docker-compose.yml` workflow runs the deployment commands on the server when manually triggered from GitHub Actions.
 
-Use a self-hosted runner only for a repository whose contributors and workflow code you trust. GitHub recommends using self-hosted runners with private repositories because workflows execute directly on the runner machine.
+Use a self-hosted runner only for a repository whose contributors and workflow code you trust. GitHub recommends using self-hosted runners with private repositories because workflows execute directly on the runner machine. **This repository is public:** a pull request from a fork can change a workflow to run on any registered runner, so before registering one, require approval for workflow runs from all outside collaborators (**Settings** > **Actions** > **General**), or deploy from a private mirror instead.
 
 ### Configure Repository Variables and Secrets
 
@@ -73,6 +73,8 @@ In the repository, go to **Settings** > **Secrets and variables** > **Actions** 
 * `DOMAIN`
 * `PROJECT_NAME`
 * `FIRST_SUPERUSER`
+
+`FRONTEND_HOST` is an optional repository variable: the public URL of the app, which is the only CORS origin and the base of every emailed link. Unset, `compose.deploy.yml` uses `https://${DOMAIN}`.
 
 To enable emails, add these optional repository variables:
 

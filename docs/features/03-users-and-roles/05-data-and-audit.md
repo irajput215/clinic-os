@@ -58,6 +58,15 @@ US-30.
 | `PERMISSION_REVOKED` | permission removed | target id, permission code, actor, step-up flag |
 | `ACCESS_REVIEW_COMPLETED` | periodic access review closes | review window, reviewer, accounts listed, accounts flagged |
 
+**As built.** The staff invitation emits doc 07 §1's `user.create` (the closed catalogue's name for
+`USER_CREATED`, as `user.permission_change` stands for `ROLE_ASSIGNED`/`ROLE_REVOKED`; OPEN-1). Its
+payload allow-list is `target_user_id`, `added` (the role codes) and `step_up`; the inviter is the
+envelope's `actor_id`, and the invitation expiry is the event's timestamp plus
+`STAFF_INVITATION_EXPIRE_HOURS`, so no key was invented for it. Each granted role also emits
+`user.permission_change` `GRANT`. Refusals write `user.create` `DENIED` with `PERMISSION_NOT_HELD`,
+`GRANT_EXCEEDS_ACTOR`, `EMAIL_UNAVAILABLE` or `CLIENT_TENANT_ID_IGNORED` (the last alongside the
+successful create). Accepting the invitation writes nothing: the catalogue has no credential event.
+
 A refused create, grant or assignment writes a denial event with `result = DENIED` and a reason code
 (`PERMISSION_NOT_HELD`, `GRANT_EXCEEDS_ACTOR`, `CROSS_TENANT`, `STEP_UP_REQUIRED`). The audit store is
 append-only by grant: the app role holds `SELECT, INSERT` on `audit_log` and never `UPDATE`, `DELETE` or

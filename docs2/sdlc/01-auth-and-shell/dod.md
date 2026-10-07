@@ -11,11 +11,13 @@
 | Signup, password recovery and reset rebuilt from the removed `frontend/` (R10 to R13), e2e in `tests/account.spec.ts` | done |
 | Administration rebuilt from the removed `frontend/` (R14, R15), e2e in `tests/admin.spec.ts` | done |
 | Settings rebuilt from the removed `frontend/` (R16), e2e in `tests/settings.spec.ts` | done |
+| Staff list and invitation (R14) and invitation acceptance (R17), backed by `GET`/`POST /users/staff` and `POST /users/invitations/accept`; e2e in `tests/staff.spec.ts`, API in `backend/tests/users/test_staff.py` | done |
 | Served by the backend at `/` from the production build; CI e2e runs against that build ([ADR-F005](../../adr/ADR-F005-one-app-served-by-the-backend.md)) | done |
 
 `GET /api/v1/users/me/permissions` is served by `backend/app/modules/users_roles/router.py`
 (`read_own_permissions`) and tested in `backend/tests/users/test_own_permissions.py`. It is the
-design's `GET /api/v1/auth/capabilities` row
+design's self-permissions row (named `GET /api/v1/auth/capabilities` until the owner settled the path
+on 2026-10-07)
 ([`docs/features/03-users-and-roles/03-design.md`](../../../docs/features/03-users-and-roles/03-design.md),
 "Endpoints": valid session, advisory UI data only, never a control). It writes no audit event: the
 closed action catalogue in

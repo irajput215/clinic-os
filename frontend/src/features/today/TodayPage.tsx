@@ -70,7 +70,7 @@ export function TodayPage() {
         <StatCard
           to="/approvals"
           value={today.approvals_expiring.length}
-          label="Approvals expiring ≤ 30 d"
+          label={"Approvals expiring ≤\u00a030\u00a0d"}
           sub={
             today.approvals_expiring.length ? "renewals needed" : "all current"
           }

@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.core.correlation import CorrelationIdMiddleware
 from app.core.errors import install_exception_handlers
 from app.core.logging import configure_logging
+from app.core.security_headers import SecurityHeadersMiddleware
 
 FRONTEND_DIR = Path(__file__).parent / "frontend"
 
@@ -41,6 +42,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Every response - API, /docs and the app's HTML at `/` - refuses framing and sniffing
+# (`app/core/security_headers.py`). Outside CORS, so a CORS refusal carries the headers as well.
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Added last, so it is the outermost user middleware: every request gets its handle before any
 # other middleware runs, and the echo header is present on a CORS refusal as well as a success.

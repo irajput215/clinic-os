@@ -1,5 +1,5 @@
 import { queryOptions } from "@tanstack/react-query"
-import { apiCall } from "@/data/api"
+import { ClinicalRecordsService } from "@/client"
 import type { ClinicalRecordSummary, SoapNote } from "@/data/types"
 
 /**
@@ -13,12 +13,6 @@ import type { ClinicalRecordSummary, SoapNote } from "@/data/types"
 
 /** The API's largest timeline page (`MAX_TIMELINE_PAGE_SIZE`). */
 const PAGE_SIZE = 100
-
-interface RecordsPage {
-  data: ClinicalRecordSummary[]
-  count: number
-  next_cursor: string | null
-}
 
 /**
  * Only the sections the clinician actually wrote, trimmed. The API renders every section it is sent
@@ -38,34 +32,33 @@ export const recordsRepo = {
     const records: ClinicalRecordSummary[] = []
     let cursor: string | undefined
     do {
-      const page = await apiCall<RecordsPage>(
-        "GET",
-        "/api/v1/patients/{patient_id}/clinical-records",
-        {
+      const { data: page } =
+        await ClinicalRecordsService.recordsListPatientClinicalRecords({
           path: { patient_id: patientId },
           query: { limit: PAGE_SIZE, cursor },
-        },
-      )
-      records.push(...page.data)
+        })
+      records.push(...(page.data as ClinicalRecordSummary[]))
       cursor = page.next_cursor ?? undefined
     } while (cursor)
     return records
   },
-  create: (patientId: string, soap: SoapNote) =>
-    apiCall<{ id: string }>("POST", "/api/v1/clinical-records", {
-      body: {
-        patient_id: patientId,
-        record_type: "NOTE",
-        soap: writtenSections(soap),
-      },
-    }),
+  create: async (patientId: string, soap: SoapNote) =>
+    (
+      await ClinicalRecordsService.recordsCreateClinicalRecord({
+        body: {
+          patient_id: patientId,
+          record_type: "NOTE",
+          soap: writtenSections(soap),
+        },
+      })
+    ).data,
   sign: async (recordId: string) => {
-    await apiCall("POST", "/api/v1/clinical-records/{record_id}/sign", {
+    await ClinicalRecordsService.recordsSignClinicalRecord({
       path: { record_id: recordId },
     })
   },
   amend: async (recordId: string, soap: SoapNote, reason: string) => {
-    await apiCall("POST", "/api/v1/clinical-records/{record_id}/amendments", {
+    await ClinicalRecordsService.recordsAmendClinicalRecord({
       path: { record_id: recordId },
       body: { soap: writtenSections(soap), amendment_reason: reason.trim() },
     })

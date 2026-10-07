@@ -110,8 +110,8 @@ All client-facing paths carry the `/api/v1` prefix (D-005).
 
 | Method and path | Permission | Step-up | Notes |
 | --- | --- | --- | --- |
-| `GET /api/v1/users` | `users:manage` | no | tenant-scoped list, cursor-paginated |
-| `POST /api/v1/users` | `users:manage` | yes, 5 min | invite; `409` duplicate email; `422` role not grantable |
+| `GET /api/v1/users` | `users:manage` | no | tenant-scoped list, cursor-paginated. **Served as `GET /api/v1/users/staff`** (the bare `/users/` is the frozen superuser route), `skip`/`limit` offset paging like `UsersPublic` |
+| `POST /api/v1/users` | `users:manage` | yes, 5 min | invite; `409` duplicate email; `422` role not grantable. **Served as `POST /api/v1/users/staff`**: R3 refusal is `403 GRANT_EXCEEDS_ACTOR` (the policy layer's code), the duplicate is one `409 EMAIL_UNAVAILABLE` for every tenant, a client `tenant_id` is ignored and audited (INV-1); step-up deferred (D-003). The invitee sets a password at `POST /api/v1/users/invitations/accept` with a single-use, expiring emailed token (R10) |
 | `GET /api/v1/users/{id}` | `users:manage` | no | `404` on cross-tenant |
 | `POST /api/v1/users/{id}/deactivate` | `users:manage` | yes | revokes sessions; `USER_DEACTIVATED` |
 | `POST /api/v1/users/{id}/roles` | `users:manage` | yes, 5 min | `ROLE_ASSIGNED`; `200` when the account already holds the role, `201` when the grant is created |
@@ -121,7 +121,13 @@ All client-facing paths carry the `/api/v1` prefix (D-005).
 | `GET /api/v1/roles` | `users:manage` | no | roles with their permission bundles |
 | `GET /api/v1/permissions` | `users:manage` | no | the global catalogue (R7); read-only reference data with no tenant key |
 | `PUT /api/v1/roles/{id}/permissions` | `users:manage` | yes, 5 min | passkey/hardware key only; `PERMISSION_GRANTED`/`PERMISSION_REVOKED` |
-| `GET /api/v1/auth/capabilities` | valid session | no | advisory UI data only; never a control |
+| `GET /api/v1/users/me/permissions` | valid session | no | the caller's own effective set, `{permissions: string[]}`; advisory UI data only; never a control |
+
+**Decision (owner, 2026-10-07):** the self-permissions capability is served as
+`GET /api/v1/users/me/permissions`, the path the frontend contract names
+([`docs2/sdlc/01-auth-and-shell/api.md`](../../../docs2/sdlc/01-auth-and-shell/api.md)), not as the
+`GET /api/v1/auth/capabilities` this table first named. It is built and tested
+(`backend/tests/users/test_own_permissions.py`); every other property of the row is unchanged.
 
 There is no `DELETE /users/{id}` endpoint. Access reviews are read-only over the above; their completion
 event is emitted by the review job. Source: `06-authentication-rbac.md` §8, §12;

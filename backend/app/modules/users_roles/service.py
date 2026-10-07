@@ -35,22 +35,30 @@ existed when it ran.
 
 import uuid
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from enum import StrEnum
 
-from sqlmodel import Session, select
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import Session, col, func, select
 
-from app.core.db import tenant_transaction
+from app.core.db import engine, tenant_transaction
+from app.core.security import get_password_hash
 from app.models import User
 
 # The audit module is reached through its service facade, like every other module
 # (`docs/reference/build-contract.md` §7). The import is one-way — `audit` knows nothing about
 # `users_roles` — so there is no cycle.
 from app.modules.audit import service as audit
+from app.modules.identity_tenancy import service as identity_tenancy
+from app.modules.users_roles import invitations
 from app.modules.users_roles.catalog import (
     ADMINISTRATION_PERMISSION,
     BOOTSTRAP_ROLE_CODE,
+    CLIENT_TENANT_ID_IGNORED,
+    EMAIL_UNAVAILABLE,
     PERMISSION_CATALOGUE,
     SYSTEM_ROLE_CATALOGUE,
+    USER_CREATE,
     USER_PERMISSION_CHANGE,
 )
 from app.modules.users_roles.models import Permission, Role, RolePermission, UserRole
@@ -63,11 +71,16 @@ from app.modules.users_roles.policy import (
     enforce,
 )
 from app.modules.users_roles.schemas import (
+    InvitationAccepted,
     OwnPermissionsRead,
     PermissionRead,
     PermissionsPublic,
     RoleRead,
     RolesPublic,
+    StaffInvite,
+    StaffMemberRead,
+    StaffPublic,
+    StaffRoleRead,
     UserPermissionsRead,
     UserRoleRead,
     UserRolesPublic,
@@ -77,7 +90,10 @@ __all__ = [
     "Actor",
     "Decision",
     "ResourceRef",
+    "InvitationOutcome",
+    "InvitationResult",
     "RevokeOutcome",
+    "accept_invitation",
     "actor_for",
     "assign_role",
     "authorize",
@@ -86,13 +102,16 @@ __all__ = [
     "can_grant",
     "effective_permissions",
     "enforce",
+    "invite_staff",
     "list_permissions",
     "list_roles",
+    "list_staff",
     "own_permissions",
     "provision_tenant",
     "provision_tenant_in_transaction",
     "provision_tenant_roles",
     "read_user_roles",
+    "record_invitation_denial",
     "resolve_permissions",
     "revoke_role",
     "seed_tenant_roles",
@@ -736,3 +755,333 @@ def revoke_role(
             ),
         )
         return RevokeOutcome.REVOKED
+
+
+# --------------------------------------------------------------------------------------------
+# Staff: the organisation's own accounts, and onboarding a new one by invitation
+# --------------------------------------------------------------------------------------------
+
+
+def _staff_roles(
+    session: Session, *, tenant_id: uuid.UUID, user_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, list[StaffRoleRead]]:
+    """The roles each of these accounts holds in this tenant, sorted by role name."""
+    if not user_ids:
+        return {}
+    roles: Sequence[Role] = session.exec(
+        select(Role).where(Role.tenant_id == tenant_id)
+    ).all()
+    role_by_id = {role.id: role for role in roles}
+    held: dict[uuid.UUID, list[StaffRoleRead]] = {user_id: [] for user_id in user_ids}
+    assignments: Sequence[UserRole] = session.exec(
+        select(UserRole).where(
+            UserRole.tenant_id == tenant_id,
+            col(UserRole.user_id).in_(user_ids),
+        )
+    ).all()
+    for assignment in assignments:
+        role = role_by_id.get(assignment.role_id)
+        if role is None:
+            # Unreachable under the composite foreign key and RLS; dropping the edge is fail-safe.
+            continue
+        held[assignment.user_id].append(
+            StaffRoleRead(role_id=role.id, code=role.code, name=role.name)
+        )
+    for entries in held.values():
+        entries.sort(key=lambda entry: (entry.name, entry.code))
+    return held
+
+
+def _staff_member(user: User, roles: list[StaffRoleRead]) -> StaffMemberRead:
+    return StaffMemberRead(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        is_active=user.is_active,
+        created_at=user.created_at,
+        roles=roles,
+    )
+
+
+def list_staff(*, tenant_id: uuid.UUID, skip: int, limit: int) -> StaffPublic:
+    """One page of the organisation's accounts, with the roles each holds (`GET /users/staff`).
+
+    The tenant is the one the session resolved (INV-1). The legacy `user` table has no RLS policy
+    (T1-03 is blocked by D-003), so the explicit `tenant_id` predicate is the isolation control for
+    the accounts, exactly as in `_tenant_user`; the role and assignment reads run under forced RLS as
+    well. Ordered by name, then email, then id, so a page boundary is stable. `count` is the
+    organisation's total, which `skip`/`limit` do not change.
+    """
+    with tenant_transaction(tenant_id=tenant_id) as session:
+        scope = User.tenant_id == tenant_id
+        count = session.exec(select(func.count()).select_from(User).where(scope)).one()
+        users: Sequence[User] = session.exec(
+            select(User)
+            .where(scope)
+            .order_by(
+                func.lower(func.coalesce(col(User.full_name), col(User.email))),
+                func.lower(col(User.email)),
+                col(User.id),
+            )
+            .offset(skip)
+            .limit(limit)
+        ).all()
+        held = _staff_roles(
+            session, tenant_id=tenant_id, user_ids=[user.id for user in users]
+        )
+        return StaffPublic(
+            data=[_staff_member(user, held[user.id]) for user in users], count=count
+        )
+
+
+class InvitationOutcome(StrEnum):
+    """What one invitation attempt did, so the router maps it to a status without re-deciding.
+
+    `ROLE_NOT_FOUND` is the answer for a role id that is absent **or another tenant's** (`404`, R6).
+    `GRANT_EXCEEDS_ACTOR` is R3's refusal (`403`). `EMAIL_UNAVAILABLE` is the one answer for an
+    address that already has an account anywhere (`409`): it never says which organisation.
+    """
+
+    INVITED = "INVITED"
+    ROLE_NOT_FOUND = "ROLE_NOT_FOUND"
+    GRANT_EXCEEDS_ACTOR = "GRANT_EXCEEDS_ACTOR"
+    EMAIL_UNAVAILABLE = "EMAIL_UNAVAILABLE"
+
+
+@dataclass(frozen=True)
+class InvitationResult:
+    outcome: InvitationOutcome
+    member: StaffMemberRead | None = None
+    # The policy layer's refusal, for `GRANT_EXCEEDS_ACTOR`, so the router raises the policy's own
+    # answer rather than restating it.
+    denial: Decision | None = None
+
+
+def _email_taken(session: Session, email: str) -> bool:
+    """Whether any account, in any organisation, already uses this address (case-insensitively).
+
+    `user.email` is unique across the whole platform (one account is one organisation's, OPEN-3), so
+    the check is deliberately not tenant-scoped; what is tenant-scoped is the **answer**, which is
+    the same for every organisation (see `invite_staff`).
+    """
+    taken = session.exec(
+        select(func.count())
+        .select_from(User)
+        .where(func.lower(col(User.email)) == email.lower())
+    ).one()
+    return taken > 0
+
+
+def _record_invitation_refusal(
+    session: Session, *, reason: str, role_codes: Sequence[str]
+) -> None:
+    audit.record(
+        session,
+        audit.AuditEvent(
+            action=USER_CREATE,
+            result="DENIED",
+            reason=reason,
+            payload={"added": sorted(role_codes), "step_up": False},
+        ),
+    )
+
+
+def record_invitation_denial(*, actor: Actor, reason: str) -> None:
+    """Audit an invitation the policy layer refused before the service ran (`PERMISSION_NOT_HELD`).
+
+    Its own transaction, because nothing else is written: the refusal happened before any change.
+    A failure here propagates, so a refusal that cannot be audited fails closed.
+    """
+    with tenant_transaction(
+        tenant_id=actor.tenant_id, actor_id=actor.user_id, actor_role=actor.actor_role
+    ) as session:
+        _record_invitation_refusal(session, reason=reason, role_codes=())
+
+
+def invite_staff(
+    *, actor: Actor, invite: StaffInvite, client_tenant_id_supplied: bool
+) -> InvitationResult:
+    """Create an account in the actor's organisation, grant its roles and email an invitation.
+
+    The order is the design's deny-by-default path, and each refusal is decided before anything is
+    written:
+
+    1. Every role must be the actor's tenant's (`404` otherwise; another tenant's role looks absent).
+    2. R3: the union of the roles' bundles must be held by the actor (`403 GRANT_EXCEEDS_ACTOR`).
+       Checked **before** the address, so a caller who may not grant a role learns nothing about
+       which addresses exist.
+    3. The address must not already have an account anywhere (`409 EMAIL_UNAVAILABLE`, one answer
+       whether the account is in this organisation or another, so no tenant is disclosed).
+
+    The account is created with an unusable password and `tenant_id` from the session (a client
+    `tenant_id` was dropped by the schema and is audited here as `CLIENT_TENANT_ID_IGNORED`). The
+    grants, the `user.create` event, one `user.permission_change` per role and the email all happen
+    on this one transaction (INV-4): the email is sent last, inside it, so a send that raises rolls the
+    account back and no account exists that was never invited. A refusal at steps 2 and 3 writes its
+    `DENIED` event on this transaction and returns, so the event commits and nothing else does.
+    """
+    role_ids = list(dict.fromkeys(invite.role_ids))
+    try:
+        with tenant_transaction(
+            tenant_id=actor.tenant_id,
+            actor_id=actor.user_id,
+            actor_role=actor.actor_role,
+        ) as session:
+            roles: Sequence[Role] = session.exec(
+                select(Role).where(
+                    Role.tenant_id == actor.tenant_id, col(Role.id).in_(role_ids)
+                )
+            ).all()
+            if len(roles) != len(role_ids):
+                return InvitationResult(InvitationOutcome.ROLE_NOT_FOUND)
+            roles = sorted(roles, key=lambda role: role.code)
+            role_codes = [role.code for role in roles]
+
+            by_id, order = _permission_reads(session)
+            bundles = {
+                role.id: sorted(
+                    permission.code
+                    for permission in _role_bundle(
+                        session,
+                        tenant_id=actor.tenant_id,
+                        role_id=role.id,
+                        by_id=by_id,
+                        order=order,
+                    )
+                )
+                for role in roles
+            }
+            conferred = {code for bundle in bundles.values() for code in bundle}
+            grant = can_grant(actor, permission_codes=conferred)
+            if not grant.allowed:
+                _record_invitation_refusal(
+                    session, reason=grant.code.value, role_codes=role_codes
+                )
+                return InvitationResult(
+                    InvitationOutcome.GRANT_EXCEEDS_ACTOR, denial=grant
+                )
+
+            if _email_taken(session, invite.email):
+                _record_invitation_refusal(
+                    session, reason=EMAIL_UNAVAILABLE, role_codes=role_codes
+                )
+                return InvitationResult(InvitationOutcome.EMAIL_UNAVAILABLE)
+
+            if client_tenant_id_supplied:
+                _record_invitation_refusal(
+                    session, reason=CLIENT_TENANT_ID_IGNORED, role_codes=role_codes
+                )
+
+            user = User(
+                email=invite.email,
+                full_name=invite.full_name,
+                is_active=True,
+                is_superuser=False,
+                tenant_id=actor.tenant_id,
+                hashed_password=invitations.unusable_password_hash(),
+            )
+            session.add(user)
+            session.flush()
+            for role in roles:
+                session.add(
+                    UserRole(
+                        user_id=user.id,
+                        role_id=role.id,
+                        tenant_id=actor.tenant_id,
+                        granted_by=actor.user_id,
+                    )
+                )
+            session.flush()
+
+            audit.record(
+                session,
+                audit.AuditEvent(
+                    action=USER_CREATE,
+                    result="SUCCESS",
+                    resource_id=user.id,
+                    payload={
+                        "target_user_id": str(user.id),
+                        "added": role_codes,
+                        "step_up": False,
+                    },
+                ),
+            )
+            for role in roles:
+                audit.record(
+                    session,
+                    audit.AuditEvent(
+                        action=USER_PERMISSION_CHANGE,
+                        result="SUCCESS",
+                        resource_id=user.id,
+                        payload={
+                            "target_user_id": str(user.id),
+                            "role_code": role.code,
+                            "change": "GRANT",
+                            "added": bundles[role.id],
+                            "removed": [],
+                            "step_up": False,
+                        },
+                    ),
+                )
+
+            invitations.send_invitation_email(
+                email_to=user.email,
+                full_name=invite.full_name,
+                organisation=identity_tenancy.tenant_display_name(
+                    session, tenant_id=actor.tenant_id
+                ),
+                token=invitations.issue(
+                    user_id=user.id, hashed_password=user.hashed_password
+                ),
+            )
+            return InvitationResult(
+                InvitationOutcome.INVITED,
+                _staff_member(
+                    user,
+                    [
+                        StaffRoleRead(role_id=role.id, code=role.code, name=role.name)
+                        for role in sorted(roles, key=lambda r: (r.name, r.code))
+                    ],
+                ),
+            )
+    except IntegrityError:
+        # Two requests raced for the same address (an invitation and a signup, or two
+        # invitations): the unique index refused the second insert and everything rolled back.
+        # The answer is the one a sequential duplicate gets.
+        return InvitationResult(InvitationOutcome.EMAIL_UNAVAILABLE)
+
+
+def accept_invitation(*, token: str, new_password: str) -> InvitationAccepted | None:
+    """Spend an invitation link: set the invitee's own password. `None` for any unusable link.
+
+    One answer for a tampered, expired, wrong-purpose or already-spent token, for an account that no
+    longer exists, and for a deactivated one, so the response cannot be used to probe accounts. The
+    account row is locked while the link is checked and spent, so two concurrent submissions of the
+    same link cannot both succeed: the second sees the new password hash and is refused.
+    """
+    claims = invitations.read(token)
+    if claims is None:
+        return None
+    # The token names the account; the account names its organisation. `user` has no RLS (legacy
+    # layer), so this lookup is the same plain read sign-in makes, and the write below runs under
+    # the account's own tenant context.
+    with Session(engine) as lookup:
+        found = lookup.get(User, claims.user_id)
+        tenant_id = None if found is None else found.tenant_id
+    if tenant_id is None:
+        return None
+    with tenant_transaction(tenant_id=tenant_id, actor_id=claims.user_id) as session:
+        user = session.exec(
+            select(User)
+            .where(User.id == claims.user_id, User.tenant_id == tenant_id)
+            .with_for_update()
+        ).first()
+        if (
+            user is None
+            or not user.is_active
+            or not invitations.still_unspent(claims, user.hashed_password)
+        ):
+            return None
+        user.hashed_password = get_password_hash(new_password)
+        session.add(user)
+        return InvitationAccepted(email=user.email)
