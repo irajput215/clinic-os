@@ -4,7 +4,8 @@
 - **Date:** 2026-10-06
 
 > Superseded on 2026-10-06. `frontend-features/` is now the only app; it builds into the backend
-> image and is served at `/`, and `frontend/` has been deleted. Kept for the record of why the two
+> image and is served at `/`, and `frontend/` has been deleted. (On 2026-10-07 the app directory was
+> renamed from `frontend-features/` to `frontend/`; see ADR-F005's addendum.) Kept for the record of why the two
 > apps once ran side by side.
 
 ## Context

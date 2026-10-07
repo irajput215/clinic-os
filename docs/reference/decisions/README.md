@@ -21,7 +21,7 @@ that is a defect.
 | ID | Decision | Status | Blocks a gate? |
 |---|---|---|---|
 | [D-001](D-001-python-fastapi-stack.md) | Backend is Python 3.14 + FastAPI, not Node + TypeScript | **Accepted** | No — translation only |
-| [D-002](D-002-repo-layout.md) | Layout is `backend/` + `frontend-features/` + `packages/`, not `apps/*` (amended 2026-10-06) | **Accepted** | No — translation only |
+| [D-002](D-002-repo-layout.md) | Layout is `backend/` + `frontend/` + `packages/`, not `apps/*` (amended 2026-10-06) | **Accepted** | No — translation only |
 | [D-003](D-003-identity-model.md) | Identity is self-hosted password auth, not a managed OIDC provider | **OPEN — requires a decision** | **Yes — Gate 3** |
 | [D-004](D-004-deployment-target.md) | Deployment target is unresolved between compose and the source's AWS shape | **OPEN — requires a decision** | **Yes — Gate 6** |
 | [D-005](D-005-route-path-convention.md) | Routes carry the `/api/v1` prefix; provider webhooks are the one exception | **Accepted** | No |

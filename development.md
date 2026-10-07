@@ -23,7 +23,7 @@ Start the FastAPI development server:
 uv run fastapi dev
 ```
 
-In another terminal, from the project root, install the frontend dependencies and start the Vite development server for the app in `frontend-features/`:
+In another terminal, from the project root, install the frontend dependencies and start the Vite development server for the app in `frontend/`:
 
 ```bash
 bun install
@@ -40,7 +40,7 @@ Automatic interactive API documentation with Swagger UI: <http://localhost:8000/
 
 Mailpit: <http://localhost:8025>
 
-The frontend development server proxies `/api` to the backend at `http://127.0.0.1:8000` (`VITE_API_PROXY_TARGET` in `frontend-features/.env.local`, see `frontend-features/.env.example`), so the app and the API share an origin and no CORS setting is needed.
+The frontend development server proxies `/api` to the backend at `http://127.0.0.1:8000` (`VITE_API_PROXY_TARGET` in `frontend/.env.local`, see `frontend/.env.example`), so the app and the API share an origin and no CORS setting is needed.
 
 ### Frontend Served by FastAPI
 

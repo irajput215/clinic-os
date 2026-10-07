@@ -25,7 +25,7 @@ uv run mypy app                           # strict
 uv run alembic revision --autogenerate -m "message"
 uv run alembic upgrade head
 
-# Frontend: frontend-features/, the only app (run from the repo root; workspace scripts)
+# Frontend: frontend/, the only app (run from the repo root; workspace scripts)
 bun install && bun run dev                # :5174, proxies /api to the backend on :8000
 bun run lint && bun run typecheck         # biome, tsc
 bun run build                             # writes backend/app/frontend, served by the backend at /

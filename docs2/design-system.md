@@ -5,7 +5,7 @@ one clay accent, a serif for headings and a monospace face for anything a person
 token values below come from the reference's own `:root`, read from the live page, so names like
 `clay`, `oat` and `stone` are the design system's vocabulary, not Tailwind defaults.
 
-Source of truth in code: [`src/styles/app.css`](../frontend-features/src/styles/app.css) (`@theme`).
+Source of truth in code: [`src/styles/app.css`](../frontend/src/styles/app.css) (`@theme`).
 
 ![Sign in](assets/login.png)
 
@@ -48,7 +48,7 @@ Radii are `card` 14 px, `inner` 10 px, `btn` 9 px and `chip` 6 px. Pills are ful
 have a 1 px `line` border and `shadow-card` (`0 1px 2px` at 8% ink). Dialogs and popovers use
 `shadow-pop`. The sign-in card uses the reference's deep shadow over the tiled-mark backdrop.
 
-## Components ([`src/design/primitives.tsx`](../frontend-features/src/design/primitives.tsx))
+## Components ([`src/design/primitives.tsx`](../frontend/src/design/primitives.tsx))
 
 | Component | Notes |
 |---|---|

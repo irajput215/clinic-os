@@ -1,6 +1,6 @@
-# docs2: the `frontend-features` app
+# docs2: the ClinicOS web app
 
-`docs2/` documents the ClinicOS web app in [`frontend-features/`](../frontend-features/), the only
+`docs2/` documents the ClinicOS web app in [`frontend/`](../frontend/), the only
 frontend in this repository. The app follows the Banksia ClinicOS reference design; the backend image
 builds it and serves it at `/`, beside the API under `/api`
 ([ADR-F005](adr/ADR-F005-one-app-served-by-the-backend.md)).
@@ -27,7 +27,7 @@ disagree, `docs/` wins and the disagreement is a defect to raise.
 docker compose watch            # or: cd backend && uv run fastapi dev app/main.py
 
 # 2. The app, with hot reload (from the repository root; workspace scripts)
-cp frontend-features/.env.example frontend-features/.env.local   # optional; the proxy defaults to :8000
+cp frontend/.env.example frontend/.env.local   # optional; the proxy defaults to :8000
 bun install
 bun run dev                     # http://127.0.0.1:5174, proxies /api to the backend
 

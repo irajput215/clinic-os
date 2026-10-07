@@ -1,7 +1,7 @@
 # Capabilities: API or preview
 
 Each feature reads either from the backend (`api`) or from the in-browser preview store (`preview`).
-The switch lives in [`src/data/capabilities.ts`](../frontend-features/src/data/capabilities.ts).
+The switch lives in [`src/data/capabilities.ts`](../frontend/src/data/capabilities.ts).
 The reasoning is in [ADR-F004](adr/ADR-F004-preview-store.md).
 
 | Capability | Today | Backend status | To switch to `api` |
@@ -46,7 +46,7 @@ You can also switch at build time without editing code: `VITE_API_FEATURES=appoi
 
 ## MIRROR and PROPOSED types
 
-[`src/data/types.ts`](../frontend-features/src/data/types.ts) marks every type as one of two kinds:
+[`src/data/types.ts`](../frontend/src/data/types.ts) marks every type as one of two kinds:
 
 - **MIRROR** types are copied field for field from a backend branch's `schemas.py`. When the
   branch merges, the generated type replaces the mirror, and the compiler flags any drift.

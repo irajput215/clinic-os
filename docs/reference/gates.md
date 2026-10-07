@@ -41,7 +41,7 @@ The source contract names TypeScript artefacts. The control is unchanged; the ar
 | `rls.holds_without_app_filter.spec.ts` | `backend/tests/isolation/test_rls_holds_without_app_filter.py` |
 | `dispatch.blocks_without_active_approval.spec.ts` | `backend/tests/security/test_dispatch_blocks_without_active_approval.py` |
 | `logging.no_phi_in_log_payload.spec.ts` | `backend/tests/security/test_no_phi_in_log_payload.py` |
-| `frontend.storage_contains_no_phi.spec.ts` | `frontend-features/tests/security/storage-no-phi.spec.ts` |
+| `frontend.storage_contains_no_phi.spec.ts` | `frontend/tests/security/storage-no-phi.spec.ts` |
 | `security-headers.spec.ts` | `backend/tests/security/test_security_headers.py` |
 | Zod schemas | Pydantic v2 models in `backend/app/modules/<module>/schemas.py` |
 | ESLint + typecheck pipeline stage | `ruff check` + `mypy --strict` stage |

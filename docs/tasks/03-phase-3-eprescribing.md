@@ -282,14 +282,14 @@ Every task adds its negative path first.
 - [ ] **T3-35 — No PHI in logs, metrics, traces or error responses**
   - Acceptance: `SENTINEL-PATIENT-7F3A`, `SENTINEL-TOKEN-9C1D` and `SENTINEL-CLINICAL-4B2E` appear in no application log, audit event, metric label, trace span, error response or frontend bundle after the dispatch, block, webhook and reconciliation journeys
   - Verify: `cd backend && uv run pytest tests/security/test_no_phi_in_log_payload.py -v` and `cd frontend && bun run test --grep storage-no-phi`
-  - Files: `backend/tests/security/test_no_phi_in_log_payload.py`, `frontend-features/tests/security/storage-no-phi.spec.ts`
+  - Files: `backend/tests/security/test_no_phi_in_log_payload.py`, `frontend/tests/security/storage-no-phi.spec.ts`
   - Controls: 5 Output validation, 9 Error handling, 7 Encryption, 11 Security testing
   - Evidence: Sentinel scan output (INV-5)
 
 - [ ] **T3-36 — Frontend caution and server-side refusal are independent**
   - Acceptance: The Dispatch control is disabled while `approval_status` is not active and renders the message verbatim from the response; with the control disabled, a direct request is still refused; the disabled state is never the enforcement point; no approval or prescription clinical content is stored in browser storage
   - Verify: `cd frontend && bun run test --grep dispatch-approval` and `cd backend && uv run pytest tests/security/test_safety_gate_direct_api_call.py -v`
-  - Files: `frontend-features/src/`, `frontend-features/tests/security/`
+  - Files: `frontend/src/`, `frontend/tests/security/`
   - Controls: 5 Output validation, 2 Authorisation, 11 Security testing
   - Evidence: Frontend E2E output; storage-no-PHI output (INV-3)
 

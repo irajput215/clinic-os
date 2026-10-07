@@ -3,7 +3,7 @@
 ## Shape
 
 ```
-frontend-features/src
+frontend/src
 ├── main.tsx              API client config, query client, router, 401 handling
 ├── routes/               TanStack file routes: thin; validate search params, prefetch, render a feature
 ├── features/<feature>/   screens and dialogs, one folder per SDLC feature
@@ -21,7 +21,7 @@ frontend-features/src
 
 Screens never call `fetch`/axios. They call a repository (`data/*.ts`) through TanStack Query. A
 repository has an `api` implementation and/or a `preview` one behind the same interface, chosen by
-[`capabilities.ts`](../frontend-features/src/data/capabilities.ts). When a backend module merges, one
+[`capabilities.ts`](../frontend/src/data/capabilities.ts). When a backend module merges, one
 line changes and the screens do not. See [capabilities.md](capabilities.md).
 
 ## Build and deployment
@@ -29,7 +29,7 @@ line changes and the screens do not. See [capabilities.md](capabilities.md).
 There is one frontend, and the backend serves it
 ([ADR-F005](adr/ADR-F005-one-app-served-by-the-backend.md), superseding ADR-F001).
 
-- `bun run build` (root workspace script, or `bun run --filter frontend-features build`) typechecks
+- `bun run build` (root workspace script, or `bun run --filter frontend build`) typechecks
   and writes the production build to `backend/app/frontend/`, which is gitignored output.
 - `backend/app/main.py` serves that directory at `/` with `app.frontend(...)`. API routes match
   first, so `/api/*`, `/docs` and `/redoc` are never shadowed. A path with no file falls back to
@@ -56,7 +56,7 @@ There is one frontend, and the backend serves it
    record, by design) renders "not available", not an error.
 5. Error bodies are RFC 7807. The refusal sentence comes from `detail.message` (falling back to
    `title`), and every failure state shows the `request_id` as a "Reference" so a support conversation
-   can find the server's log line ([`lib/http.ts`](../frontend-features/src/lib/http.ts)).
+   can find the server's log line ([`lib/http.ts`](../frontend/src/lib/http.ts)).
 
 ## The backend is the security boundary
 
@@ -67,7 +67,7 @@ The UI hides, disables and explains. It never decides. In particular:
 - **The safety gate** result shown on a script will be the server's answer once `prescriptions` is
   `api` (the gate runs inside the signing transaction). While scripts are preview it comes from a
   stand-in that mirrors the server's rules over the preview's sample approvals
-  ([`data/preview/gate.ts`](../frontend-features/src/data/preview/gate.ts)), never over the
+  ([`data/preview/gate.ts`](../frontend/src/data/preview/gate.ts)), never over the
   patient's real approvals, so one screen can't say "covered" while signing says "blocked".
   Either way, the UI disables signing when the answer is a refusal, and the server must refuse again
   at sign and at dispatch (proposed contract in [sdlc/07](sdlc/07-script-queue/api.md)).

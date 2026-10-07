@@ -4,6 +4,8 @@
 - **Date:** 2026-10-06
 - **Supersedes:** [ADR-F001](ADR-F001-separate-spa.md)
 - **Decided by:** the owner (handoff decision D-A, 2026-10-06)
+- **Amended:** 2026-10-07. The app directory is now `frontend/` (see the addendum below). The body
+  keeps the name the app had when this decision was taken, `frontend-features/`.
 
 ## Context
 
@@ -51,3 +53,18 @@ There is one frontend: `frontend-features/`. `frontend/` is deleted.
   so the CSP is injected at build only and HMR is unaffected.
 - The ADR-F001 concern about keeping two SPAs in step is gone. So is the old app's `localStorage`
   token: [ADR-F002](ADR-F002-token-storage.md) (`sessionStorage`) is now the only token rule.
+
+## Addendum (2026-10-07): the app directory is `frontend/`
+
+With the template UI gone, the `-features` suffix distinguished the app from nothing. The owner
+decided to give the one app the conventional name: `frontend-features/` was renamed to `frontend/`
+(`git mv`, history kept), and the bun workspace package is now `frontend`
+(`bun run --filter frontend <script>`).
+
+Nothing else in this decision changes: the build still lands in `backend/app/frontend`, the backend
+still serves it at `/`, and CI still runs the Playwright suite against the served build. Every path
+that named `frontend-features/` now names `frontend/`: the root `package.json` workspaces and
+scripts, `bun.lock`, `backend/Dockerfile`, `frontend/Dockerfile.playwright`, `.dockerignore`,
+`compose.override.yml`, `scripts/generate-client.sh`, `.pre-commit-config.yaml`, the workflows,
+`dependabot.yml`, `latest-changes.yml`, `.vscode/launch.json` and the docs. Mentions of
+`frontend-features/` that remain describe what happened before the rename.
