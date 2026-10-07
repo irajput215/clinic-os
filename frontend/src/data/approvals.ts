@@ -1,5 +1,5 @@
 import { queryOptions } from "@tanstack/react-query"
-import { apiCall } from "@/data/api"
+import { TgaApprovalsService } from "@/client"
 import type { TgaApproval, TgaApprovalCreate } from "@/data/types"
 import { Refusal } from "@/lib/http"
 
@@ -11,6 +11,9 @@ import { Refusal } from "@/lib/http"
  * TGA_APPLICATION_NUMBER_MISMATCH, TGA_OVERLAPPING_ACTIVE_APPROVAL, ILLEGAL_STATE_TRANSITION) and
  * are worded in lib/http.ts.
  *
+ * The generated SDK types `state` and `source` as plain strings; `TgaApproval` (data/types.ts)
+ * narrows them to the values the backend's schema allows, so the reads are typed with it.
+ *
  * The practice-wide register has no route: `GET /tga-approvals` is proposed in
  * docs2/sdlc/05-approvals/api.md. Until it lands, `listAll` is a designed refusal rather than a
  * guess, and the register screen says so.
@@ -21,12 +24,6 @@ const PAGE_SIZE = 100
 
 /** The refusal code `listAll` raises while `GET /tga-approvals` does not exist. */
 export const REGISTER_NOT_AVAILABLE = "NOT_AVAILABLE"
-
-interface ApprovalsPage {
-  data: TgaApproval[]
-  count: number
-  next_cursor: string | null
-}
 
 export const approvalsRepo = {
   listAll: async (): Promise<TgaApproval[]> => {
@@ -40,31 +37,33 @@ export const approvalsRepo = {
     const approvals: TgaApproval[] = []
     let cursor: string | undefined
     do {
-      const page = await apiCall<ApprovalsPage>(
-        "GET",
-        "/api/v1/patients/{patient_id}/tga-approvals",
-        {
+      const { data: page } =
+        await TgaApprovalsService.approvalsListPatientTgaApprovals({
           path: { patient_id: patientId },
           query: { limit: PAGE_SIZE, cursor },
-        },
-      )
-      approvals.push(...page.data)
+        })
+      approvals.push(...(page.data as TgaApproval[]))
       cursor = page.next_cursor ?? undefined
     } while (cursor)
     return approvals
   },
-  create: (body: TgaApprovalCreate) =>
-    apiCall<TgaApproval>("POST", "/api/v1/tga-approvals", { body }),
-  verify: (id: string, applicationNumber: string) =>
-    apiCall<TgaApproval>("POST", "/api/v1/tga-approvals/{approval_id}/verify", {
-      path: { approval_id: id },
-      body: { tga_application_number: applicationNumber.trim() },
-    }),
-  revoke: (id: string, reasonCode: string) =>
-    apiCall<TgaApproval>("POST", "/api/v1/tga-approvals/{approval_id}/revoke", {
-      path: { approval_id: id },
-      body: { reason_code: reasonCode },
-    }),
+  create: async (body: TgaApprovalCreate) =>
+    (await TgaApprovalsService.approvalsCreateTgaApproval({ body }))
+      .data as TgaApproval,
+  verify: async (id: string, applicationNumber: string) =>
+    (
+      await TgaApprovalsService.approvalsVerifyTgaApproval({
+        path: { approval_id: id },
+        body: { tga_application_number: applicationNumber.trim() },
+      })
+    ).data as TgaApproval,
+  revoke: async (id: string, reasonCode: string) =>
+    (
+      await TgaApprovalsService.approvalsRevokeTgaApproval({
+        path: { approval_id: id },
+        body: { reason_code: reasonCode },
+      })
+    ).data as TgaApproval,
 }
 
 export const approvalsQuery = queryOptions({
