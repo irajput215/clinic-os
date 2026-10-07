@@ -2,7 +2,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Loader2, TriangleAlert } from "lucide-react"
 import { type FormEvent, useId, useState } from "react"
 import { toast } from "sonner"
-import type { RoleRead, UserPublic, UserRoleRead } from "@/client/types.gen"
+import type {
+  RoleRead,
+  StaffPublic,
+  UserPublic,
+  UserRoleRead,
+} from "@/client/types.gen"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -45,14 +50,19 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
  * One account's access: the roles it holds, the effective set the server computes from them, and
  * the two real operations on it, grant and revoke.
  *
- * The API has no organisation user directory yet (the tenant-scoped `GET /users` is T1-03, blocked
- * by D-003), and the platform `GET /users/` is superuser-only and cross-tenant. So an account is
- * addressed by its ID, starting on the signed-in account. Each person can copy their own ID from
- * Settings.
+ * The usual way here is Staff (`GET /users/staff`), whose "Manage access" opens this tab on that
+ * account (`initial`). An account can still be addressed by its ID, which each person can copy from
+ * Settings; without one the tab starts on the signed-in account.
  */
-export function AccessPanel({ me }: { me: UserPublic }) {
-  const [accountId, setAccountId] = useState(me.id)
-  const [draft, setDraft] = useState(me.id)
+export function AccessPanel({
+  me,
+  initial,
+}: {
+  me: UserPublic
+  initial?: string
+}) {
+  const [accountId, setAccountId] = useState(initial ?? me.id)
+  const [draft, setDraft] = useState(initial ?? me.id)
   const [draftError, setDraftError] = useState<string>()
   const inputId = useId()
 
@@ -132,6 +142,12 @@ function AccountAccess({
   const held = useHeldCodes(me.id)
   const [revoking, setRevoking] = useState<UserRoleRead | null>(null)
   const isMe = accountId === me.id
+  const queryClient = useQueryClient()
+  // The name, when Staff already loaded this account: no extra read on the administrative budget.
+  const known = queryClient
+    .getQueriesData<StaffPublic>({ queryKey: ["admin", "staff"] })
+    .flatMap(([, page]) => page?.data ?? [])
+    .find((member) => member.id === accountId)
 
   const error = assignments.error ?? effective.error ?? roles.error
   if (error) {
@@ -170,7 +186,13 @@ function AccountAccess({
           title="Assigned roles"
           action={
             <span className="text-xs text-stone">
-              {isMe ? "Your account" : <Mono>{accountId.slice(0, 8)}</Mono>}
+              {isMe ? (
+                "Your account"
+              ) : known ? (
+                known.full_name || known.email
+              ) : (
+                <Mono>{accountId.slice(0, 8)}</Mono>
+              )}
             </span>
           }
         >

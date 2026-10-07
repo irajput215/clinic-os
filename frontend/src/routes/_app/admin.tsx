@@ -4,14 +4,23 @@ import { AdminPage } from "@/features/admin/AdminPage"
 import { ADMIN_TAB_KEYS, type AdminTab } from "@/features/admin/tabs"
 import { oneOf } from "@/lib/search"
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 /**
  * No permission gate here: the server is the boundary. The page renders, its reads go out, and a
- * `403` renders as the designed "not available to your role" state.
+ * `403` renders as the designed "not available to your role" state. `account` is an account ID
+ * (never a name or an email, so nothing personal is in the URL) that User access opens on.
  */
 export const Route = createFileRoute("/_app/admin")({
   staticData: { title: "Administration" },
-  validateSearch: (search: Record<string, unknown>): { tab?: AdminTab } => ({
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { tab?: AdminTab; account?: string } => ({
     tab: oneOf(ADMIN_TAB_KEYS, search.tab),
+    account:
+      typeof search.account === "string" && UUID.test(search.account)
+        ? search.account.toLowerCase()
+        : undefined,
   }),
   pendingComponent: PagePending,
   errorComponent: PageError,
@@ -19,6 +28,6 @@ export const Route = createFileRoute("/_app/admin")({
 })
 
 function AdminRoute() {
-  const { tab } = Route.useSearch()
-  return <AdminPage tab={tab} />
+  const { tab, account } = Route.useSearch()
+  return <AdminPage tab={tab} account={account} />
 }
