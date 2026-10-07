@@ -231,9 +231,7 @@ def test_no_filter_lists_every_approval_with_the_practice_totals(
     assert created == sorted(created, reverse=True)
 
 
-def test_state_filters_select_by_state(
-    api: TgaApi, clinic: TenantWithPatient
-) -> None:
+def test_state_filters_select_by_state(api: TgaApi, clinic: TenantWithPatient) -> None:
     seeded = _seed(api, clinic)
 
     pending = _register(api, clinic.owner, state="PENDING")
@@ -475,6 +473,15 @@ def test_read_refusals_are_audited(api: TgaApi, clinic: TenantWithPatient) -> No
         ("DENIED", "PERMISSION_NOT_HELD"),
         ("DENIED", "PERMISSION_NOT_HELD"),
     ]
+
+
+def test_the_patient_list_shares_the_register_cursor_rules(
+    api: TgaApi, clinic: TenantWithPatient
+) -> None:
+    """One keyset, one cursor format: a garbled cursor is refused on the patient list too."""
+    response = api.list_for_patient(clinic.owner, clinic.patient_id, cursor="nope")
+    assert response.status_code == 422
+    assert problem_code(response) == "INVALID_CURSOR"
 
 
 # -- Units ------------------------------------------------------------------------------------
