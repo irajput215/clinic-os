@@ -1,40 +1,133 @@
+import { randomBytes } from "node:crypto"
+import type { APIRequestContext } from "@playwright/test"
 import { expect, test } from "./fixtures"
+import { emailedPath, waitForEmailHtml } from "./mail"
 
 /**
- * The prescription safety gate, as the clinician meets it. Scripts are still preview (no
- * prescriptions module), so the script tests' gate decision comes from the preview store, which
- * mirrors the backend's match rules over sample approvals. The approval tests run against the real
- * tga_approvals API.
+ * The prescription safety gate, as the clinician meets it, against the real prescriptions API: the
+ * gate's answer on every card comes from the server, and the server decides again inside the
+ * signing and dispatch transactions. Signing re-enters the password through the server-side step-up
+ * (`POST /auth/step-up`); no pharmacy transport exists, so a signed script is "queued, not sent".
  */
+const api = (request: APIRequestContext, token: string) => ({
+  get: async <T>(path: string) => {
+    const res = await request.get(`/api/v1${path}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    expect(res.ok(), await res.text()).toBeTruthy()
+    return (await res.json()) as T
+  },
+  post: async <T>(path: string, data: unknown) => {
+    const res = await request.post(`/api/v1${path}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data,
+    })
+    expect(res.ok(), await res.text()).toBeTruthy()
+    return (await res.json()) as T
+  },
+})
+
+const patientId = async (
+  owner: ReturnType<typeof api>,
+  given: string,
+): Promise<string> => {
+  const { data } = await owner.get<{
+    data: { id: string; given_name: string }[]
+  }>("/patients?limit=100")
+  const found = data.find((p) => p.given_name === given)
+  expect(found, `patient ${given}`).toBeTruthy()
+  return found!.id
+}
+
+/**
+ * An ACTIVE approval needs a second clinician (four-eyes): invite a doctor into the clinic, accept
+ * through the emailed link's token, sign in once as them, and verify the owner's entry.
+ */
+const activeApproval = async (
+  request: APIRequestContext,
+  owner: ReturnType<typeof api>,
+  patient: string,
+  grain: { tga_category: string; dosage_form: string },
+) => {
+  const { data: roles } = await owner.get<{
+    data: { id: string; code: string }[]
+  }>("/roles")
+  const doctorRole = roles.find((r) => r.code === "DOCTOR")!
+  const doctor = {
+    email: `doctor-${randomBytes(4).toString("hex")}@e2e.example.com`,
+    password: `E2e-${randomBytes(9).toString("base64url")}`,
+  }
+  await owner.post("/users/staff", {
+    email: doctor.email,
+    full_name: "Dr Tom Verifier",
+    role_ids: [doctorRole.id],
+  })
+  const link = emailedPath(
+    await waitForEmailHtml(request, doctor.email),
+    "/accept-invite",
+  )
+  const token = new URL(link, "http://x").searchParams.get("token")
+  const accepted = await request.post("/api/v1/users/invitations/accept", {
+    data: { token, new_password: doctor.password },
+  })
+  expect(accepted.ok(), await accepted.text()).toBeTruthy()
+  const login = await request.post("/api/v1/login/access-token", {
+    form: { username: doctor.email, password: doctor.password },
+  })
+  expect(login.ok(), await login.text()).toBeTruthy()
+  const doctorApi = api(
+    request,
+    ((await login.json()) as { access_token: string }).access_token,
+  )
+  const reference = `SAS-B 2026-${randomBytes(3).toString("hex")}`
+  const approval = await owner.post<{ id: string }>("/tga-approvals", {
+    patient_id: patient,
+    ...grain,
+    approval_reference: reference,
+    creation_reason: "NEW_APPLICATION",
+    valid_from: "2026-01-01",
+    valid_to: "2027-12-31",
+  })
+  await doctorApi.post(`/tga-approvals/${approval.id}/verify`, {
+    tga_application_number: reference,
+  })
+}
+
 test("a script with no covering approval cannot be signed", async ({
   signedIn: page,
 }) => {
   await page.goto("/patients")
   await page.getByRole("cell", { name: "Grace Liu" }).click()
-  // Aurora is Category 3 capsules; nothing in this patient's approvals covers that grain.
+  // Nothing in this patient's approvals covers Category 3 capsules.
   await page.getByRole("tab", { name: "Scripts" }).click()
   await page.getByRole("button", { name: "Stage a script" }).click()
   const stage = page.getByRole("dialog")
-  await stage
-    .getByLabel("Product")
-    .selectOption({ label: "Aurora 10 Capsules" })
+  await stage.getByLabel("Product").fill("Aurora 10 Capsules")
+  await stage.getByLabel("TGA category").selectOption("CATEGORY_3")
+  await stage.getByLabel("Dosage form").selectOption("CAPSULE")
   await stage.getByLabel("Directions / titration").fill("1 capsule nocte")
   await stage.getByLabel("Triage outcome").fill("Eligible - insomnia")
   await stage
     .getByLabel("Conventional therapy first")
     .fill("Sleep hygiene, melatonin 6 months")
   await stage.getByRole("button", { name: "Stage draft" }).click()
-  await expect(page.getByText("It can't be sent until one does.")).toBeVisible()
+  await expect(
+    page.getByText("It can't be signed until one does."),
+  ).toBeVisible()
 
   const card = page.locator("article", { hasText: "Aurora 10 Capsules" })
+  await expect(card).toContainText("No TGA approval on file for this patient")
   await card.getByRole("button", { name: "Review & sign" }).click()
   const review = page.getByRole("dialog")
   await expect(review.getByRole("status")).toContainText(
     "Safety gate: blocked.",
   )
+  await expect(review.getByRole("status")).toContainText(
+    "TGA_APPROVAL_NOT_FOUND",
+  )
   await expect(review.getByLabel("Your password, to sign")).toBeDisabled()
   await expect(
-    review.getByRole("button", { name: "Sign & send to pharmacy" }),
+    review.getByRole("button", { name: "Sign & queue for pharmacy" }),
   ).toBeDisabled()
 })
 
@@ -68,34 +161,61 @@ test("the person who records an approval cannot verify it", async ({
   )
 })
 
-test("a covered script is signed with a password re-entry and sent", async ({
+test("a covered script is signed with a password re-entry and queued, not sent", async ({
   signedIn: page,
   clinic,
+  request,
 }) => {
+  test.setTimeout(60_000)
+  const owner = api(request, clinic.token)
+  const dean = await patientId(owner, "Dean")
+  const grain = { tga_category: "CATEGORY_2", dosage_form: "ORAL_LIQUID" }
+  await activeApproval(request, owner, dean, grain)
+  const me = await owner.get<{ id: string }>("/users/me")
+  await owner.post("/prescriptions", {
+    patient_id: dean,
+    prescriber_id: me.id,
+    medicine_name: "Solace CBD Oil 50",
+    ...grain,
+    dose_instruction: "0.5 mL twice daily",
+    quantity: "1",
+    repeats: 2,
+    triage_outcome: "Eligible - chronic pain",
+    conventional_therapy: "NSAIDs and physiotherapy, 9 months",
+    date_of_service: new Date().toLocaleDateString("en-CA", {
+      timeZone: "Australia/Sydney",
+    }),
+  })
+
   await page.goto("/scripts")
-  const card = page.locator("article", { hasText: "Covered through" }).first()
-  const patient = (
-    await card.locator("span.font-semibold").first().innerText()
-  ).trim()
+  const card = page.locator("article", { hasText: "Solace CBD Oil 50" })
+  await expect(card).toContainText("Covered through")
   await card.getByRole("button", { name: "Review & sign" }).click()
   const review = page.getByRole("dialog")
   await expect(review.getByRole("status")).toContainText("Safety gate: clear.")
 
+  // The server checks the password; a wrong one signs nothing and keeps the session.
   await review.getByLabel("Your password, to sign").fill("wrong-password")
-  await review.getByRole("button", { name: "Sign & send to pharmacy" }).click()
+  await review
+    .getByRole("button", { name: "Sign & queue for pharmacy" })
+    .click()
   await expect(review.getByRole("alert")).toHaveText(
-    "That password isn't right. Re-enter it to sign.",
+    "That password isn't right. Re-enter it to continue.",
   )
 
   await review.getByLabel("Your password, to sign").fill(clinic.password)
-  await review.getByRole("button", { name: "Sign & send to pharmacy" }).click()
-  await expect(page.getByText(/^Signed and sent to /)).toBeVisible()
+  await review
+    .getByRole("button", { name: "Sign & queue for pharmacy" })
+    .click()
   await expect(
-    page
-      .getByRole("row", {
-        name: new RegExp(`${patient}.*Sent to pharmacy.*EVQ`),
-      })
-      .first(),
+    page.getByText(
+      "Signed and queued. Not sent: no pharmacy connection is configured yet.",
+    ),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("row", {
+      name: /Dean Caruso.*Solace CBD Oil 50.*Queued, not sent/,
+    }),
   ).toBeVisible()
 })
 
