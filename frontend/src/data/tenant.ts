@@ -1,6 +1,6 @@
 import { queryOptions, useQuery } from "@tanstack/react-query"
 import { TenantsService } from "@/client"
-import { httpStatus } from "@/lib/http"
+import { retryTransient } from "@/lib/http"
 import { currentUserQuery } from "@/lib/session"
 import { myPermissionsQuery } from "./permissions"
 
@@ -13,8 +13,11 @@ import { myPermissionsQuery } from "./permissions"
  * a name it does not have. The route needs `tenant:read` (Practice Owner and Compliance / Auditor);
  * anyone else is refused `403`, and the app then shows no clinic identity at all.
  *
- * The route is in the administrative rate-limit class (20/min per client address), so a `429` waits
- * for the window to move; every other `4xx` is final. The slug cannot change during a session.
+ * The slug only labels the sidebar, so a failure is never chased: the route is in the single-resource
+ * read class (300/min per session), and a `429` is final like every other `4xx`, instead of
+ * queuing retries that compete with the screen the person is actually using. A request that never
+ * reached the API, or a `5xx`, gets the app's usual retries. The slug cannot change during a session;
+ * a failed read is asked again on the next mount or window focus.
  */
 export const TENANT_READ = "tenant:read"
 
@@ -22,14 +25,7 @@ export const currentTenantQuery = queryOptions({
   queryKey: ["session", "tenant"],
   queryFn: async () => (await TenantsService.readCurrentTenant()).data,
   staleTime: Number.POSITIVE_INFINITY,
-  retry: (failureCount, error) => {
-    const status = httpStatus(error)
-    if (status === 429) return failureCount < 3
-    if (status !== undefined && status >= 400 && status < 500) return false
-    return failureCount < 3
-  },
-  retryDelay: (failureCount) =>
-    [5_000, 20_000, 40_000][Math.min(failureCount, 2)],
+  retry: retryTransient,
 })
 
 /**

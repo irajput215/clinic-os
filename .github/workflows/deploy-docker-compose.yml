@@ -18,6 +18,8 @@ jobs:
     timeout-minutes: 30
     env:
       DOMAIN: ${{ vars.DOMAIN }}
+      # Optional; empty means compose.deploy.yml's default, https://$DOMAIN.
+      FRONTEND_HOST: ${{ vars.FRONTEND_HOST }}
       PROJECT_NAME: ${{ vars.PROJECT_NAME }}
       SECRET_KEY: ${{ secrets.SECRET_KEY }}
       FIRST_SUPERUSER: ${{ vars.FIRST_SUPERUSER }}

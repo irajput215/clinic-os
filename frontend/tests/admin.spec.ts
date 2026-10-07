@@ -3,13 +3,12 @@ import { signInThroughUi, signUp, superuser } from "./accounts"
 import { expect, test } from "./fixtures"
 
 /**
- * Administration, against the real API. The roles and access endpoints share one 20-a-minute budget
- * per client address (`backend/app/core/rate_limit.py`), and every test in a parallel run comes from
- * the same address. The screen waits out a `429` and retries (5 s, 20 s, 40 s), so the steps that
- * spend that budget allow for the full wait instead of assuming a quiet server.
+ * Administration, against the real API. The roles and access endpoints are the administrative
+ * rate-limit class, 20 a minute per session (`backend/app/core/rate_limit.py`), and the tests that open
+ * administration each do it as a different account, so no test spends another's budget and none
+ * waits out a `429`. The sidebar's clinic read is the single-resource read class (300/min) and spends
+ * none of it.
  */
-test.describe.configure({ timeout: 240_000 })
-const slow = { timeout: 90_000 }
 
 test("a practice owner sees every role against the 21-permission catalogue", async ({
   signedIn: page,
@@ -28,7 +27,7 @@ test("a practice owner sees every role against the 21-permission catalogue", asy
   await expect(page.getByRole("tab", { name: "Accounts" })).toHaveCount(0)
 
   const matrix = page.getByTestId("permission-matrix")
-  await expect(matrix).toBeVisible(slow)
+  await expect(matrix).toBeVisible()
   await expect(matrix.locator("tbody tr[data-testid^='perm-']")).toHaveCount(21)
   await expect(matrix.getByRole("columnheader")).toContainText([
     "Permission",
@@ -62,22 +61,22 @@ test("an owner grants and revokes a role, and cannot remove the last administrat
   await page.getByRole("tab", { name: "User access" }).click()
 
   const assigned = page.getByTestId("assigned-roles")
-  await expect(assigned.getByText("Practice Owner")).toBeVisible(slow)
+  await expect(assigned.getByText("Practice Owner")).toBeVisible()
   await expect(page.getByTestId("assigned-DOCTOR")).toHaveCount(0)
 
   await page
     .getByLabel("Role", { exact: true })
     .selectOption({ label: "Doctor" })
   await page.getByRole("button", { name: "Grant role" }).click()
-  await expect(page.getByText("Doctor granted")).toBeVisible(slow)
-  await expect(page.getByTestId("assigned-DOCTOR")).toBeVisible(slow)
+  await expect(page.getByText("Doctor granted")).toBeVisible()
+  await expect(page.getByTestId("assigned-DOCTOR")).toBeVisible()
 
   await page.getByRole("button", { name: "Revoke Doctor" }).click()
   const dialog = page.getByRole("dialog", { name: "Revoke Doctor?" })
   await dialog.getByRole("button", { name: "Revoke role" }).click()
-  await expect(page.getByText("Doctor revoked")).toBeVisible(slow)
+  await expect(page.getByText("Doctor revoked")).toBeVisible()
   await expect(dialog).toBeHidden()
-  await expect(page.getByTestId("assigned-DOCTOR")).toHaveCount(0, slow)
+  await expect(page.getByTestId("assigned-DOCTOR")).toHaveCount(0)
 
   // R8: the server refuses to leave the organisation with nobody who can manage users.
   await page.getByRole("button", { name: "Revoke Practice Owner" }).click()
@@ -85,7 +84,6 @@ test("an owner grants and revokes a role, and cannot remove the last administrat
   await last.getByRole("button", { name: "Revoke role" }).click()
   await expect(last.getByRole("alert")).toContainText(
     "last account that can manage users",
-    slow,
   )
   await last.getByRole("button", { name: "Keep role" }).click()
   await expect(assigned.getByText("Practice Owner")).toBeVisible()
@@ -109,25 +107,25 @@ test("an account without the permission gets no Administration entry, and a refu
   await expect(
     page.getByRole("heading", { name: "Administration", level: 1 }),
   ).toBeVisible()
-  await expect(page.getByText("Not available to your role.")).toBeVisible(slow)
+  await expect(page.getByText("Not available to your role.")).toBeVisible()
   await expect(page.getByTestId("permission-matrix")).toHaveCount(0)
 
   await page.goto("/admin?tab=access")
-  await expect(page.getByText("Not available to your role.")).toBeVisible(slow)
+  await expect(page.getByText("Not available to your role.")).toBeVisible()
   await expect(page.getByRole("button", { name: "Grant role" })).toHaveCount(0)
 })
 
 test("the platform superuser lists, adds, edits and deactivates accounts", async ({
   page,
 }) => {
-  await signInThroughUi(page, superuser(), "/admin")
+  const admin = superuser()
+  await signInThroughUi(page, admin, "/admin")
   await expect(page.getByRole("tab", { name: "Accounts" })).toHaveAttribute(
     "aria-selected",
     "true",
   )
   const table = page.getByTestId("accounts-table")
   await expect(table).toBeVisible()
-  await expect(table.getByText("You", { exact: true })).toBeVisible()
 
   const email = `added-${randomBytes(4).toString("hex")}@e2e.example.com`
   await page.getByRole("button", { name: "Add account" }).click()
@@ -160,4 +158,24 @@ test("the platform superuser lists, adds, edits and deactivates accounts", async
   await confirm.getByRole("button", { name: "Deactivate" }).click()
   await expect(page.getByText(`${email} deactivated`)).toBeVisible()
   await expect(row).toContainText("Inactive")
+
+  // The signed-in account is marked as yours. It is the oldest account, so on a database that has
+  // collected more than a page of accounts it is on a later page: page forward until it shows.
+  // The confirmation must be fully dismissed first: until the modal unmounts after its close
+  // animation, the page behind it is `aria-hidden` and the pager is absent from role queries.
+  await expect(page.locator("[data-aria-hidden]")).toHaveCount(0)
+  const self = page.getByTestId(`account-${admin.email}`)
+  const next = page
+    .getByRole("navigation", { name: "Accounts pages" })
+    .getByRole("button", { name: "Next" })
+  while (
+    !(await self.isVisible()) &&
+    (await next.count()) > 0 &&
+    (await next.isEnabled())
+  ) {
+    const before = await table.textContent()
+    await next.click()
+    await expect(table).not.toHaveText(before ?? "")
+  }
+  await expect(self.getByText("You", { exact: true })).toBeVisible()
 })

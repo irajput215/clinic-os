@@ -114,7 +114,7 @@ Column-level grants do not apply to `SELECT *`, so auth queries enumerate column
 | `POST /api/v1/auth/step-up` | yes | yes | — | — | issue a single-use resource-bound step-up token |
 | `POST /api/v1/auth/recover`, `POST /api/v1/auth/recover/complete` | no | — | — | — | identical response whether the account exists; single-use hashed token, 30 min, second factor if enrolled |
 | `POST /api/v1/auth/mfa/enrol`, `POST /api/v1/auth/mfa/verify` | yes | no | — | — | Branch B enrolment-only session |
-| `GET /api/v1/auth/session`, `GET /api/v1/auth/capabilities` | yes | no | — | — | the only pre-MFA route and the advisory UI capabilities |
+| `GET /api/v1/auth/session` | yes | no | - | - | the only pre-MFA route. The advisory UI capabilities are `GET /api/v1/users/me/permissions` (feature 03; owner decision 2026-10-07) |
 | `POST /api/v1/users/{id}/mfa-reset` | yes | yes | `users:manage` | yes | privileged reset; audited |
 | `GET /api/v1/auth/jwks.json` | no | — | — | — | Branch B only; public keys, never secrets |
 

@@ -6,7 +6,7 @@
 |---|---|---|---|
 | `POST` | `/api/v1/login/access-token` | `backend/app/api/routes/login.py` | Form `username`, `password`. `200` gives `{access_token}`. `400` for bad credentials. Rate limited 20/min. |
 | `GET` | `/api/v1/users/me` | `backend/app/api/routes/users.py` | Current user. `401` if the session is unusable. |
-| `POST` | `/api/v1/users/signup` | `backend/app/api/routes/users.py` | Organisation signup (`clinic_name`). Open registration only. |
+| `POST` | `/api/v1/users/signup` | `backend/app/api/routes/users.py` | Organisation signup (`clinic_name`). Open registration only. Rate limited 20/min. A taken email is `400` (it discloses that the address has an account: a recorded residual risk, see `register_user`). |
 | `POST` | `/api/v1/password-recovery/{email}` | `backend/app/api/routes/login.py` | Same answer for a known and an unknown address. Shares one 5/min window with reset. |
 | `POST` | `/api/v1/reset-password/` | `backend/app/api/routes/login.py` | `{token, new_password}`. `400` for an invalid or expired token. |
 | `PATCH` | `/api/v1/users/me`, `/api/v1/users/me/password` | `backend/app/api/routes/users.py` | Settings: own profile and password (current password required). |

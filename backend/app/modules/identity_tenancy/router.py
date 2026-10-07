@@ -55,9 +55,11 @@ unclassified store under a route whose write path is already blocked (below).
   `retention_profile` and `legal_name` are never returned (US-1; the application role holds no `SELECT`
   on either column)
 - Audit: deferred — feature 04 is not built; `05-data-and-audit.md` names `tenant.viewed`
-- Rate limit: 20/min per client address — the administrative class R15 sets for `/api/v1/tenants/*`. The
-  in-process limiter keys on the connection address, not the session, which is reported rather than
-  hidden (`app/core/rate_limit.py`)
+- Rate limit: 300/min per session - the single-resource read class R15 sets ("single-resource reads to
+  300/min"). Until 2026-10-07 this read was in the administrative class (20/min); the app shell reads
+  it on every page load, so it spent the administrative budget before an administrator opened the
+  administration screen. The read is still limited; only its class changed. A request without a
+  verified session is counted per client address (`app/core/rate_limit.py`)
 - Errors: `401` (unauthenticated), `403` (`PERMISSION_NOT_HELD`, or no organisation on the account),
   `404` (the session's tenant row is absent — unreachable while the account's foreign key holds), `429`;
   fails closed = yes
@@ -73,7 +75,7 @@ unclassified store under a route whose write path is already blocked (below).
 - Output schema: none — see the refusal below
 - Audit: deferred — feature 04 is not built; `05-data-and-audit.md` names `tenant.config_changed` with
   `result = DENIED` for the refusal that is the only outcome today
-- Rate limit: 20/min per client address, administrative class (R15)
+- Rate limit: 20/min per session, administrative class (R15)
 - Errors: `401` (unauthenticated), `403` (`PERMISSION_NOT_HELD`, `STEP_UP_REQUIRED`, or no organisation),
   `422` (unknown body field); fails closed = yes
 - Step-up: **required by the design and unimplemented — blocked by D-003.** The design requires a fresh,
@@ -97,7 +99,7 @@ from sqlalchemy import select
 
 from app.api.deps import ActorDep
 from app.core.db import tenant_transaction
-from app.core.rate_limit import admin_rate_limit
+from app.core.rate_limit import admin_rate_limit, read_rate_limit
 from app.modules.identity_tenancy.models import Tenant
 from app.modules.identity_tenancy.schemas import (
     TenantCurrentRead,
@@ -106,12 +108,11 @@ from app.modules.identity_tenancy.schemas import (
 from app.modules.users_roles.catalog import TENANCY_PERMISSIONS
 from app.modules.users_roles.service import authorize
 
-# The administrative class covers `/api/v1/tenants/*` (R15: "maps to the administrative class
-# (20/min)"). A router-level dependency runs before the endpoint's own authentication and
-# authorisation, so an unauthenticated flood is bounded too.
-router = APIRouter(
-    prefix="/tenants", tags=["tenants"], dependencies=[Depends(admin_rate_limit)]
-)
+# R15: a change under `/api/v1/tenants/*` is the administrative class (20/min); a single-resource
+# read is the read class (300/min). Each route declares its class as a route dependency, which runs
+# before the endpoint's own authentication and authorisation, so an unauthenticated flood is bounded
+# on both.
+router = APIRouter(prefix="/tenants", tags=["tenants"])
 
 # R12's refusal reason. `01-tenancy-and-clinics/03-design.md` requires the step-up and does not name a
 # code; `03-users-and-roles/05-data-and-audit.md` lists `STEP_UP_REQUIRED` among the denial reason codes,
@@ -180,7 +181,11 @@ def _current_tenant(*, tenant_id: uuid.UUID) -> TenantCurrentRead | None:
         )
 
 
-@router.get("/current", response_model=TenantCurrentRead)
+@router.get(
+    "/current",
+    response_model=TenantCurrentRead,
+    dependencies=[Depends(read_rate_limit)],
+)
 def read_current_tenant(*, actor: ActorDep) -> TenantCurrentRead:
     """Return the caller's own tenant. `retention_profile` is never part of the answer (US-1)."""
     authorize(actor, TENANCY_PERMISSIONS["read"])
@@ -192,6 +197,7 @@ def read_current_tenant(*, actor: ActorDep) -> TenantCurrentRead:
 
 @router.patch(
     "/current",
+    dependencies=[Depends(admin_rate_limit)],
     responses={
         status.HTTP_403_FORBIDDEN: {
             "description": (

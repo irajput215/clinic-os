@@ -47,7 +47,8 @@ services:
   backend:
     restart: always
     environment:
-      FRONTEND_HOST: https://${DOMAIN:?Variable not set}
+      # The app's public URL. Defaults to the Traefik host; set FRONTEND_HOST to override it.
+      FRONTEND_HOST: ${FRONTEND_HOST:-https://${DOMAIN:?Variable not set}}
     labels:
       # Route HTTPS traffic for this domain
       - traefik.http.routers.backend-https.rule=Host(`${DOMAIN:?Variable not set}`)

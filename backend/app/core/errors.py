@@ -52,6 +52,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.correlation import request_id_from_scope, route_template
 from app.core.logging import current_correlation_id, current_request_id, request_context
+from app.core.security_headers import SECURITY_HEADERS
 
 logger = logging.getLogger("app.errors")
 
@@ -254,7 +255,13 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
                 "method": request.method,
             },
         )
-    return problem_response(request, status_code=500, detail=GENERIC_INTERNAL_DETAIL)
+    response = problem_response(
+        request, status_code=500, detail=GENERIC_INTERNAL_DETAIL
+    )
+    # Starlette answers this one from `ServerErrorMiddleware`, outside every user middleware, so
+    # `SecurityHeadersMiddleware` never sees it; the headers are set here instead.
+    response.headers.update(SECURITY_HEADERS)
+    return response
 
 
 def install_exception_handlers(app: FastAPI) -> None:

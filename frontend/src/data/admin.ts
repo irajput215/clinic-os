@@ -14,14 +14,14 @@ import { currentUserQuery } from "@/lib/session"
  *
  * Two API surfaces, with different gates, both decided by the server:
  * - roles and access (`backend/app/modules/users_roles/router.py`) need `users:manage` and an
- *   organisation; tenant comes from the session. Rate limited at 20 requests a minute.
+ *   organisation; tenant comes from the session. Rate limited at 20 requests a minute per session.
  * - accounts (`backend/app/api/routes/users.py`, the frozen template layer) are platform-wide and
  *   superuser-only.
  */
 
 /**
- * The administrative class is rate limited (20/min per client address) and a view issues several
- * reads, so a `429` is retried with a wait long enough for the window to move. Every other `4xx`
+ * The administrative class is rate limited (20/min per session) and a view issues several reads,
+ * so a `429` is retried with a wait long enough for the window to move. Every other `4xx`
  * is final; network failures and `5xx` get the app's usual retries.
  */
 const retryAdmin = (failureCount: number, error: unknown) => {
