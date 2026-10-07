@@ -1,24 +1,24 @@
 import { zodResolver } from "@hookform/resolvers/zod"
-import { useMutation, useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Check, ChevronLeft, Loader2 } from "lucide-react"
 import { useMemo, useState } from "react"
 import { useForm } from "react-hook-form"
 import { Button } from "@/components/ui/button"
 import { bookingRepo, clinicNameFromSlug } from "@/data/booking"
-import { clinicDateOf } from "@/data/preview/time"
 import {
   APPOINTMENT_TYPES,
   type AppointmentType,
   type PublicSlot,
 } from "@/data/types"
-import { Field, Mono, PreviewBanner } from "@/design/primitives"
+import { Field, Mono } from "@/design/primitives"
+import { clinicDateOf } from "@/lib/clinic-time"
 import {
   clinicToday,
   formatDate,
   formatLongDay,
   formatTime,
 } from "@/lib/format"
-import { describeError } from "@/lib/http"
+import { describeError, httpStatus, refusalCode } from "@/lib/http"
 import { cn } from "@/lib/utils"
 import { z } from "@/lib/zod"
 import { BrandMark } from "@/shell/BrandMark"
@@ -78,10 +78,20 @@ type Details = z.infer<typeof details>
 
 type Step = "visit" | "details" | "time" | "done"
 
+const slotsQuery = (clinicSlug: string, visit: AppointmentType) => ({
+  queryKey: ["public-slots", clinicSlug, visit],
+  queryFn: () => bookingRepo.slots(clinicSlug, visit),
+  staleTime: 30_000,
+})
+
 export function BookingPage({ clinicSlug }: { clinicSlug: string }) {
   const clinic = clinicNameFromSlug(clinicSlug)
   const [step, setStep] = useState<Step>("visit")
   const [visit, setVisit] = useState<AppointmentType>("NURSE_TRIAGE")
+  // Asked on arrival, so an unknown or closed clinic says so before anyone fills in the form, and
+  // the first visit type's times are ready by the time the patient reaches them.
+  const opening = useQuery(slotsQuery(clinicSlug, visit))
+  const unavailable = httpStatus(opening.error) === 404
   const [info, setInfo] = useState<Details | null>(null)
   const [slot, setSlot] = useState<PublicSlot | null>(null)
   const [reference, setReference] = useState<string | null>(null)
@@ -107,12 +117,18 @@ export function BookingPage({ clinicSlug }: { clinicSlug: string }) {
         </div>
 
         <div className="animate-rise rounded-[18px] border border-line bg-paper/95 p-6 shadow-[0_24px_70px_rgba(38,34,27,0.12)] sm:p-8">
-          <PreviewBanner
-            standalone
-            what="This is a demonstration booking page. Bookings appear only in the clinic's preview calendar, in this browser tab."
-          />
+          {unavailable ? (
+            <section className="py-4 text-center" role="alert">
+              <h1 className="font-serif text-[26px] font-medium">
+                This booking page isn't available
+              </h1>
+              <p className="mt-2 text-sm text-stone">
+                Check the link you were given, or contact the clinic directly.
+              </p>
+            </section>
+          ) : null}
 
-          {step !== "done" ? (
+          {!unavailable && step !== "done" ? (
             <ol
               className="mb-6 flex items-center gap-2 text-xs font-semibold tracking-[0.04em] uppercase"
               aria-label="Progress"
@@ -146,7 +162,7 @@ export function BookingPage({ clinicSlug }: { clinicSlug: string }) {
             </ol>
           ) : null}
 
-          {step === "visit" ? (
+          {!unavailable && step === "visit" ? (
             <section>
               <h1 className="font-serif text-[26px] font-medium">
                 What kind of visit?
@@ -201,6 +217,7 @@ export function BookingPage({ clinicSlug }: { clinicSlug: string }) {
 
           {step === "time" && info ? (
             <TimeStep
+              clinicSlug={clinicSlug}
               visit={visit}
               selected={slot}
               onSelect={setSlot}
@@ -234,8 +251,8 @@ export function BookingPage({ clinicSlug }: { clinicSlug: string }) {
                 </Mono>
               </p>
               <p className="mt-4 text-xs text-stone">
-                We'll send a confirmation and a secure intake link to{" "}
-                {info.email}.
+                Keep this reference. The clinic has your booking and will
+                contact you at {info.email} if anything changes.
               </p>
             </section>
           ) : null}
@@ -277,7 +294,9 @@ function DetailsStep({
     <form onSubmit={form.handleSubmit(onNext)} noValidate>
       <h1 className="font-serif text-[26px] font-medium">A little about you</h1>
       <p className="mt-1 text-sm text-stone">
-        This helps the clinician prepare. It's stored in Australia.
+        The first two questions only check that booking online suits you; your
+        answers aren't sent. Your name and contact details are stored in
+        Australia.
       </p>
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
         <Field
@@ -434,6 +453,7 @@ function DetailsStep({
 }
 
 function TimeStep({
+  clinicSlug,
   visit,
   selected,
   onSelect,
@@ -441,6 +461,7 @@ function TimeStep({
   onBooked,
   info,
 }: {
+  clinicSlug: string
   visit: AppointmentType
   selected: PublicSlot | null
   onSelect: (s: PublicSlot) => void
@@ -448,10 +469,8 @@ function TimeStep({
   onBooked: (reference: string) => void
   info: Details
 }) {
-  const slots = useQuery({
-    queryKey: ["public-slots", visit],
-    queryFn: () => bookingRepo.slots(visit),
-  })
+  const queryClient = useQueryClient()
+  const slots = useQuery(slotsQuery(clinicSlug, visit))
   const days = useMemo(() => {
     const byDay = new Map<string, PublicSlot[]>()
     for (const s of slots.data ?? []) {
@@ -464,14 +483,25 @@ function TimeStep({
   const activeDay = day ?? days[0]?.[0] ?? null
   const book = useMutation({
     mutationFn: () =>
-      bookingRepo.book({
-        slot: selected!,
+      bookingRepo.book(clinicSlug, {
         type: visit,
-        ...info,
-        tried_conventional: info.tried_conventional === "yes",
+        practitioner_id: selected!.practitioner_id,
+        starts_at: selected!.starts_at,
+        given_name: info.given_name,
+        family_name: info.family_name,
+        date_of_birth: info.date_of_birth,
+        email: info.email,
+        phone: info.phone,
         consent: info.consent,
       }),
     onSuccess: (r) => onBooked(r.reference),
+    onError: (error) => {
+      // Someone else took the time: show the times that are still free.
+      if (refusalCode(error) === "SLOT_TAKEN")
+        void queryClient.invalidateQueries({
+          queryKey: ["public-slots", clinicSlug, visit],
+        })
+    },
   })
 
   return (
@@ -481,10 +511,33 @@ function TimeStep({
         {APPOINTMENT_TYPES[visit].label} · {APPOINTMENT_TYPES[visit].minutes}{" "}
         minutes · times are Sydney time
       </p>
-      {slots.isPending ? (
-        <div className="mt-6 flex justify-center text-stone">
+      {slots.isError ? (
+        <div
+          role="alert"
+          className="mt-5 rounded-btn bg-danger-tint px-3 py-2.5 text-[13px] text-danger-deep"
+        >
+          {describeError(slots.error)}{" "}
+          <button
+            type="button"
+            className="font-semibold underline"
+            onClick={() => void slots.refetch()}
+          >
+            Try again
+          </button>
+        </div>
+      ) : slots.isPending ? (
+        <div
+          className="mt-6 flex justify-center text-stone"
+          role="status"
+          aria-label="Loading times"
+        >
           <Loader2 className="animate-spin" />
         </div>
+      ) : days.length === 0 ? (
+        <p className="mt-5 rounded-btn bg-oat px-3 py-2.5 text-[13px] text-stone">
+          No online times are free in the next two weeks for this visit. Please
+          contact the clinic directly.
+        </p>
       ) : (
         <>
           <div className="mt-5 flex gap-2 overflow-x-auto pb-1">

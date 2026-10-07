@@ -5,6 +5,88 @@ export type ClientOptions = {
 };
 
 /**
+ * AppointmentCreate
+ *
+ * `POST /appointments`. The server computes `ends_at` from the type (R2).
+ */
+export type AppointmentCreate = {
+    /**
+     * Patient Id
+     */
+    patient_id: string;
+    /**
+     * Practitioner Id
+     */
+    practitioner_id: string;
+    /**
+     * Type
+     */
+    type: 'NURSE_TRIAGE' | 'INITIAL_CONSULT' | 'FOLLOW_UP';
+    /**
+     * Starts At
+     */
+    starts_at: string;
+};
+
+/**
+ * AppointmentRead
+ */
+export type AppointmentRead = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Patient Id
+     */
+    patient_id: string;
+    /**
+     * Patient Name
+     */
+    patient_name: string;
+    /**
+     * Practitioner Id
+     */
+    practitioner_id: string;
+    /**
+     * Type
+     */
+    type: 'NURSE_TRIAGE' | 'INITIAL_CONSULT' | 'FOLLOW_UP';
+    /**
+     * Status
+     */
+    status: 'BOOKED' | 'CONFIRMED' | 'ARRIVED' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
+    /**
+     * Starts At
+     */
+    starts_at: string;
+    /**
+     * Ends At
+     */
+    ends_at: string;
+    /**
+     * Source
+     */
+    source: 'STAFF' | 'PUBLIC_BOOKING';
+    /**
+     * Created At
+     */
+    created_at: string;
+};
+
+/**
+ * AppointmentStatusUpdate
+ *
+ * `POST /appointments/{id}/status`.
+ */
+export type AppointmentStatusUpdate = {
+    /**
+     * Status
+     */
+    status: 'BOOKED' | 'CONFIRMED' | 'ARRIVED' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
+};
+
+/**
  * AuditEventRead
  *
  * One audit event as the API returns it — the design's envelope, and nothing else.
@@ -714,6 +796,111 @@ export type PermissionsPublic = {
      * Count
      */
     count: number;
+};
+
+/**
+ * PractitionerRead
+ *
+ * A bookable member of staff: an active account holding a Doctor, Authorised Prescriber or
+ * Nurse role in the session's organisation.
+ */
+export type PractitionerRead = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Role
+     */
+    role: 'DOCTOR' | 'NURSE';
+    /**
+     * Title
+     */
+    title: string;
+};
+
+/**
+ * PublicBookingCreated
+ *
+ * The confirmation. The same shape whether the patient was new or matched (never says which).
+ */
+export type PublicBookingCreated = {
+    /**
+     * Reference
+     */
+    reference: string;
+};
+
+/**
+ * PublicBookingRequest
+ *
+ * `POST /public/{clinic_slug}/bookings`: a slot, who the patient is, and the APP 5 consent.
+ */
+export type PublicBookingRequest = {
+    /**
+     * Type
+     */
+    type: 'NURSE_TRIAGE' | 'INITIAL_CONSULT' | 'FOLLOW_UP';
+    /**
+     * Practitioner Id
+     */
+    practitioner_id: string;
+    /**
+     * Starts At
+     */
+    starts_at: string;
+    /**
+     * Given Name
+     */
+    given_name: string;
+    /**
+     * Family Name
+     */
+    family_name: string;
+    /**
+     * Date Of Birth
+     */
+    date_of_birth: string;
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Phone
+     */
+    phone: string;
+    /**
+     * Consent
+     */
+    consent: true;
+};
+
+/**
+ * PublicSlot
+ *
+ * One free, bookable time. Only what the booking page shows: never another patient's data.
+ */
+export type PublicSlot = {
+    /**
+     * Practitioner Id
+     */
+    practitioner_id: string;
+    /**
+     * Practitioner Name
+     */
+    practitioner_name: string;
+    /**
+     * Starts At
+     */
+    starts_at: string;
+    /**
+     * Ends At
+     */
+    ends_at: string;
 };
 
 /**
@@ -3039,3 +3226,263 @@ export type tgaApprovalsListPatientTgaApprovalsResponses = {
 };
 
 export type tgaApprovalsListPatientTgaApprovalsResponse = tgaApprovalsListPatientTgaApprovalsResponses[keyof tgaApprovalsListPatientTgaApprovalsResponses];
+
+export type appointmentsListPractitionersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/practitioners';
+};
+
+export type appointmentsListPractitionersResponses = {
+    /**
+     * Response Appointments-List Practitioners
+     *
+     * Successful Response
+     */
+    200: Array<PractitionerRead>;
+};
+
+export type appointmentsListPractitionersResponse = appointmentsListPractitionersResponses[keyof appointmentsListPractitionersResponses];
+
+export type appointmentsListAppointmentsData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * From
+         */
+        from: string;
+        /**
+         * To
+         */
+        to: string;
+        /**
+         * Practitioner Id
+         */
+        practitioner_id?: string | null;
+    };
+    url: '/api/v1/appointments';
+};
+
+export type appointmentsListAppointmentsErrors = {
+    /**
+     * Absent, or another organisation's
+     */
+    404: unknown;
+    /**
+     * Refused by the booking rules (overlap, slot taken, illegal transition)
+     */
+    409: unknown;
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type appointmentsListAppointmentsError = appointmentsListAppointmentsErrors[keyof appointmentsListAppointmentsErrors];
+
+export type appointmentsListAppointmentsResponses = {
+    /**
+     * Response Appointments-List Appointments
+     *
+     * Successful Response
+     */
+    200: Array<AppointmentRead>;
+};
+
+export type appointmentsListAppointmentsResponse = appointmentsListAppointmentsResponses[keyof appointmentsListAppointmentsResponses];
+
+export type appointmentsCreateAppointmentData = {
+    body: AppointmentCreate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/appointments';
+};
+
+export type appointmentsCreateAppointmentErrors = {
+    /**
+     * Absent, or another organisation's
+     */
+    404: unknown;
+    /**
+     * Refused by the booking rules (overlap, slot taken, illegal transition)
+     */
+    409: unknown;
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type appointmentsCreateAppointmentError = appointmentsCreateAppointmentErrors[keyof appointmentsCreateAppointmentErrors];
+
+export type appointmentsCreateAppointmentResponses = {
+    /**
+     * Successful Response
+     */
+    201: AppointmentRead;
+};
+
+export type appointmentsCreateAppointmentResponse = appointmentsCreateAppointmentResponses[keyof appointmentsCreateAppointmentResponses];
+
+export type appointmentsChangeAppointmentStatusData = {
+    body: AppointmentStatusUpdate;
+    path: {
+        /**
+         * Appointment Id
+         */
+        appointment_id: string;
+    };
+    query?: never;
+    url: '/api/v1/appointments/{appointment_id}/status';
+};
+
+export type appointmentsChangeAppointmentStatusErrors = {
+    /**
+     * Absent, or another organisation's
+     */
+    404: unknown;
+    /**
+     * Refused by the booking rules (overlap, slot taken, illegal transition)
+     */
+    409: unknown;
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type appointmentsChangeAppointmentStatusError = appointmentsChangeAppointmentStatusErrors[keyof appointmentsChangeAppointmentStatusErrors];
+
+export type appointmentsChangeAppointmentStatusResponses = {
+    /**
+     * Successful Response
+     */
+    200: AppointmentRead;
+};
+
+export type appointmentsChangeAppointmentStatusResponse = appointmentsChangeAppointmentStatusResponses[keyof appointmentsChangeAppointmentStatusResponses];
+
+export type appointmentsListPatientAppointmentsData = {
+    body?: never;
+    path: {
+        /**
+         * Patient Id
+         */
+        patient_id: string;
+    };
+    query?: never;
+    url: '/api/v1/patients/{patient_id}/appointments';
+};
+
+export type appointmentsListPatientAppointmentsErrors = {
+    /**
+     * Absent, or another organisation's
+     */
+    404: unknown;
+    /**
+     * Refused by the booking rules (overlap, slot taken, illegal transition)
+     */
+    409: unknown;
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type appointmentsListPatientAppointmentsError = appointmentsListPatientAppointmentsErrors[keyof appointmentsListPatientAppointmentsErrors];
+
+export type appointmentsListPatientAppointmentsResponses = {
+    /**
+     * Response Appointments-List Patient Appointments
+     *
+     * Successful Response
+     */
+    200: Array<AppointmentRead>;
+};
+
+export type appointmentsListPatientAppointmentsResponse = appointmentsListPatientAppointmentsResponses[keyof appointmentsListPatientAppointmentsResponses];
+
+export type publicBookingListPublicSlotsData = {
+    body?: never;
+    path: {
+        /**
+         * Clinic Slug
+         */
+        clinic_slug: string;
+    };
+    query: {
+        /**
+         * Type
+         */
+        type: 'NURSE_TRIAGE' | 'INITIAL_CONSULT' | 'FOLLOW_UP';
+    };
+    url: '/api/v1/public/{clinic_slug}/slots';
+};
+
+export type publicBookingListPublicSlotsErrors = {
+    /**
+     * No such clinic, or not taking bookings
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type publicBookingListPublicSlotsError = publicBookingListPublicSlotsErrors[keyof publicBookingListPublicSlotsErrors];
+
+export type publicBookingListPublicSlotsResponses = {
+    /**
+     * Response Public-Booking-List Public Slots
+     *
+     * Successful Response
+     */
+    200: Array<PublicSlot>;
+};
+
+export type publicBookingListPublicSlotsResponse = publicBookingListPublicSlotsResponses[keyof publicBookingListPublicSlotsResponses];
+
+export type publicBookingCreatePublicBookingData = {
+    body: PublicBookingRequest;
+    path: {
+        /**
+         * Clinic Slug
+         */
+        clinic_slug: string;
+    };
+    query?: never;
+    url: '/api/v1/public/{clinic_slug}/bookings';
+};
+
+export type publicBookingCreatePublicBookingErrors = {
+    /**
+     * No such clinic, or not taking bookings
+     */
+    404: unknown;
+    /**
+     * `SLOT_TAKEN`: somebody booked that time first
+     */
+    409: unknown;
+    /**
+     * Not `application/json`
+     */
+    415: unknown;
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type publicBookingCreatePublicBookingError = publicBookingCreatePublicBookingErrors[keyof publicBookingCreatePublicBookingErrors];
+
+export type publicBookingCreatePublicBookingResponses = {
+    /**
+     * Successful Response
+     */
+    201: PublicBookingCreated;
+};
+
+export type publicBookingCreatePublicBookingResponse = publicBookingCreatePublicBookingResponses[keyof publicBookingCreatePublicBookingResponses];

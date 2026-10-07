@@ -1,6 +1,5 @@
 import { PatientsService, UsersService } from "@/client"
 import type { PatientRead } from "@/client/types.gen"
-import { takePendingPublicBookings } from "@/data/booking"
 import { clinicToday } from "@/lib/format"
 import { type PreviewState, seedPreview } from "./seed"
 
@@ -63,12 +62,6 @@ const ensureLoaded = async (): Promise<PreviewState> => {
       loading = null
     })
     cache = await loading
-  }
-  // Bookings made on the public page in this tab arrive here, the way the API would surface them.
-  const arrivals = takePendingPublicBookings()
-  if (arrivals.length) {
-    cache.appointments.push(...arrivals)
-    persist(cache)
   }
   return cache
 }

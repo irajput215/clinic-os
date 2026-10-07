@@ -29,11 +29,12 @@ const DEFAULTS: Record<Capability, Source> = {
   // The per-patient tab and every write are live. The practice-wide register needs
   // GET /tga-approvals, which does not exist yet, so it shows a designed refusal (not preview data).
   tgaApprovals: "api",
+  // backend/app/modules/appointments (docs2/sdlc/04-calendar-and-booking/api.md).
+  appointments: "api",
+  publicBooking: "api",
   // No backend module yet; contracts proposed in docs2/sdlc.
-  appointments: "preview",
   prescriptions: "preview",
   dashboard: "preview",
-  publicBooking: "preview",
 }
 
 const overrides = new Set(

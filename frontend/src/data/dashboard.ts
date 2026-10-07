@@ -1,8 +1,8 @@
 import { queryOptions } from "@tanstack/react-query"
 import { previewMatch } from "@/data/preview/gate"
 import { readPreview } from "@/data/preview/store"
-import { clinicDateOf } from "@/data/preview/time"
 import type { TodaySummary } from "@/data/types"
+import { clinicDateOf } from "@/lib/clinic-time"
 import {
   clinicToday,
   daysBetween,

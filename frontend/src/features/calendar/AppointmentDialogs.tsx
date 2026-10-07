@@ -14,7 +14,6 @@ import {
 } from "@/components/ui/dialog"
 import { appointmentsRepo, STATUS_LABEL } from "@/data/appointments"
 import { patientName, patientsQuery } from "@/data/patients"
-import { clinicInstant } from "@/data/preview/time"
 import {
   APPOINTMENT_TRANSITIONS,
   APPOINTMENT_TYPES,
@@ -25,6 +24,7 @@ import {
 } from "@/data/types"
 import { ErrorState, Field } from "@/design/primitives"
 import { AppointmentStatusPill } from "@/features/shared/pills"
+import { clinicInstant } from "@/lib/clinic-time"
 import { formatLongDay, formatTime } from "@/lib/format"
 import { describeError } from "@/lib/http"
 
@@ -77,16 +77,13 @@ export function NewAppointmentDialog({
   }, [types, type])
 
   const create = useMutation({
-    mutationFn: () => {
-      const patient = patients.data?.data.find((p) => p.id === patientId)
-      return appointmentsRepo.create({
+    mutationFn: () =>
+      appointmentsRepo.create({
         patient_id: patientId,
-        patient_name: patient ? patientName(patient) : "",
         practitioner_id: practitionerId,
         type,
         starts_at: clinicInstant(date, time),
-      })
-    },
+      }),
     onSuccess: async (appt) => {
       await invalidateSchedule(queryClient)
       toast.success(
@@ -250,12 +247,15 @@ export function AppointmentDialog({
       )
       onOpenChange(false)
     },
-    onError: (error) => toast.error(describeError(error)),
   })
+  const { reset } = update
+  // A refusal belongs to the booking it was about: opening another one starts clean.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset when the selected booking changes
+  useEffect(() => reset(), [appointment?.id, reset])
 
   const a = appointment
   const next = a ? APPOINTMENT_TRANSITIONS[a.status] : []
-  const intake = a?.patient_id.startsWith("intake-")
+  const intake = a?.source === "PUBLIC_BOOKING"
 
   return (
     <Dialog open={a !== null} onOpenChange={onOpenChange}>
@@ -290,18 +290,25 @@ export function AppointmentDialog({
             </dl>
             {intake ? (
               <p className="rounded-btn bg-info-tint px-3 py-2.5 text-[13px] text-info-deep">
-                New patient from the booking page. Create their record from the
-                intake before the consult.
+                Booked by the patient on the public booking page. Check their
+                details and add anything missing before the consult.
               </p>
-            ) : (
-              <Link
-                to="/patients/$patientId"
-                params={{ patientId: a.patient_id }}
-                className="text-sm font-medium text-clay hover:underline"
+            ) : null}
+            <Link
+              to="/patients/$patientId"
+              params={{ patientId: a.patient_id }}
+              className="text-sm font-medium text-clay hover:underline"
+            >
+              Open patient record →
+            </Link>
+            {update.isError ? (
+              <p
+                role="alert"
+                className="rounded-btn bg-danger-tint px-3 py-2.5 text-[13px] text-danger-deep"
               >
-                Open patient record →
-              </Link>
-            )}
+                {describeError(update.error)}
+              </p>
+            ) : null}
             {next.length ? (
               <DialogFooter className="flex-wrap gap-2 sm:justify-start">
                 {next.map((status) => (

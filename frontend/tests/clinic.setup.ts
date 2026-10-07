@@ -53,6 +53,23 @@ setup("sign up a clinic and add patients", async ({ request, baseURL }) => {
   expect(signup.ok(), await signup.text()).toBeTruthy()
 
   const access_token = await signInWithApi(request, clinic)
+  const auth = { authorization: `Bearer ${access_token}` }
+
+  // The owner also consults: granting the Doctor role makes them a bookable practitioner, so the
+  // calendar has a column and the public booking page offers doctor consults. Practitioners are
+  // derived from roles on the server (appointments module); there is no roster to seed.
+  const roles = await request.get("/api/v1/roles", { headers: auth })
+  expect(roles.ok(), await roles.text()).toBeTruthy()
+  const doctor = (
+    (await roles.json()) as { data: { id: string; code: string }[] }
+  ).data.find((role) => role.code === "DOCTOR")
+  expect(doctor).toBeDefined()
+  const ownerId = ((await signup.json()) as { id: string }).id
+  const granted = await request.post(`/api/v1/users/${ownerId}/roles`, {
+    headers: auth,
+    data: { role_id: doctor?.id },
+  })
+  expect(granted.ok(), await granted.text()).toBeTruthy()
 
   for (const [
     given_name,

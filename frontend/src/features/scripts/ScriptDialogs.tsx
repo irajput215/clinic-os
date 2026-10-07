@@ -15,9 +15,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { practitionersQuery } from "@/data/appointments"
 import { categoryShort, formLabel } from "@/data/approvals"
 import { patientName, patientsQuery } from "@/data/patients"
+import { previewPractitionersQuery } from "@/data/preview/practitioners"
 import { productsQuery, scriptsRepo } from "@/data/scripts"
 import {
   MATCH_REASONS,
@@ -99,7 +99,7 @@ function StageScriptForm({
 }) {
   const patients = useQuery({ ...patientsQuery, enabled: !patientId })
   const products = useQuery(productsQuery)
-  const practitioners = useQuery(practitionersQuery)
+  const practitioners = useQuery(previewPractitionersQuery)
   const { data: me } = useQuery(currentUserQuery)
   const failed = products.error ?? practitioners.error ?? patients.error
   if (failed) return <ErrorState error={failed} />
