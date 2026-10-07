@@ -31,9 +31,9 @@ jobs:
       - name: Install frontend dependencies
         run: bun ci
       - name: Build frontend
-        # Writes frontend-features' production build to backend/app/frontend, which the backend
+        # Writes the frontend's production build to backend/app/frontend, which the backend
         # serves at `/` and `fastapi deploy` ships (.fastapicloudignore keeps it).
-        run: bun run --filter frontend-features build
+        run: bun run --filter frontend build
         env:
           # Same origin as the API: the client calls `/api` on its own origin, and the build's CSP
           # `connect-src` is `'self'` with no second origin.

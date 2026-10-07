@@ -27,6 +27,6 @@ jobs:
       - name: Test backend is up
         run: curl http://localhost:8000/api/v1/utils/health-check
       - name: Test frontend is up
-        # The served page must be the frontend-features build, not merely any 200.
+        # The served page must be the frontend build, not merely any 200.
         run: curl -fsS http://localhost:8000 | grep -F '<title>Clinic OS</title>'
       - run: docker compose down -v --remove-orphans

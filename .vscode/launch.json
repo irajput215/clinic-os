@@ -22,7 +22,7 @@
             "request": "launch",
             "name": "Debug Frontend: Launch Chrome against http://localhost:5174",
             "url": "http://localhost:5174",
-            "webRoot": "${workspaceFolder}/frontend-features"
+            "webRoot": "${workspaceFolder}/frontend"
         },
     ]
 }

@@ -3,13 +3,13 @@ FROM oven/bun:1 AS frontend-build
 WORKDIR /app
 
 COPY package.json bun.lock /app/
-COPY frontend-features/package.json /app/frontend-features/
+COPY frontend/package.json /app/frontend/
 
-WORKDIR /app/frontend-features
+WORKDIR /app/frontend
 
 RUN bun install
 
-COPY ./frontend-features /app/frontend-features
+COPY ./frontend /app/frontend
 
 # Empty: the backend serves this build and the API from one origin, so the client calls `/api` on
 # its own origin and the build's CSP `connect-src` is `'self'` alone.

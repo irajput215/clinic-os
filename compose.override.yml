@@ -52,14 +52,14 @@ services:
             - .venv
         - path: ./backend/pyproject.toml
           action: rebuild
-        - path: ./frontend-features
+        - path: ./frontend
           action: rebuild
           ignore:
-            - ./frontend-features/node_modules
-            - ./frontend-features/blob-report
-            - ./frontend-features/test-results
-            - ./frontend-features/playwright-report
-            - ./frontend-features/playwright
+            - ./frontend/node_modules
+            - ./frontend/blob-report
+            - ./frontend/test-results
+            - ./frontend/playwright-report
+            - ./frontend/playwright
     # TODO: remove once coverage is done locally
     volumes:
       - ./backend/htmlcov:/app/backend/htmlcov
@@ -80,7 +80,7 @@ services:
   playwright:
     build:
       context: .
-      dockerfile: frontend-features/Dockerfile.playwright
+      dockerfile: frontend/Dockerfile.playwright
       args:
         - NODE_ENV=production
     ipc: host
@@ -97,7 +97,7 @@ services:
       - PLAYWRIGHT_HTML_HOST=0.0.0.0
       - CI=${CI:-}
     volumes:
-      - ./frontend-features/blob-report:/app/frontend-features/blob-report
-      - ./frontend-features/test-results:/app/frontend-features/test-results
+      - ./frontend/blob-report:/app/frontend/blob-report
+      - ./frontend/test-results:/app/frontend/test-results
     ports:
       - 9323:9323

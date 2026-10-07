@@ -1,6 +1,6 @@
 auto-labels:
   docs:
-    - exclude: frontend-features/**
+    - exclude: frontend/**
     - exclude: backend/**
     - exclude: .github/**
     - exclude: scripts/**
