@@ -23,6 +23,7 @@ import {
 } from "@/data/approvals"
 import { patientName, patientsQuery } from "@/data/patients"
 import {
+  formatQuantity,
   type Prescription,
   prescribersQuery,
   scriptsRepo,
@@ -480,7 +481,7 @@ export function ReviewSignDialog({
               <div className="text-[15px] font-semibold">
                 {s.medicine_name}{" "}
                 <span className="font-normal text-stone">
-                  · qty {s.quantity} · {s.repeats} repeats
+                  · qty {formatQuantity(s.quantity)} · {s.repeats} repeats
                 </span>
               </div>
               <div className="mt-0.5 text-stone">{s.dose_instruction}</div>

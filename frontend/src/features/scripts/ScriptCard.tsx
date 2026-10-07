@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router"
 import { Button } from "@/components/ui/button"
 import { categoryShort, formLabel } from "@/data/approvals"
 import type { Prescription } from "@/data/scripts"
+import { formatQuantity } from "@/data/scripts"
 import { Mono } from "@/design/primitives"
 import { GatePill, PrescriptionStatePill } from "@/features/shared/pills"
 import { formatDayMonthTime, patientRef } from "@/lib/format"
@@ -46,7 +47,8 @@ export function ScriptCard({
           <span className="text-stone">
             {" "}
             · {categoryShort(s.tga_category)} · {formLabel(s.dosage_form)} · qty{" "}
-            {s.quantity} · {s.repeats} repeat{s.repeats === 1 ? "" : "s"} ·{" "}
+            {formatQuantity(s.quantity)} · {s.repeats} repeat
+            {s.repeats === 1 ? "" : "s"} ·{" "}
           </span>
           <span className="text-stone">{s.dose_instruction}</span>
         </div>

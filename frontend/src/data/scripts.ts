@@ -59,6 +59,12 @@ export const PRESCRIPTION_STATE_LABEL: Record<PrescriptionState, string> = {
   REVERSED: "Reversed",
 }
 
+/** The API sends a decimal string ("1.00"); show it as a clinician writes it ("1", "2.5"). */
+export const formatQuantity = (quantity: string) => {
+  const n = Number(quantity)
+  return Number.isFinite(n) ? String(n) : quantity
+}
+
 /** The API's largest page (prescriptions/service.py `MAX_PAGE_SIZE`). */
 const PAGE_SIZE = 100
 
