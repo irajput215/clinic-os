@@ -30,6 +30,7 @@ import {
   Pill,
   TabBar,
 } from "@/design/primitives"
+import { focusFirstError } from "@/lib/form"
 import { describeError } from "@/lib/http"
 import { currentUserQuery, signOut } from "@/lib/session"
 import { z } from "@/lib/zod"
@@ -76,6 +77,7 @@ function ProfileTab({ me }: { me: UserPublic }) {
   const queryClient = useQueryClient()
   const defaults = { full_name: me.full_name ?? "", email: me.email }
   const form = useForm<ProfileValues>({
+    shouldFocusError: false,
     resolver: zodResolver(profileSchema),
     defaultValues: defaults,
   })
@@ -110,7 +112,10 @@ function ProfileTab({ me }: { me: UserPublic }) {
     <div className="space-y-5">
       <Card title="Profile">
         <form
-          onSubmit={form.handleSubmit((v) => save.mutate(v))}
+          onSubmit={form.handleSubmit(
+            (v) => save.mutate(v),
+            focusFirstError(form.setFocus),
+          )}
           noValidate
           className="grid gap-4"
         >
@@ -236,6 +241,7 @@ type PasswordValues = z.infer<typeof passwordSchema>
 
 function PasswordTab() {
   const form = useForm<PasswordValues>({
+    shouldFocusError: false,
     resolver: zodResolver(passwordSchema),
     defaultValues: {
       current_password: "",
@@ -271,7 +277,10 @@ function PasswordTab() {
   return (
     <Card title="Change password">
       <form
-        onSubmit={form.handleSubmit((v) => save.mutate(v))}
+        onSubmit={form.handleSubmit(
+          (v) => save.mutate(v),
+          focusFirstError(form.setFocus),
+        )}
         noValidate
         className="grid gap-4"
       >

@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog"
 import { createPatient, patientName, updatePatient } from "@/data/patients"
 import { Field } from "@/design/primitives"
+import { focusFirstError } from "@/lib/form"
 import { clinicToday } from "@/lib/format"
 import { describeError } from "@/lib/http"
 import { z } from "@/lib/zod"
@@ -94,6 +95,7 @@ export function PatientFormDialog({
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const form = useForm<FormIn, unknown, FormOut>({
+    shouldFocusError: false,
     resolver: zodResolver(schema),
     defaultValues: toForm(patient),
   })
@@ -138,7 +140,10 @@ export function PatientFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[620px]">
         <form
-          onSubmit={form.handleSubmit((v) => save.mutate(v))}
+          onSubmit={form.handleSubmit(
+            (v) => save.mutate(v),
+            focusFirstError(form.setFocus),
+          )}
           noValidate
           className="grid gap-4"
         >

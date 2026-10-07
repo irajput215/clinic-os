@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog"
 import { createAccount, deactivateAccount, updateAccount } from "@/data/admin"
 import { Field, FormAlert } from "@/design/primitives"
+import { focusFirstError } from "@/lib/form"
 import { describeError } from "@/lib/http"
 import { z } from "@/lib/zod"
 
@@ -71,6 +72,7 @@ export function AccountFormDialog({
   const creating = !account
   const queryClient = useQueryClient()
   const form = useForm<FormValues>({
+    shouldFocusError: false,
     resolver: zodResolver(schema(creating)),
     defaultValues: toForm(account),
   })
@@ -144,7 +146,10 @@ export function AccountFormDialog({
     >
       <DialogContent className="sm:max-w-[520px]">
         <form
-          onSubmit={form.handleSubmit((v) => save.mutate(v))}
+          onSubmit={form.handleSubmit(
+            (v) => save.mutate(v),
+            focusFirstError(form.setFocus),
+          )}
           noValidate
           className="grid gap-4"
         >

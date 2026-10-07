@@ -24,6 +24,7 @@ import {
   rolesQuery,
 } from "@/data/admin"
 import { Field, FormAlert, SkeletonRows } from "@/design/primitives"
+import { focusFirstError } from "@/lib/form"
 import { describeError, refusalCode } from "@/lib/http"
 import { cn } from "@/lib/utils"
 import { z } from "@/lib/zod"
@@ -63,6 +64,7 @@ export function InviteStaffDialog({
   const roles = useQuery({ ...rolesQuery, enabled: open })
   const held = useHeldCodes(me.id)
   const form = useForm<Values>({
+    shouldFocusError: false,
     resolver: zodResolver(schema),
     defaultValues: EMPTY,
   })
@@ -109,7 +111,10 @@ export function InviteStaffDialog({
     >
       <DialogContent className="sm:max-w-[540px]">
         <form
-          onSubmit={form.handleSubmit((values) => invite.mutate(values))}
+          onSubmit={form.handleSubmit(
+            (values) => invite.mutate(values),
+            focusFirstError(form.setFocus),
+          )}
           noValidate
           className="grid min-w-0 gap-4"
           aria-label="Invite a staff member"
