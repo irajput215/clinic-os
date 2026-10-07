@@ -3,16 +3,18 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlmodel import select
 
 from app import crud
 from app.api.deps import ActiveTenantUser, SessionDep
 from app.core import security
 from app.core.config import settings
 from app.core.rate_limit import login_rate_limit, password_recovery_rate_limit
-from app.models import Message, NewPassword, Token, UserPublic, UserUpdate
+from app.models import Message, NewPassword, Token, User, UserPublic, UserUpdate
 from app.utils import (
     generate_password_reset_token,
     generate_reset_password_email,
+    password_reset_token_unspent,
     send_email,
     verify_password_reset_token,
 )
@@ -69,7 +71,9 @@ def recover_password(email: str, session: SessionDep) -> Message:
     # Always return the same response to prevent email enumeration attacks
     # Only send email if user actually exists
     if user:
-        password_reset_token = generate_password_reset_token(email=email)
+        password_reset_token = generate_password_reset_token(
+            email=email, hashed_password=user.hashed_password
+        )
         email_data = generate_reset_password_email(
             email_to=user.email, email=email, token=password_reset_token
         )
@@ -96,12 +100,18 @@ def reset_password(session: SessionDep, body: NewPassword) -> Message:
     grants a session, so guessing one must be at least as expensive as asking for one. Both routes
     share the `password-recovery` window, which caps recovery work from one address in total.
     """
-    email = verify_password_reset_token(token=body.token)
-    if not email:
+    # A recovery link is single use: it is bound to the password hash it was issued for, so once
+    # it has set a password (or the password changed any other way) it is refused exactly like a
+    # forged or expired one. The row is locked while the link is checked and spent, so two
+    # concurrent submissions of one link cannot both succeed.
+    claims = verify_password_reset_token(token=body.token)
+    if not claims:
         raise HTTPException(status_code=400, detail="Invalid token")
-    user = crud.get_user_by_email(session=session, email=email)
-    if not user:
-        # Don't reveal that the user doesn't exist - use same error as invalid token
+    user = session.exec(
+        select(User).where(User.email == claims.subject).with_for_update()
+    ).first()
+    if not user or not password_reset_token_unspent(claims, user.hashed_password):
+        # Don't reveal that the user doesn't exist or that the link was spent
         raise HTTPException(status_code=400, detail="Invalid token")
     elif not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")

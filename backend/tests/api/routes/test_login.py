@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -5,9 +6,15 @@ from pwdlib.hashers.bcrypt import BcryptHasher
 from sqlmodel import Session
 
 from app.core.config import settings
-from app.core.security import get_password_hash, verify_password
-from app.crud import create_user
-from app.models import User, UserCreate
+from app.core.rate_limit import limiter
+from app.core.security import (
+    create_access_token,
+    get_password_hash,
+    verify_password,
+)
+from app.crud import create_user, update_user
+from app.models import User, UserCreate, UserUpdate
+from app.modules.users_roles import invitations
 from app.utils import generate_password_reset_token
 from tests.utils.user import user_authentication_headers
 from tests.utils.utils import random_email, random_lower_string
@@ -92,7 +99,9 @@ def test_reset_password(client: TestClient, db: Session) -> None:
         is_superuser=False,
     )
     user = create_user(session=db, user_create=user_create)
-    token = generate_password_reset_token(email=email)
+    token = generate_password_reset_token(
+        email=email, hashed_password=user.hashed_password
+    )
     headers = user_authentication_headers(client=client, email=email, password=password)
     data = {"new_password": new_password, "token": token}
 
@@ -189,3 +198,111 @@ def test_login_with_argon2_password_keeps_hash(client: TestClient, db: Session) 
 
     assert user.hashed_password == original_hash
     assert user.hashed_password.startswith("$argon2")
+
+
+def _recovery_token(client: TestClient, email: str) -> str:
+    """Ask for a recovery link the way the sign-in page does and return the token it carries."""
+    with (
+        patch("app.core.config.settings.SMTP_HOST", "smtp.example.com"),
+        patch("app.core.config.settings.SMTP_USER", "admin@example.com"),
+        patch("app.api.routes.login.send_email") as send,
+    ):
+        r = client.post(f"{settings.API_V1_STR}/password-recovery/{email}")
+    assert r.status_code == 200
+    html = send.call_args.kwargs["html_content"]
+    return html.split("reset-password?token=", 1)[1].split('"', 1)[0]
+
+
+def _new_user(db: Session) -> tuple[User, str]:
+    password = random_lower_string()
+    user = create_user(
+        session=db,
+        user_create=UserCreate(email=random_email(), password=password),
+    )
+    return user, password
+
+
+def test_reset_password_token_is_single_use(client: TestClient, db: Session) -> None:
+    """A recovery link sets a password once. Replaying it - after the reset it was issued for has
+    been spent - is refused with the same answer as a forged token, and the password stays put."""
+    user, _ = _new_user(db)
+    token = _recovery_token(client, user.email)
+    first, second = random_lower_string(), random_lower_string()
+
+    r = client.post(
+        f"{settings.API_V1_STR}/reset-password/",
+        json={"token": token, "new_password": first},
+    )
+    assert r.status_code == 200
+
+    replay = client.post(
+        f"{settings.API_V1_STR}/reset-password/",
+        json={"token": token, "new_password": second},
+    )
+    assert replay.status_code == 400
+    assert replay.json()["detail"] == "Invalid token"
+
+    db.refresh(user)
+    assert verify_password(first, user.hashed_password)[0]
+    assert not verify_password(second, user.hashed_password)[0]
+
+
+def test_reset_password_token_dies_when_password_changes_otherwise(
+    client: TestClient, db: Session
+) -> None:
+    """A link issued before the password changed some other way (any write of a new password hash,
+    such as a second recovery or the user changing it while signed in) no longer works: it was
+    issued for a password state that is gone."""
+    user, _ = _new_user(db)
+    token = _recovery_token(client, user.email)
+    changed = random_lower_string()
+    update_user(session=db, db_user=user, user_in=UserUpdate(password=changed))
+
+    r = client.post(
+        f"{settings.API_V1_STR}/reset-password/",
+        json={"token": token, "new_password": random_lower_string()},
+    )
+    assert r.status_code == 400
+    assert r.json()["detail"] == "Invalid token"
+    db.refresh(user)
+    assert verify_password(changed, user.hashed_password)[0]
+
+
+def test_reset_password_refuses_expired_and_foreign_tokens(
+    client: TestClient, db: Session
+) -> None:
+    """Expired, access and invitation tokens all get the one uniform answer."""
+    user, _ = _new_user(db)
+    expired = generate_password_reset_token(
+        email=user.email,
+        hashed_password=user.hashed_password,
+        now=datetime.now(UTC)
+        - timedelta(hours=settings.EMAIL_RESET_TOKEN_EXPIRE_HOURS + 1),
+    )
+    access = create_access_token(user.email, timedelta(minutes=5))
+    invitation = invitations.issue(
+        user_id=user.id, hashed_password=user.hashed_password
+    )
+    for bad in (expired, access, invitation):
+        r = client.post(
+            f"{settings.API_V1_STR}/reset-password/",
+            json={"token": bad, "new_password": random_lower_string()},
+        )
+        assert r.status_code == 400, bad
+        assert r.json()["detail"] == "Invalid token"
+        limiter.clear()
+
+
+def test_recovery_link_is_not_an_invitation(client: TestClient, db: Session) -> None:
+    """The two password-setting links share one mechanism but never verify as each other."""
+    user, _ = _new_user(db)
+    token = _recovery_token(client, user.email)
+    r = client.post(
+        f"{settings.API_V1_STR}/users/invitations/accept",
+        json={"token": token, "new_password": random_lower_string()},
+    )
+    assert r.status_code == 400
+    r = client.get(
+        f"{settings.API_V1_STR}/users/me", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert r.status_code == 401

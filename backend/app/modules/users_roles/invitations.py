@@ -3,7 +3,7 @@
 Design: `docs/features/03-users-and-roles/03-design.md` "Endpoints" (`POST /api/v1/users`, "invite")
 and R10 (*"Invitations expire if not accepted inside the configured window"*). No table holds an
 invitation (no schema change), so the link is a signed token and its three properties come from what
-it signs:
+it signs (the mechanism is `app.core.password_bound_tokens`, shared with password recovery):
 
 - **Purpose-bound.** The token is signed with a key derived from `SECRET_KEY` for this purpose only,
   so it never verifies as an access token (whose `sub` is also a user id) or as a password-reset
@@ -18,33 +18,29 @@ The admin never sets or sees a password: the account is created with the hash of
 is discarded at once, so nobody can sign in until the invitee chooses a password through the link.
 """
 
-import hashlib
-import hmac
 import html
 import secrets
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
-
-import jwt
-from jwt.exceptions import InvalidTokenError
+from datetime import datetime, timedelta
 
 from app import utils
 from app.core.config import settings
-from app.core.security import ALGORITHM, get_password_hash
+from app.core.password_bound_tokens import LinkClaims, PasswordBoundToken
+from app.core.security import get_password_hash
 
 PURPOSE = "staff-invitation"
-_KEY_LABEL = b"clinicos/staff-invitation/v1"
+_LINK = PasswordBoundToken(purpose=PURPOSE, key_label=b"clinicos/staff-invitation/v1")
 
 
 def _key() -> bytes:
     """The signing key for invitation tokens, derived from `SECRET_KEY` and never used elsewhere."""
-    return hmac.new(settings.SECRET_KEY.encode(), _KEY_LABEL, hashlib.sha256).digest()
+    return _LINK.key()
 
 
 def fingerprint(hashed_password: str) -> str:
     """A keyed digest of the account's password hash, which binds a token to one password state."""
-    return hmac.new(_key(), hashed_password.encode(), hashlib.sha256).hexdigest()
+    return _LINK.fingerprint(hashed_password)
 
 
 def unusable_password_hash() -> str:
@@ -56,16 +52,12 @@ def issue(
     *, user_id: uuid.UUID, hashed_password: str, now: datetime | None = None
 ) -> str:
     """Sign an invitation link token for one account in its current password state."""
-    issued = now or datetime.now(UTC)
-    claims = {
-        "sub": str(user_id),
-        "purpose": PURPOSE,
-        "pwd": fingerprint(hashed_password),
-        "iat": issued,
-        "nbf": issued,
-        "exp": issued + timedelta(hours=settings.STAFF_INVITATION_EXPIRE_HOURS),
-    }
-    return jwt.encode(claims, _key(), algorithm=ALGORITHM)
+    return _LINK.issue(
+        subject=str(user_id),
+        hashed_password=hashed_password,
+        lifetime=timedelta(hours=settings.STAFF_INVITATION_EXPIRE_HOURS),
+        now=now,
+    )
 
 
 @dataclass(frozen=True)
@@ -81,27 +73,26 @@ def read(token: str) -> InvitationClaims | None:
     used to tell them apart. Whether the link was already spent is decided by the caller, against the
     account's current password hash.
     """
-    try:
-        claims = jwt.decode(
-            token,
-            _key(),
-            algorithms=[ALGORITHM],
-            options={"require": ["sub", "purpose", "pwd", "exp", "nbf"]},
-        )
-        if claims["purpose"] != PURPOSE:
-            return None
-        return InvitationClaims(
-            user_id=uuid.UUID(str(claims["sub"])),
-            password_fingerprint=str(claims["pwd"]),
-        )
-    except InvalidTokenError, ValueError:
+    claims = _LINK.read(token)
+    if claims is None:
         return None
+    try:
+        user_id = uuid.UUID(claims.subject)
+    except ValueError:
+        return None
+    return InvitationClaims(
+        user_id=user_id, password_fingerprint=claims.password_fingerprint
+    )
 
 
 def still_unspent(claims: InvitationClaims, hashed_password: str) -> bool:
     """Whether the account is still in the password state the link was issued for."""
-    return hmac.compare_digest(
-        claims.password_fingerprint, fingerprint(hashed_password)
+    return _LINK.still_unspent(
+        LinkClaims(
+            subject=str(claims.user_id),
+            password_fingerprint=claims.password_fingerprint,
+        ),
+        hashed_password,
     )
 
 
