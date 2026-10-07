@@ -1,7 +1,7 @@
 """index the tga approvals register page order
 
 Revision ID: 7c41a2f09b53
-Revises: 9a21387b450c
+Revises: b9fa64996260
 Create Date: 2026-10-07 14:41:03.152037
 
 `GET /api/v1/tga-approvals` (the practice-wide register, `docs2/sdlc/05-approvals/api.md`, agreed
@@ -18,7 +18,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "7c41a2f09b53"
-down_revision = "9a21387b450c"
+down_revision = "b9fa64996260"
 branch_labels = None
 depends_on = None
 
