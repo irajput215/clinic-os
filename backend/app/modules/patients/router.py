@@ -1,4 +1,4 @@
-"""The patients HTTP API — four routes, and no more.
+"""The patients HTTP API - five routes, and no more.
 
 Design: `docs/features/05-patients/03-design.md`, "Endpoints" and "Deny-by-default request
 path". Requirements: `docs/features/05-patients/01-requirements.md`.
@@ -42,12 +42,30 @@ indistinguishable to the caller.
 - Permission: `patient:read`
 - Tenant scope: session
 - Ownership rule: every returned row's `tenant_id` equals the session's tenant; another tenant's rows are absent, not denied
-- Input schema: none — `limit` is bounded `1..25`
+- Input schema: `limit` bounded `1..25`, an opaque signed `cursor`; **any other query parameter is
+  refused** `422 UNSUPPORTED_QUERY_PARAMETER`, so a search term put in the URL (`?q=`) is never
+  silently ignored and answered with the unfiltered list (R12)
+- Output schema: `PatientsPublic` - one keyset page, the tenant's live total, `next_cursor`
+- Audit: `patient.read` on the same transaction, with `result_count`; a permission refusal, an
+  unsupported parameter and a cursor that does not verify are each audited `DENIED`
+- Rate limit: deferred - the list is a plain tenant-scoped read, as before this change
+- Errors: `401` (unauthenticated), `403` (`PERMISSION_NOT_HELD` or no organisation on the account), `422` (`INVALID_CURSOR`, `UNSUPPORTED_QUERY_PARAMETER`, a bad `limit`); fails closed = yes
+- Step-up: no
+
+#### `POST /api/v1/patients/search`
+- Authentication: Yes
+- Permission: `patient:read`
+- Tenant scope: session
+- Ownership rule: as the list; another tenant's rows are absent from every result (S2)
+- Input schema: `PatientSearch` - `q` (1..100 characters, at most 6 words), `cursor`, `limit` `1..25`;
+  unknown fields rejected. The term is in the body because a search term never goes in a URL (R12)
 - Output schema: `PatientsPublic`
-- Audit: deferred — `patient.read` needs `care_relationship_id` and `purpose`, and the
-  treating-relationship rule that supplies them is blocked on the `care_relationships` table (T1-34)
-- Rate limit: deferred — no rate-limit layer is applied to authenticated routes yet
-- Errors: `401` (unauthenticated), `403` (`PERMISSION_NOT_HELD` or no organisation on the account), `422`; fails closed = yes
+- Audit: `patient.read` on the same transaction, with `result_count` and `query_filters` (the kinds
+  of term used - `name_prefix`, `date_of_birth`, `reference` - never the term); refusals audited `DENIED`
+- Rate limit: 120/min per session (`app/core/rate_limit.py`), an interim value - the threat model
+  leaves the search limit open (T-05.13, "Rate-limit values for the search ... routes")
+- Errors: `401`, `403` (`PERMISSION_NOT_HELD` or no organisation), `422` (`INVALID_CURSOR`, body
+  validation), `429`; fails closed = yes
 - Step-up: no
 
 #### `GET /api/v1/patients/{patient_id}`
@@ -75,40 +93,84 @@ indistinguishable to the caller.
 - Errors: `401` (unauthenticated), `403` (`PERMISSION_NOT_HELD` or no organisation on the account), `404` (absent or another tenant's), `422`; fails closed = yes
 - Step-up: no
 
-Out of scope for this slice — merge, search, duplicates, export, the treating-relationship rule,
-`patient.read` events, identifier validation, and encryption/blind-index key handling — is listed
+Out of scope for this slice - merge, identifier search, duplicates, export, the treating-relationship
+rule, the single-record `patient.read` event, identifier validation, and encryption/blind-index key
+handling - is listed
 with a reason in the `service` module docstring. The treating-relationship resource rule (task T1-34) is a
 blocked dependency with no `care_relationships` table; `can()` therefore has no resource rule to run
 yet, which can only remove access, never grant it.
 """
 
 import uuid
+from typing import Final
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from app.api.deps import ActorDep
+from app.core.rate_limit import patient_search_rate_limit
 from app.modules.patients import service
 from app.modules.patients.schemas import (
+    MAX_CURSOR_LENGTH,
+    MAX_PATIENTS_PAGE_SIZE,
     PatientCreate,
     PatientRead,
+    PatientSearch,
     PatientsPublic,
     PatientUpdate,
 )
 from app.modules.users_roles.catalog import PATIENT_PERMISSIONS
-from app.modules.users_roles.policy import ResourceRef
+from app.modules.users_roles.policy import Actor, ResourceRef, can, enforce
 from app.modules.users_roles.service import authorize
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 
-# The server-side maximum for one page of patients. A client may ask for fewer; asking for
-# more is a `422` rather than a silently truncated result.
-MAX_PATIENTS_PAGE_SIZE = 25
+# The only query parameters `GET /patients` honours. Anything else - `q` above all - is refused rather
+# than ignored: an ignored `?q=` would answer a search with the unfiltered list, and the term would
+# already be in the URL. Search is `POST /patients/search` (R12).
+_LIST_QUERY_PARAMETERS: Final[frozenset[str]] = frozenset({"limit", "cursor"})
+UNSUPPORTED_QUERY_PARAMETER: Final[str] = "UNSUPPORTED_QUERY_PARAMETER"
+INVALID_CURSOR: Final[str] = "INVALID_CURSOR"
+# The audit reason for a policy refusal, the code the clinical-records trail uses for the same case.
+AUTHZ_DENIED: Final[str] = "AUTHZ_DENIED"
 
 
 def _patient_not_found() -> HTTPException:
     """One answer for "absent" and "another tenant's", so the response leaks no existence."""
     return HTTPException(
         status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found"
+    )
+
+
+def _unprocessable(code: str, message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail={"code": code, "message": message},
+    )
+
+
+def _read_context(actor: Actor, request: Request) -> service.ReadContext:
+    """The audit envelope's actor fields, from the verified session; the address from the socket."""
+    return service.ReadContext(
+        actor_id=actor.user_id,
+        actor_role=actor.actor_role,
+        source_ip=None if request.client is None else request.client.host,
+    )
+
+
+def _authorise_read(actor: Actor, context: service.ReadContext) -> None:
+    """`patient:read`, with the refusal audited before it is raised (R13, equal fidelity)."""
+    decision = can(actor, PATIENT_PERMISSIONS["read"])
+    if not decision.allowed:
+        service.record_read_denial(
+            tenant_id=actor.tenant_id, context=context, reason=AUTHZ_DENIED
+        )
+    enforce(decision)
+
+
+def _invalid_cursor() -> HTTPException:
+    return _unprocessable(
+        INVALID_CURSOR,
+        "The cursor is not valid for this request. Start again from the first page.",
     )
 
 
@@ -128,11 +190,53 @@ def create_patient(*, actor: ActorDep, patient_in: PatientCreate) -> PatientRead
 def list_patients(
     *,
     actor: ActorDep,
+    request: Request,
     limit: int = Query(default=MAX_PATIENTS_PAGE_SIZE, ge=1, le=MAX_PATIENTS_PAGE_SIZE),
+    cursor: str | None = Query(default=None, max_length=MAX_CURSOR_LENGTH),
 ) -> PatientsPublic:
-    """List the caller's patients, bounded by the server maximum."""
-    authorize(actor, PATIENT_PERMISSIONS["read"])
-    return service.list_patients(tenant_id=actor.tenant_id, limit=limit)
+    """One keyset page of the caller's patients. Follow `next_cursor` for the next page."""
+    context = _read_context(actor, request)
+    _authorise_read(actor, context)
+    if set(request.query_params) - _LIST_QUERY_PARAMETERS:
+        service.record_read_denial(
+            tenant_id=actor.tenant_id,
+            context=context,
+            reason=UNSUPPORTED_QUERY_PARAMETER,
+        )
+        raise _unprocessable(
+            UNSUPPORTED_QUERY_PARAMETER,
+            "This list takes only limit and cursor. Search with POST /api/v1/patients/search,"
+            " which keeps the search term out of the URL.",
+        )
+    try:
+        return service.list_patients(
+            tenant_id=actor.tenant_id, context=context, limit=limit, cursor=cursor
+        )
+    except service.InvalidCursor as error:
+        raise _invalid_cursor() from error
+
+
+@router.post(
+    "/search",
+    response_model=PatientsPublic,
+    dependencies=[Depends(patient_search_rate_limit)],
+)
+def search_patients(
+    *, actor: ActorDep, request: Request, search_in: PatientSearch
+) -> PatientsPublic:
+    """Find the caller's patients by name prefix, date of birth or reference. Keyset-paged."""
+    context = _read_context(actor, request)
+    _authorise_read(actor, context)
+    try:
+        return service.search_patients(
+            tenant_id=actor.tenant_id,
+            context=context,
+            q=search_in.q,
+            limit=search_in.limit,
+            cursor=search_in.cursor,
+        )
+    except service.InvalidCursor as error:
+        raise _invalid_cursor() from error
 
 
 @router.get("/{patient_id}", response_model=PatientRead)

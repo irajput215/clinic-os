@@ -17,7 +17,7 @@
 - R4 A `403` never signs out. The screen says the action isn't available to the role.
 - R5 The sidebar groups Care / Prescribing / Business / Practice. Items not in this phase are visibly disabled.
 - R6 The script queue and approvals items show live counts of items needing action.
-- R7 Patient quick-find filters the loaded patients in memory. Nothing typed is sent or put in a URL.
+- R7 Patient quick-find searches the server (`POST /patients/search`, debounced) so every patient is findable. The term is sent only in a request body, never put in a URL.
 - R8 Sign-out clears the token, the query cache and the preview store.
 - R9 Below 1024 px the sidebar is a drawer. No page scrolls horizontally at any width.
 - R10 Organisation signup (`/signup`) posts `POST /users/signup` with a `clinic_name`, which creates the tenant and makes the signer its Practice Owner, then signs them in. Field rules mirror the API (`UserRegister`: password 8 to 128 characters, names and email at most 255).

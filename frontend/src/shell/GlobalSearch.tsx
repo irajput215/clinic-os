@@ -1,15 +1,20 @@
-import { useQuery } from "@tanstack/react-query"
+import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
 import { Search } from "lucide-react"
-import { useId, useMemo, useRef, useState } from "react"
-import { patientName, patientsQuery } from "@/data/patients"
-import { formatDate, patientRef } from "@/lib/format"
+import { useId, useRef, useState } from "react"
+import {
+  patientName,
+  patientQuickFindQuery,
+  useSearchTerm,
+} from "@/data/patients"
+import { formatDate } from "@/lib/format"
+import { isForbidden } from "@/lib/http"
 import { cn } from "@/lib/utils"
 
 /**
- * Patient quick-find. The patients API has no search parameter yet, so this filters the loaded page
- * (up to 25) in memory; nothing typed here is sent anywhere, which also keeps names out of URLs and
- * access logs.
+ * Patient quick-find. Asks the server (`POST /patients/search`) once typing pauses, so every patient
+ * is findable, not just the first page. The term goes in the request body, never in a URL, so it
+ * stays out of browser history and access logs.
  */
 export function GlobalSearch() {
   const [term, setTerm] = useState("")
@@ -18,19 +23,15 @@ export function GlobalSearch() {
   const listId = useId()
   const navigate = useNavigate()
   const inputRef = useRef<HTMLInputElement>(null)
-  const { data } = useQuery({ ...patientsQuery, enabled: open, retry: false })
-
-  const results = useMemo(() => {
-    const q = term.trim().toLowerCase()
-    if (!q || !data) return []
-    return data.data
-      .filter((p) =>
-        `${patientName(p)} ${p.given_name} ${patientRef(p.id)}`
-          .toLowerCase()
-          .includes(q),
-      )
-      .slice(0, 6)
-  }, [term, data])
+  const q = useSearchTerm(term)
+  const search = useQuery({
+    ...patientQuickFindQuery(q),
+    enabled: q !== "",
+    retry: false,
+    placeholderData: keepPreviousData,
+  })
+  const settled = q === term.trim() && !search.isFetching
+  const results = q && search.data ? search.data.data : []
 
   const go = (id: string) => {
     setOpen(false)
@@ -83,9 +84,15 @@ export function GlobalSearch() {
           role="listbox"
           className="absolute top-[calc(100%+6px)] right-0 z-30 w-[300px] overflow-hidden rounded-inner border border-line bg-paper shadow-pop"
         >
-          {results.length === 0 ? (
-            <p className="px-3.5 py-3 text-sm text-stone">
-              No patient matches “{term.trim()}”.
+          {search.isError && settled ? (
+            <p className="px-3.5 py-3 text-sm text-stone" role="status">
+              {isForbidden(search.error)
+                ? "Patient search is not available to your role."
+                : "Search is unavailable right now. Try again in a moment."}
+            </p>
+          ) : results.length === 0 ? (
+            <p className="px-3.5 py-3 text-sm text-stone" role="status">
+              {settled ? `No patient matches “${term.trim()}”.` : "Searching…"}
             </p>
           ) : (
             results.map((p, i) => (

@@ -55,7 +55,7 @@ with a `clinic_name` (open registration is on in development). The public bookin
 | 01 | [Auth and app shell](sdlc/01-auth-and-shell/) | Organisation signup, password recovery and reset | API |
 | 01 | [Auth and app shell](sdlc/01-auth-and-shell/) | Administration: roles and permissions, user access, accounts (superuser) | API |
 | 01 | [Auth and app shell](sdlc/01-auth-and-shell/) | Settings: profile, password, deactivate own account | API |
-| 02 | [Patients](sdlc/02-patients/) | Patients list, add/edit, patient record | API |
+| 02 | [Patients](sdlc/02-patients/) | Patients list (server search, keyset paging), add/edit, patient record | API (search and paging, M2 2B) |
 | 03 | [Consult notes](sdlc/03-consult-notes/) | Patient record → Consult notes | API (clinical records, #47) |
 | 04 | [Calendar and booking](sdlc/04-calendar-and-booking/) | Calendar day/week, public booking page | Preview (contract proposed) |
 | 05 | [TGA approvals](sdlc/05-approvals/) | Approvals register, patient approvals tab | Patient tab: API (#46). Register: refusal until `GET /tga-approvals` exists |

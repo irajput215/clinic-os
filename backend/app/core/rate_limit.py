@@ -154,3 +154,11 @@ read_rate_limit = rate_limit(scope="read", limit=300, window_seconds=60)
 # login (20/min): the explicit "already exists" answer is a deliberate usability trade (the form says
 # which field to fix), and this limit is what bounds how fast that answer can be harvested.
 signup_rate_limit = rate_limit(scope="signup", limit=20, window_seconds=60)
+# Patient search (`POST /api/v1/patients/search`). An interim value: the threat model leaves "Rate-limit
+# values for the search and duplicate-candidate routes" open (`docs/features/05-patients/
+# 04-threat-model.md`, T-05.1 and T-05.13). 120/min per session lets the top-bar quick-find search as a
+# clinician types (debounced) while bounding a scripted sweep of the tenant's names, which is the
+# scraping threat the limit exists for.
+patient_search_rate_limit = rate_limit(
+    scope="patient-search", limit=120, window_seconds=60
+)

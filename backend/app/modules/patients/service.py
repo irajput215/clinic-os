@@ -36,26 +36,50 @@ is open (feature 14, `docs/reference/open-questions.md`).
 | Item | Why it is deferred |
 |---|---|
 | Merge and merge/reverse (`POST /patients/{id}/merge`, `.../merge/reverse`) | Reversal rules and step-up are unbuilt, and the merge endpoints sit behind `patient:merge`, which is not in the fixed permission list (`03-design.md`, open items) |
-| Search (`POST /api/v1/patients/search`) | Needs the blind-index key, which has no custodian (`04-database-erd.md` open item 5), and the "no search term in a URL" decision (R12) is a separate route |
 | Duplicate detection (`GET /patients/{id}/duplicates`) | Requires an exact two-identifier match, so it needs the same unbuilt blind-index key handling |
 | Export | Requires step-up, a typed reason and a permission the app cannot yet check |
 | Treating-relationship rule | `care_relationships` has no ERD table definition and no named owner — a blocked dependency (`03-design.md`, open items; `01-requirements.md` OPEN-4) |
 | Permission / RBAC layer | Feature 03 (authentication and RBAC) is not started; the app has `is_superuser` and ordinary authenticated users only, so there is no central policy layer to call |
-| Read and list audit events (`patient.read`) | Feature 04 is built and emits `patient.create` and
-  `patient.update`; a read event needs `care_relationship_id` and `purpose`, and the treating
-  relationship rule that supplies them is blocked on the `care_relationships` table |
+| Single-record read audit (`patient.read` on `GET /patients/{id}`) | The design attaches `care_relationship_id` and `purpose` to a direct read, and the treating-relationship call site that supplies them is not wired yet (T1-34). The list and search reads *are* audited (below) |
+| Identifier search (Medicare, IHI) | Exact match on the keyed blind index only (R8), and no identifier is stored yet: the blind-index key has no custodian (`04-database-erd.md` open item 5) |
 | Identifier validation algorithms | The Medicare check digit, IRN rule and IHI format are unspecified in the source (`01-requirements.md` OPEN-1, requires legal/regulatory validation) |
 | Field-level encryption and blind-index key handling | Key custody and rotation are OPEN (`03-design.md`, open items), so no identifier is accepted or stored by this slice |
 | Soft-delete and retention scheduling | A privacy decision, not an engineering one (feature 14; `database-conventions.md`, "Reconciled with the rest of this document set") |
 | Identifier masking on output | Not applicable while no identifier is exposed; R9's mask applies when one is added |
-| Cursor pagination, `Idempotency-Key`, rate limits, the shared error envelope | Cross-cutting API standards (`definition-of-done.md` §4) with no implementation anywhere in the app yet; this slice bounds the list with a server maximum instead |
+| `Idempotency-Key`, the search rate-limit value | `Idempotency-Key` is a cross-cutting standard with no implementation in the app yet; the search limit's value is open (`04-threat-model.md`, "Rate-limit values for the search and duplicate-candidate routes"), so the router applies an interim value and says so |
+
+## List and search (`docs2/sdlc/02-patients/api.md`, agreed 2026-10-07)
+
+- **Keyset, never `OFFSET`**, on `(family_name, given_name, id)`: a patient registered while a
+  clinician pages cannot make the next page skip or repeat a row, and `id` makes the order total.
+- **The cursor names a row, not a value.** It is the boundary row's internal id, signed with an HMAC
+  over the tenant, the request's scope (the list, or one normalised search) and the id, so it cannot be
+  forged, replayed in another tenant (`definition-of-done.md` §4) or reused under a different search.
+  The boundary's names are re-read from the row under the tenant's transaction, so no name ever
+  travels in the cursor - which matters because the list's cursor is a URL query parameter.
+- **Search is a body, not a URL** (R12). Each word must match: a date (`1980-03-14` or `14/03/1980`)
+  matches the date of birth exactly; `PT-` and hex digits match the on-screen reference (the id's
+  prefix); anything else is a case-insensitive *prefix* of the family, given or preferred name - the
+  plaintext search keys of `03-design.md`. `%`, `_` and `\\` are escaped before binding (T-05.2).
+- **Every list and search read is audited as `patient.read`** on the transaction that served it, with
+  `result_count` and, for a search, the *kinds* of term used (`query_filters`) - never the term.
+  Refusals (permission, malformed cursor) are audited `DENIED` with the same fidelity (R13).
 """
 
+import base64
+import hashlib
+import hmac
+import re
 import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import date
+from typing import Final
 
+from sqlalchemy import ColumnElement, literal, or_, tuple_
 from sqlmodel import Session, col, func, select
 
+from app.core.config import settings
 from app.core.db import tenant_transaction
 
 # The audit module is reached through its service facade (`docs/reference/build-contract.md` §7).
@@ -76,6 +100,10 @@ from app.modules.patients.schemas import (
 # The catalogue wins; the divergence is recorded in the PR.
 PATIENT_CREATE: str = "patient.create"
 PATIENT_UPDATE: str = "patient.update"
+PATIENT_READ: str = "patient.read"
+
+# The audit `reason` code for a refused cursor.
+INVALID_CURSOR: Final[str] = "INVALID_CURSOR"
 
 
 def _field_names(patient_in: PatientCreate | PatientUpdate) -> list[str]:
@@ -143,29 +171,337 @@ def create_patient(
         return PatientRead.model_validate(patient)
 
 
-def list_patients(*, tenant_id: uuid.UUID, limit: int) -> PatientsPublic:
-    """The caller's patients, ordered by family name, given name, id, bounded by `limit`.
+@dataclass(frozen=True)
+class ReadContext:
+    """Who is reading, as the session resolved it. The audit envelope carries these."""
 
-    `count` is the tenant's live total, which the router's `limit` does not change; cursor
-    pagination is deferred (see the module docstring).
+    actor_id: uuid.UUID
+    actor_role: str | None = None
+    source_ip: str | None = None
+
+
+class InvalidCursor(ValueError):
+    """The cursor is malformed, not signed by this application, or issued for another request.
+
+    The message is a constant: it never echoes the cursor, and a search cursor's scope is the search
+    term. The router answers `422 INVALID_CURSOR`.
     """
-    with tenant_transaction(tenant_id=tenant_id) as session:
-        scope = (Patient.tenant_id == tenant_id, col(Patient.deleted_at).is_(None))
-        count = session.exec(
-            select(func.count()).select_from(Patient).where(*scope)
-        ).one()
-        statement = (
-            select(Patient)
-            .where(*scope)
-            .order_by(
-                col(Patient.family_name), col(Patient.given_name), col(Patient.id)
+
+
+# ---------------------------------------------------------------------------------------------
+# Search terms
+# ---------------------------------------------------------------------------------------------
+
+# The kinds of term, which are also the `query_filters` values the audit event records.
+NAME_PREFIX: Final[str] = "name_prefix"
+DATE_OF_BIRTH: Final[str] = "date_of_birth"
+REFERENCE: Final[str] = "reference"
+
+_ISO_DATE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
+_AU_DATE = re.compile(r"^(\d{1,2})/(\d{1,2})/(\d{4})$")
+# The on-screen reference is `PT-` and the first six hex digits of the id (`frontend/src/lib/format.ts`
+# `patientRef`). Four to 32 digits are accepted, so a longer prefix narrows further.
+_REFERENCE = re.compile(r"^pt-?([0-9a-f]{4,32})$")
+_UUID_HEX_DIGITS = 32
+
+
+@dataclass(frozen=True)
+class SearchTerm:
+    """One word of a search: its kind and the value it is compared with."""
+
+    kind: str
+    value: str | date | tuple[uuid.UUID, uuid.UUID]
+
+
+def _as_date(word: str) -> date | None:
+    """`1980-03-14` or `14/03/1980` (the Australian order), or `None`."""
+    if match := _ISO_DATE.match(word):
+        year, month, day = match.groups()
+    elif match := _AU_DATE.match(word):
+        day, month, year = match.groups()
+    else:
+        return None
+    try:
+        return date(int(year), int(month), int(day))
+    except ValueError:
+        return None
+
+
+def _escape_like(value: str) -> str:
+    """Escape `LIKE`'s wildcards so a `%` or `_` in a name matches itself (T-05.2).
+
+    PostgreSQL's default `LIKE` escape character is the backslash, so the pattern needs no `ESCAPE`
+    clause - which also keeps it a plain constant the planner can turn into an index range.
+    """
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def parse_search(q: str) -> list[SearchTerm]:
+    """Split a search into terms. Every term must match for a patient to be returned."""
+    terms: list[SearchTerm] = []
+    for word in q.lower().split():
+        if (born := _as_date(word)) is not None:
+            terms.append(SearchTerm(kind=DATE_OF_BIRTH, value=born))
+        elif match := _REFERENCE.match(word):
+            digits = match.group(1)
+            padding = _UUID_HEX_DIGITS - len(digits)
+            terms.append(
+                SearchTerm(
+                    kind=REFERENCE,
+                    value=(
+                        uuid.UUID(hex=digits + "0" * padding),
+                        uuid.UUID(hex=digits + "f" * padding),
+                    ),
+                )
             )
-            .limit(limit)
+        else:
+            terms.append(SearchTerm(kind=NAME_PREFIX, value=_escape_like(word) + "%"))
+    return terms
+
+
+def _term_condition(term: SearchTerm) -> ColumnElement[bool]:
+    """The SQL predicate for one term. Each one is served by an index (see the migration)."""
+    if isinstance(term.value, date):
+        return col(Patient.date_of_birth) == term.value
+    if isinstance(term.value, tuple):
+        low, high = term.value
+        return col(Patient.id).between(low, high)
+    pattern = term.value
+    return or_(
+        func.lower(col(Patient.family_name)).like(pattern),
+        func.lower(col(Patient.given_name)).like(pattern),
+        func.lower(col(Patient.preferred_name)).like(pattern),
+    )
+
+
+def _search_scope(q: str) -> str:
+    """The cursor scope for one search: its words, lower-cased and single-spaced."""
+    return "search:" + " ".join(q.lower().split())
+
+
+_LIST_SCOPE: Final[str] = "list"
+
+
+# ---------------------------------------------------------------------------------------------
+# The keyset cursor
+# ---------------------------------------------------------------------------------------------
+
+_CURSOR_CONTEXT: Final[bytes] = b"clinos.patients.cursor.v1"
+_UUID_BYTES = 16
+
+
+def _cursor_signature(*, tenant_id: uuid.UUID, scope: str, payload: bytes) -> str:
+    """An HMAC binding the boundary row to the tenant and to the request that paged it."""
+    message = b"\0".join(
+        (_CURSOR_CONTEXT, tenant_id.bytes, scope.encode("utf-8"), payload)
+    )
+    digest = hmac.new(
+        settings.SECRET_KEY.encode("utf-8"), message, hashlib.sha256
+    ).digest()
+    return base64.urlsafe_b64encode(digest[:16]).decode("ascii").rstrip("=")
+
+
+def encode_cursor(*, tenant_id: uuid.UUID, scope: str, patient_id: uuid.UUID) -> str:
+    """The opaque cursor that continues after `patient_id` in this tenant and scope."""
+    payload = patient_id.bytes
+    body = base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
+    signature = _cursor_signature(tenant_id=tenant_id, scope=scope, payload=payload)
+    return f"{body}.{signature}"
+
+
+def decode_cursor(cursor: str, *, tenant_id: uuid.UUID, scope: str) -> uuid.UUID:
+    """The boundary row a cursor names, or `InvalidCursor`. Fails closed on every malformed input."""
+    try:
+        body, signature = cursor.split(".", 1)
+        payload = base64.urlsafe_b64decode(body + "=" * (-len(body) % 4))
+    except ValueError as error:
+        raise InvalidCursor("the cursor is not one this API issued") from error
+    expected = _cursor_signature(tenant_id=tenant_id, scope=scope, payload=payload)
+    if len(payload) != _UUID_BYTES or not hmac.compare_digest(signature, expected):
+        raise InvalidCursor("the cursor is not one this API issued")
+    return uuid.UUID(bytes=payload)
+
+
+# ---------------------------------------------------------------------------------------------
+# List and search
+# ---------------------------------------------------------------------------------------------
+
+
+def _page(
+    session: Session,
+    *,
+    tenant_id: uuid.UUID,
+    scope: str,
+    conditions: Sequence[ColumnElement[bool]],
+    limit: int,
+    boundary_id: uuid.UUID | None,
+) -> PatientsPublic | None:
+    """One keyset page on the caller's transaction, or `None` if the boundary row is not visible."""
+    live = [
+        # Defence in depth beside RLS, exactly as `_live_patient`.
+        col(Patient.tenant_id) == tenant_id,
+        col(Patient.deleted_at).is_(None),
+        *conditions,
+    ]
+    after: list[ColumnElement[bool]] = []
+    if boundary_id is not None:
+        # The boundary's sort key is read from the row, so the cursor carries no name. A soft-deleted
+        # boundary still positions the page; a row this tenant cannot see does not.
+        boundary = session.exec(
+            select(Patient.family_name, Patient.given_name).where(
+                col(Patient.id) == boundary_id, col(Patient.tenant_id) == tenant_id
+            )
+        ).first()
+        if boundary is None:
+            return None
+        family_name, given_name = boundary
+        after.append(
+            tuple_(col(Patient.family_name), col(Patient.given_name), col(Patient.id))
+            > tuple_(literal(family_name), literal(given_name), literal(boundary_id))
         )
-        patients: Sequence[Patient] = session.exec(statement).all()
-        return PatientsPublic(
-            data=[PatientRead.model_validate(patient) for patient in patients],
-            count=count,
+
+    count = session.exec(select(func.count()).select_from(Patient).where(*live)).one()
+    rows: Sequence[Patient] = session.exec(
+        select(Patient)
+        .where(*live, *after)
+        .order_by(col(Patient.family_name), col(Patient.given_name), col(Patient.id))
+        .limit(limit + 1)
+    ).all()
+    page, overflow = rows[:limit], rows[limit:]
+    return PatientsPublic(
+        data=[PatientRead.model_validate(patient) for patient in page],
+        count=count,
+        next_cursor=(
+            encode_cursor(tenant_id=tenant_id, scope=scope, patient_id=page[-1].id)
+            if overflow
+            else None
+        ),
+    )
+
+
+def _read(
+    *,
+    tenant_id: uuid.UUID,
+    context: ReadContext,
+    scope: str,
+    conditions: Sequence[ColumnElement[bool]],
+    limit: int,
+    cursor: str | None,
+    query_filters: list[str] | None,
+) -> PatientsPublic:
+    """Serve one list or search page and audit it on the same transaction (INV-4).
+
+    A cursor that does not verify, or names a row this tenant cannot see, is audited `DENIED` with
+    the same envelope as a success (R13), committed, and then refused with `InvalidCursor`.
+    """
+    payload: dict[str, object] = {}
+    if query_filters is not None:
+        payload["query_filters"] = query_filters
+    result: PatientsPublic | None = None
+    with tenant_transaction(
+        tenant_id=tenant_id,
+        actor_id=context.actor_id,
+        actor_role=context.actor_role,
+        source_ip=context.source_ip,
+    ) as session:
+        try:
+            boundary_id = (
+                None
+                if cursor is None
+                else decode_cursor(cursor, tenant_id=tenant_id, scope=scope)
+            )
+        except InvalidCursor:
+            pass
+        else:
+            result = _page(
+                session,
+                tenant_id=tenant_id,
+                scope=scope,
+                conditions=conditions,
+                limit=limit,
+                boundary_id=boundary_id,
+            )
+        audit.record(
+            session,
+            audit.AuditEvent(
+                action=PATIENT_READ,
+                result="DENIED" if result is None else "SUCCESS",
+                reason=INVALID_CURSOR if result is None else None,
+                source_ip=context.source_ip,
+                payload=(
+                    (payload or None)
+                    if result is None
+                    else {**payload, "result_count": len(result.data)}
+                ),
+            ),
+        )
+    if result is None:
+        raise InvalidCursor("the cursor is not one this API issued")
+    return result
+
+
+def list_patients(
+    *,
+    tenant_id: uuid.UUID,
+    context: ReadContext,
+    limit: int,
+    cursor: str | None = None,
+) -> PatientsPublic:
+    """One keyset page of the caller's live patients, by family name, given name, id. Audited."""
+    return _read(
+        tenant_id=tenant_id,
+        context=context,
+        scope=_LIST_SCOPE,
+        conditions=(),
+        limit=limit,
+        cursor=cursor,
+        query_filters=None,
+    )
+
+
+def search_patients(
+    *,
+    tenant_id: uuid.UUID,
+    context: ReadContext,
+    q: str,
+    limit: int,
+    cursor: str | None = None,
+) -> PatientsPublic:
+    """One keyset page of the caller's live patients matching every term of `q`. Audited.
+
+    The audit payload records which kinds of term were used, sorted and de-duplicated, and never the
+    term (US-7). Nothing here logs `q`.
+    """
+    terms = parse_search(q)
+    return _read(
+        tenant_id=tenant_id,
+        context=context,
+        scope=_search_scope(q),
+        conditions=[_term_condition(term) for term in terms],
+        limit=limit,
+        cursor=cursor,
+        query_filters=sorted({term.kind for term in terms}),
+    )
+
+
+def record_read_denial(
+    *, tenant_id: uuid.UUID, context: ReadContext, reason: str
+) -> None:
+    """Audit a list or search the policy layer refused, before any patient row is read (R13)."""
+    with tenant_transaction(
+        tenant_id=tenant_id,
+        actor_id=context.actor_id,
+        actor_role=context.actor_role,
+        source_ip=context.source_ip,
+    ) as session:
+        audit.record(
+            session,
+            audit.AuditEvent(
+                action=PATIENT_READ,
+                result="DENIED",
+                reason=reason,
+                source_ip=context.source_ip,
+            ),
         )
 
 

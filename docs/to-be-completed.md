@@ -107,7 +107,7 @@ handling live Australian patient health information (PHI):
 #### Workstream C: Patients & Clinical Records
 * [x] **T1-21 … T1-24**: Patients API routes (`POST`, `GET`, `GET /{id}`, `PATCH /{id}`), pagination, and React UI screens.
 * [ ] **T1-25 — Patient Identifier Masking**: Enforce `•••• ` + last 3 digits masking on all responses and logs (**INV-5**).
-* [ ] **T1-26 — Patient Search Endpoint**: `POST /api/v1/patients/search` with JSON body (prohibiting search terms in URL query strings).
+* [x] **T1-26 - Patient Search Endpoint**: `POST /api/v1/patients/search` with JSON body (prohibiting search terms in URL query strings); keyset paging on `GET /api/v1/patients`.
 * [ ] **T1-27 — Patient Merge Workflow**: Step-up protected `POST /api/v1/patients/{id}/merge` with audit attribution.
 * [ ] **T1-28 — Clinical Encounters & Notes**: Models and APIs for consultation notes with immutable amendment chains.
 * [ ] **T1-29 — Document Storage Integration**: AWS S3 client (`ap-southeast-2`) with 15-minute presigned URLs and tenant isolation.

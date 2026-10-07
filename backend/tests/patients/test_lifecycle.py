@@ -124,11 +124,14 @@ def test_list_limit_is_capped_by_the_server_maximum(api: PatientsApi) -> None:
     assert api.list(clinic, limit=-1).status_code == 422
 
 
-def test_the_four_declared_paths_are_served() -> None:
-    """Exactly the declared paths, with no trailing slash and no `DELETE`."""
+def test_the_five_declared_paths_are_served() -> None:
+    """Exactly the declared paths, with no trailing slash and no `DELETE`.
+
+    `POST /patients/search` is `03-design.md`'s search route (R12: the term in a body, never a URL).
+    """
     openapi = app.openapi()
 
-    # The patients module owns four routes; it does not own the whole `/patients/` namespace. Two
+    # The patients module owns five routes; it does not own the whole `/patients/` namespace. Two
     # other features each declare one nested route beneath it, and each is named here by its exact
     # path — never by a name pattern — together with the methods it declares:
     #
@@ -149,8 +152,9 @@ def test_the_four_declared_paths_are_served() -> None:
         path
         for path in openapi["paths"]
         if path.startswith(PATIENTS_URL) and path not in declared_elsewhere
-    ) == [PATIENTS_URL, f"{PATIENTS_URL}/{{patient_id}}"]
+    ) == [PATIENTS_URL, f"{PATIENTS_URL}/search", f"{PATIENTS_URL}/{{patient_id}}"]
     assert set(openapi["paths"][PATIENTS_URL]) == {"post", "get"}
+    assert set(openapi["paths"][f"{PATIENTS_URL}/search"]) == {"post"}
     assert set(openapi["paths"][f"{PATIENTS_URL}/{{patient_id}}"]) == {"get", "patch"}
     # And the nested routes are asserted too, so the census cannot pass by one of them vanishing.
     for path, methods in declared_elsewhere.items():

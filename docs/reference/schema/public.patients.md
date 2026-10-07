@@ -52,8 +52,11 @@
 | ix_patients_tenant_active | CREATE INDEX ix_patients_tenant_active ON public.patients USING btree (tenant_id) WHERE (deleted_at IS NULL) |
 | ix_patients_tenant_dob | CREATE INDEX ix_patients_tenant_dob ON public.patients USING btree (tenant_id, date_of_birth) |
 | ix_patients_tenant_family_name | CREATE INDEX ix_patients_tenant_family_name ON public.patients USING btree (tenant_id, family_name, given_name) |
+| ix_patients_tenant_family_name_lower | CREATE INDEX ix_patients_tenant_family_name_lower ON public.patients USING btree (tenant_id, lower((family_name)::text) text_pattern_ops) |
+| ix_patients_tenant_given_name_lower | CREATE INDEX ix_patients_tenant_given_name_lower ON public.patients USING btree (tenant_id, lower((given_name)::text) text_pattern_ops) |
 | ix_patients_tenant_ihi_blind_index | CREATE INDEX ix_patients_tenant_ihi_blind_index ON public.patients USING btree (tenant_id, ihi_blind_index) |
 | ix_patients_tenant_medicare_blind_index | CREATE INDEX ix_patients_tenant_medicare_blind_index ON public.patients USING btree (tenant_id, medicare_blind_index) |
+| ix_patients_tenant_preferred_name_lower | CREATE INDEX ix_patients_tenant_preferred_name_lower ON public.patients USING btree (tenant_id, lower((preferred_name)::text) text_pattern_ops) |
 | pk_patients | CREATE UNIQUE INDEX pk_patients ON public.patients USING btree (id) |
 | uq_patients_tenant_id_id | CREATE UNIQUE INDEX uq_patients_tenant_id_id ON public.patients USING btree (tenant_id, id) |
 

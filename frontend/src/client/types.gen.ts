@@ -569,6 +569,30 @@ export type PatientRead = {
 };
 
 /**
+ * PatientSearch
+ *
+ * The body of `POST /api/v1/patients/search`.
+ *
+ * The term travels in the body, never in a URL (`01-requirements.md` R12), so it reaches no access
+ * log, proxy log or browser history. It is never logged or audited either: the audit event records
+ * which *kinds* of term were used (`query_filters`), not what they were (`02-user-stories.md` US-7).
+ */
+export type PatientSearch = {
+    /**
+     * Q
+     */
+    q: string;
+    /**
+     * Cursor
+     */
+    cursor?: string | null;
+    /**
+     * Limit
+     */
+    limit?: number;
+};
+
+/**
  * PatientUpdate
  *
  * The body of `PATCH /api/v1/patients/{patient_id}`.
@@ -635,7 +659,12 @@ export type PatientUpdate = {
 /**
  * PatientsPublic
  *
- * A bounded page of patients plus the caller's total, following `UsersPublic`.
+ * One keyset page of patients, the total that matches, and the cursor for the next page.
+ *
+ * `count` is the number of live patients that match the request - the tenant's whole list for
+ * `GET /patients`, the matches for a search - not the length of this page. `next_cursor` is `null`
+ * on the last page. The cursor is opaque: it names the last row of this page by its internal id,
+ * never by a name, so it carries nothing a URL or a log line must not hold.
  */
 export type PatientsPublic = {
     /**
@@ -646,6 +675,10 @@ export type PatientsPublic = {
      * Count
      */
     count: number;
+    /**
+     * Next Cursor
+     */
+    next_cursor?: string | null;
 };
 
 /**
@@ -2129,6 +2162,10 @@ export type patientsListPatientsData = {
          * Limit
          */
         limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
     };
     url: '/api/v1/patients';
 };
@@ -2175,6 +2212,31 @@ export type patientsCreatePatientResponses = {
 };
 
 export type patientsCreatePatientResponse = patientsCreatePatientResponses[keyof patientsCreatePatientResponses];
+
+export type patientsSearchPatientsData = {
+    body: PatientSearch;
+    path?: never;
+    query?: never;
+    url: '/api/v1/patients/search';
+};
+
+export type patientsSearchPatientsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type patientsSearchPatientsError = patientsSearchPatientsErrors[keyof patientsSearchPatientsErrors];
+
+export type patientsSearchPatientsResponses = {
+    /**
+     * Successful Response
+     */
+    200: PatientsPublic;
+};
+
+export type patientsSearchPatientsResponse = patientsSearchPatientsResponses[keyof patientsSearchPatientsResponses];
 
 export type patientsReadPatientData = {
     body?: never;
