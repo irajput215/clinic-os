@@ -78,10 +78,16 @@ This list is closed:
 | `TENANT` | `tenant.security_config_change` |
 | `INTEGRATION` | `integration.request` |
 | `AUDIT` | `audit.read` |
+| `APPOINTMENT` | `appointment.create`, `appointment.state_change` |
 
 **No new action name may be invented.** A new action must be registered in doc 07 §1 first, by a change
 to the source contract, before any code emits it. A missing mandatory event is a defect, and an event
 coverage test asserts the list.
+
+`APPOINTMENT` and its two actions were registered on 2026-10-07 by the owner, with the appointments
+module (`docs2/sdlc/04-calendar-and-booking/api.md`): `appointment.create` carries `patient_id` and
+`source` (`STAFF` or `PUBLIC_BOOKING`), `appointment.state_change` carries `from_state` and
+`to_state` (status codes). No time, name or contact detail is ever in either payload.
 
 Events beyond the envelope carry the mandatory per-action fields from doc 07 §1 — for example
 `prescription.dispatch_blocked` carries `block_reason` and `approval_id`, and `audit.read` carries

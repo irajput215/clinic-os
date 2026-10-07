@@ -109,7 +109,9 @@ export function BookingPage({ clinicSlug }: { clinicSlug: string }) {
         <div className="mb-6 flex items-center gap-3">
           <BrandMark size={36} />
           <div>
-            <div className="font-serif text-xl font-semibold">{clinic}</div>
+            <div className="font-serif text-xl font-semibold">
+              {unavailable ? "Online booking" : clinic}
+            </div>
             <div className="text-xs tracking-[0.04em] text-stone uppercase">
               Book an appointment
             </div>

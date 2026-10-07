@@ -10,8 +10,8 @@ The reasoning is in [ADR-F004](adr/ADR-F004-preview-store.md).
 | `audit` | api | merged (#42) | already |
 | `clinicalRecords` | api | merged (#47) | already. Preview implementation deleted |
 | `tgaApprovals` | api, register refused | merged (#46); `GET /tga-approvals` missing | Patient tab, Overview card and every write are `api`; preview implementation deleted. The practice-wide register shows a designed refusal naming `GET /api/v1/tga-approvals` until that endpoint lands ([sdlc/05 api](sdlc/05-approvals/api.md)). The preview store still seeds sample approvals, used **only** by the `prescriptions` safety-gate stand-in and the `dashboard`; they go with those previews |
-| `appointments` | preview | none | Build to [sdlc/04 api](sdlc/04-calendar-and-booking/api.md) |
-| `publicBooking` | preview | none | Build to [sdlc/04 api](sdlc/04-calendar-and-booking/api.md) |
+| `appointments` | api | merged (appointments module) | already. Preview implementation deleted. The preview store keeps its sample practitioners and appointments **only** for the `dashboard` (Today) and `prescriptions` (prescriber picker) previews, through `data/preview/practitioners.ts`; they go with those previews |
+| `publicBooking` | api | merged (appointments module) | already. Preview implementation (session-storage hand-off) deleted |
 | `prescriptions` | preview | none | Build to [sdlc/07 api](sdlc/07-script-queue/api.md) |
 | `dashboard` | preview | none | Build to [sdlc/08 api](sdlc/08-today/api.md) |
 
