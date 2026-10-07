@@ -23,7 +23,7 @@ This repo has:
 
 - `compose.yml`, `compose.override.yml`, `compose.deploy.yml` — a Docker Compose deployment
 - `.env` at the repo root (committed — the source contract forbids secrets in the repo; this needs review)
-- `backend/Dockerfile` (which also builds the frontend), `frontend-features/Dockerfile.playwright`
+- `backend/Dockerfile` (which also builds the frontend), `frontend/Dockerfile.playwright`
 - `.github/workflows/` CI, `.pre-commit-config.yaml`
 - **No Terraform, no AWS resource definitions, no region pin anywhere**
 

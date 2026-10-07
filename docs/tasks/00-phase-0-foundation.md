@@ -34,7 +34,7 @@ belong to Phase 1 onward.
 ## WS1 — Repository architecture (8 points)
 
 - [ ] **T0-1 — Confirm the monorepo layout and workspace membership**
-  - Acceptance: `backend/` is a uv workspace member and `frontend-features/` + `packages/*` are bun workspace members; no `apps/*` path exists; the D-002 source-to-repo mapping table is recorded in the repo docs.
+  - Acceptance: `backend/` is a uv workspace member and `frontend/` + `packages/*` are bun workspace members; no `apps/*` path exists; the D-002 source-to-repo mapping table is recorded in the repo docs.
   - Verify: `uv sync` from the repo root resolves the `backend` member; `bun install --frozen-lockfile` resolves the bun workspaces.
   - Files: `pyproject.toml`, `package.json`, `README.md`
   - Controls: 12 Compliance evidence; 2 Authorisation (module-boundary precondition)
@@ -82,7 +82,7 @@ belong to Phase 1 onward.
 - [ ] **T0-7 — Frontend image: pinned base, non-root, static build**
   - Acceptance: a multi-stage frontend image with a build stage and a minimal runtime stage, pinned base digest, non-root runtime user and a health check.
   - Verify: `docker compose build frontend`; `docker compose up -d frontend`; the service reports healthy.
-  - Files: `frontend-features/Dockerfile`, `frontend-features/package.json`, `compose.yml`
+  - Files: `frontend/Dockerfile`, `frontend/package.json`, `compose.yml`
   - Controls: 8 Secrets management; 11 Security testing
   - Evidence: build output + health check result
 

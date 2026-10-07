@@ -1,4 +1,4 @@
-# frontend-features
+# frontend
 
 The ClinicOS app, and the only frontend in this repository: Today, Calendar, Patients, Script queue,
 TGA approvals, public booking, sign in, organisation signup, password recovery, Administration and

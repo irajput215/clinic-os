@@ -38,7 +38,7 @@ jobs:
         filters: |
           changed:
             - backend/**
-            - frontend-features/**
+            - frontend/**
             - package.json
             - bun.lock
             - .env.example
@@ -107,7 +107,7 @@ jobs:
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: blob-report-${{ matrix.shardIndex }}
-        path: frontend-features/blob-report
+        path: frontend/blob-report
         include-hidden-files: true
         retention-days: 1
 
@@ -131,17 +131,17 @@ jobs:
     - name: Download blob reports from GitHub Actions Artifacts
       uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
       with:
-        path: frontend-features/all-blob-reports
+        path: frontend/all-blob-reports
         pattern: blob-report-*
         merge-multiple: true
     - name: Merge into HTML Report
       run: bunx playwright merge-reports --reporter html ./all-blob-reports
-      working-directory: frontend-features
+      working-directory: frontend
     - name: Upload HTML report
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: html-report--attempt-${{ github.run_attempt }}
-        path: frontend-features/playwright-report
+        path: frontend/playwright-report
         retention-days: 30
         include-hidden-files: true
 

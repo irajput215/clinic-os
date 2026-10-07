@@ -19,7 +19,7 @@ This repo is `fastapi-full-stack-template`. It has already committed to Python:
   `pwdlib[argon2,bcrypt]>=0.3.1`
 - `backend/app/` — a working FastAPI application with `core/config.py` (pydantic-settings),
   `core/db.py`, `api/routes/*`, and five Alembic migrations
-- `frontend-features/` (originally `frontend/`; see [ADR-F005](../../../docs2/adr/ADR-F005-one-app-served-by-the-backend.md)) — React 19 + Vite + TanStack, consuming the FastAPI OpenAPI schema via `openapi-ts`
+- `frontend/` (the template's UI was replaced by the ClinicOS app, built as `frontend-features/` and renamed to `frontend/` on 2026-10-07; see [ADR-F005](../../../docs2/adr/ADR-F005-one-app-served-by-the-backend.md)) — React 19 + Vite + TanStack, consuming the FastAPI OpenAPI schema via `openapi-ts`
   (`bun run generate-client`)
 
 There is no TypeScript backend and no `apps/backend`. Replacing the backend would discard a working
@@ -34,7 +34,7 @@ control against this stack.
 |---|---|---|
 | Node + strict TypeScript | Python 3.14 + FastAPI, `mypy --strict` | Type safety preserved; enforced by `mypy` rather than `tsc` |
 | Zod schemas | Pydantic v2 models in `modules/<module>/schemas.py` | Unknown fields rejected; strict types preserved |
-| `packages/shared` shared types | `frontend-features/openapi-ts.config.ts` generating the client from FastAPI's OpenAPI schema | Single source of truth preserved, generated rather than authored |
+| `packages/shared` shared types | `frontend/openapi-ts.config.ts` generating the client from FastAPI's OpenAPI schema | Single source of truth preserved, generated rather than authored |
 | ESLint + typecheck stage | `ruff check` + `uv run mypy app` | Same stage, same position in the pipeline |
 | `*.spec.ts` pytest-equivalent evidence names | `backend/tests/**/test_*.py` | Same test, mapped name — see [gates.md](../gates.md#artefact-naming-source-contract--this-repo) |
 | Node worker container | A second FastAPI entrypoint in the same package (see D-002) | Same "one codebase, two entrypoints" model |

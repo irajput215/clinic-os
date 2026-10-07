@@ -50,6 +50,9 @@ export default defineConfig(({ mode }) => {
   }
   return {
     server: {
+      // An explicit IPv4 host: "localhost" binds only ::1 on macOS, so http://127.0.0.1:5174 (the
+      // documented URL and Playwright's default baseURL) would refuse connections.
+      host: "127.0.0.1",
       port: 5174,
       strictPort: true,
       // Dev only: with VITE_API_URL unset, `/api` is same-origin and proxied to the backend, so
@@ -58,7 +61,12 @@ export default defineConfig(({ mode }) => {
       proxy: apiProxy,
     },
     // `vite preview` serves the production build (with its CSP) behind the same proxy.
-    preview: { port: 5175, strictPort: true, proxy: apiProxy },
+    preview: {
+      host: "127.0.0.1",
+      port: 5175,
+      strictPort: true,
+      proxy: apiProxy,
+    },
     build: {
       target: "es2022",
       // The backend image serves this directory at `/` (backend/app/main.py, FRONTEND_DIR). It is
