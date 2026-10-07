@@ -5,7 +5,9 @@
 .env.*
 !.env.example
 backend/htmlcov
-backend/app/frontend
+# Never list backend/app/frontend here: FastAPI Cloud builds the deployed image from the uploaded
+# tree and honours this file, so ignoring the built app ships an API with no UI (2026-10-07).
+# The Dockerfile builds the app in its own stage and copies it over any local build anyway.
 frontend-features/.env
 frontend-features/.env.*
 frontend-features/blob-report
