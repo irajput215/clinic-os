@@ -1,7 +1,9 @@
 import { randomBytes } from "node:crypto"
 import { mkdirSync, writeFileSync } from "node:fs"
 import { expect, test as setup } from "@playwright/test"
+import { signInWithApi, signUp } from "./accounts"
 import { CLINIC_FILE, type Clinic } from "./fixtures"
+import { previousRunWindowLeft } from "./pacing"
 
 /**
  * One fresh clinic per run, created the way a real practice is: `POST /users/signup` with a clinic
@@ -16,12 +18,23 @@ const PATIENTS = [
   ["Grace", "Liu", "1994-02-17", "FEMALE"],
 ] as const
 
-setup("sign up a clinic and add patients", async ({ request }) => {
+setup("sign up a clinic and add patients", async ({ request, baseURL }) => {
+  // A run straight after another against the same backend waits out the window that one left,
+  // before anything here spends a sign-in (`pacing.ts`).
+  const wait = previousRunWindowLeft(new URL(baseURL!).origin)
+  setup.setTimeout(wait + 60_000)
+  if (wait > 0) {
+    console.log(
+      `Waiting ${Math.ceil(wait / 1000)}s for the previous run's rate-limit window to pass`,
+    )
+    await new Promise((resolve) => setTimeout(resolve, wait))
+  }
+
   const run = randomBytes(4).toString("hex")
   // Deliberately not the reference design's sample clinic, so a screen still showing the sample
   // name cannot pass for showing this one.
   const clinicName = `Ironbark Medical ${run}`
-  const clinic: Omit<Clinic, "token"> = {
+  const clinic: Omit<Clinic, "token" | "peer"> = {
     email: `owner-${run}@e2e.example.com`,
     password: `E2e-${randomBytes(9).toString("base64url")}`,
     fullName: "Dr Sarah Okafor",
@@ -39,11 +52,7 @@ setup("sign up a clinic and add patients", async ({ request }) => {
   })
   expect(signup.ok(), await signup.text()).toBeTruthy()
 
-  const login = await request.post("/api/v1/login/access-token", {
-    form: { username: clinic.email, password: clinic.password },
-  })
-  expect(login.ok()).toBeTruthy()
-  const { access_token } = await login.json()
+  const access_token = await signInWithApi(request, clinic)
 
   for (const [
     given_name,
@@ -64,9 +73,17 @@ setup("sign up a clinic and add patients", async ({ request }) => {
     expect(res.status(), await res.text()).toBe(201)
   }
 
+  // A second clinic's owner, for the tests that change their own name or roles (`fixtures.ts`).
+  const peer = await signUp(request, { clinic: true })
+  const peerToken = await signInWithApi(request, peer)
+
   mkdirSync("playwright/.auth", { recursive: true })
   writeFileSync(
     CLINIC_FILE,
-    JSON.stringify({ ...clinic, token: access_token } satisfies Clinic),
+    JSON.stringify({
+      ...clinic,
+      token: access_token,
+      peer: { ...peer, token: peerToken },
+    } satisfies Clinic),
   )
 })

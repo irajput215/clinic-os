@@ -188,9 +188,11 @@ your own use, is gitignored and must never be committed. Details: [deployment.md
   `lsof -nP -iTCP:8000 -sTCP:LISTEN` and stop it. The dev server uses a fixed port (`strictPort`)
   and fails rather than moving.
 - **429 Too Many Requests in e2e runs** - login and signup are limited to 20/min and password
-  recovery to 5/min per client address, per backend process, and one full run spends most of the
-  login budget. Wait a minute between runs, restart the backend to clear the window, or start the
-  test backend with `RATE_LIMIT_ENABLED=false`.
+  recovery to 5/min per client address, per backend process. One full run spends 18 sign-ins and 4
+  recovery calls, and a run started within a minute of the previous one against the same backend
+  first waits out that minute (it prints `Waiting ...s for the previous run's rate-limit window`).
+  A `429` therefore means something else is spending the budget, such as a dev session signing in
+  repeatedly against the same backend.
 - **`{"detail":"Not Found"}` on `http://127.0.0.1:8000/`** - the app is not built: `bun run build`,
   then restart the backend if it started before the first build.
 - **`ValidationError` for `SECRET_KEY`, `PROJECT_NAME` or `DATABASE_URL` on start** - `.env` is missing:

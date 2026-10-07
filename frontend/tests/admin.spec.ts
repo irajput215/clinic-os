@@ -1,12 +1,13 @@
 import { randomBytes } from "node:crypto"
-import { signInThroughUi, signUp, superuser } from "./accounts"
-import { expect, test } from "./fixtures"
+import { signInWithApi, signUp, superuser } from "./accounts"
+import { expect, openSignedIn, test } from "./fixtures"
 
 /**
  * Administration, against the real API. The roles and access endpoints are the administrative
- * rate-limit class, 20 a minute per session (`backend/app/core/rate_limit.py`), and the tests that open
- * administration each do it as a different account, so no test spends another's budget and none
- * waits out a `429`. The sidebar's clinic read is the single-resource read class (300/min) and spends
+ * rate-limit class, 20 a minute per session (`backend/app/core/rate_limit.py`), and the tests here
+ * each open administration as a different account, so none waits out a `429`. The second clinic's
+ * owner (`clinic.peer`) is shared only with the settings phone-layout check, which reads its
+ * administration once; together they stay well inside its window. The sidebar's clinic read is the single-resource read class (300/min) and spends
  * none of it.
  */
 
@@ -60,10 +61,10 @@ test("a practice owner sees every role against the 21-permission catalogue", asy
 
 test("an owner grants and revokes a role, and cannot remove the last administrator", async ({
   page,
-  request,
+  clinic,
 }) => {
-  const owner = await signUp(request, { clinic: true })
-  await signInThroughUi(page, owner, "/admin")
+  // The second clinic's owner: granting and revoking its own roles never touches the shared clinic.
+  await openSignedIn(page, clinic.peer.token, "/admin")
   await page.getByRole("tab", { name: "User access" }).click()
 
   const assigned = page.getByTestId("assigned-roles")
@@ -100,7 +101,7 @@ test("an account without the permission gets no Administration entry, and a refu
   request,
 }) => {
   const staff = await signUp(request, { clinic: false })
-  await signInThroughUi(page, staff)
+  await openSignedIn(page, await signInWithApi(request, staff))
 
   const nav = page.getByRole("navigation", { name: "Main" })
   await expect(nav.getByRole("link", { name: "Settings" })).toBeVisible()
@@ -123,9 +124,10 @@ test("an account without the permission gets no Administration entry, and a refu
 
 test("the platform superuser lists, adds, edits and deactivates accounts", async ({
   page,
+  request,
 }) => {
   const admin = superuser()
-  await signInThroughUi(page, admin, "/admin")
+  await openSignedIn(page, await signInWithApi(request, admin), "/admin")
   await expect(page.getByRole("tab", { name: "Accounts" })).toHaveAttribute(
     "aria-selected",
     "true",

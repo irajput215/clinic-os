@@ -73,3 +73,19 @@ export function superuser(): Pick<Account, "email" | "password"> {
     )
   return { email, password }
 }
+
+/**
+ * An access token for `account`, signed in through the API. It spends one of the run's sign-ins
+ * (see `fixtures.ts`), so it is for a fresh account a test needs a session as, never a stand-in for
+ * the sign-in page.
+ */
+export async function signInWithApi(
+  request: APIRequestContext,
+  { email, password }: Pick<Account, "email" | "password">,
+): Promise<string> {
+  const login = await request.post("/api/v1/login/access-token", {
+    form: { username: email, password },
+  })
+  expect(login.ok(), await login.text()).toBeTruthy()
+  return ((await login.json()) as { access_token: string }).access_token
+}

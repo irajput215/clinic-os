@@ -11,8 +11,8 @@ import { emailedPath, waitForEmailHtml } from "./mail"
  * keep it that way, or the suite starts failing on `429` instead of on behaviour. The recovery tests
  * are never retried: a retry would spend the same window again and fail on `429`, hiding the real
  * failure, and CI fails a run on any flaky test (`--fail-on-flaky-tests`), so a retry could never
- * rescue it anyway. Running the whole file twice inside a minute against one backend will also hit
- * the limit; that is the control working, not a defect.
+ * rescue it anyway. A run started straight after another against the same backend first waits out
+ * the previous run's window (`pacing.ts`), so back-to-back runs stay inside it too.
  */
 
 const run = () => randomBytes(4).toString("hex")

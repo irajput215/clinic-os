@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures"
+import { expect, openSignedIn, test } from "./fixtures"
 
 test("an anonymous visitor is sent to sign in, then back to where they were going", async ({
   page,
@@ -42,12 +42,10 @@ test("an off-site redirect target is ignored", async ({
   await expect(page).toHaveURL(new URL("/", baseURL).href)
 })
 
-// Signs in through the UI: the `signedIn` fixture re-seeds its token on every navigation.
+// The setup project's session, seeded once: the `signedIn` fixture re-seeds its token on every
+// navigation, which would undo the sign-out this test checks.
 test("signing out clears the session", async ({ page, clinic }) => {
-  await page.goto("/login")
-  await page.getByLabel("Email").fill(clinic.email)
-  await page.getByLabel("Password").fill(clinic.password)
-  await page.getByRole("button", { name: "Sign in" }).click()
+  await openSignedIn(page, clinic.token)
   await expect(
     page.getByRole("heading", { name: "Today's clinic" }),
   ).toBeVisible()
