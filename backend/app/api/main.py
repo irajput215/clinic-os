@@ -10,6 +10,7 @@ from app.modules.tga_approvals.router import (
 )
 from app.modules.tga_approvals.router import router as tga_approvals_router
 from app.modules.users_roles.router import (
+    current_user_router,
     permissions_router,
     roles_router,
     user_roles_router,
@@ -23,6 +24,9 @@ api_router.include_router(utils.router)
 api_router.include_router(patients_router)
 api_router.include_router(roles_router)
 api_router.include_router(permissions_router)
+# Before `user_roles_router`: `/users/me/permissions` must match before `/users/{user_id}/permissions`
+# can capture the literal `me` (and answer `422`). `test_own_permissions.py` pins the order.
+api_router.include_router(current_user_router)
 api_router.include_router(user_roles_router)
 api_router.include_router(tenants_router)
 api_router.include_router(audit_router)

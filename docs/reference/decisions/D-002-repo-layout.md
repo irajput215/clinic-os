@@ -1,8 +1,12 @@
-# D-002: Layout is `backend/` + `frontend/` + `packages/`, not `apps/*`
+# D-002: Layout is `backend/` + `frontend-features/` + `packages/`, not `apps/*`
 
 - **Status:** Accepted
 - **Date:** 2026-10-04
 - **Owner:** CTO
+- **Amended:** 2026-10-06. The frontend workspace is `frontend-features/`; the template's `frontend/`
+  was deleted when the backend began serving `frontend-features/` at `/`
+  ([ADR-F005](../../../docs2/adr/ADR-F005-one-app-served-by-the-backend.md)). The layout decision is
+  unchanged: one bun workspace member for the frontend, beside `backend/` and `packages/`.
 - **Source contract reference:** `23-sprint-plan.md` §2 "Repository architecture" — *"Monorepo layout: `apps/frontend`, `apps/backend`, `apps/worker`, `packages/shared`; strict TypeScript project references"*
 
 ## Context
@@ -18,7 +22,7 @@ ozbrands/
 │   ├── app/            → main.py, api/, core/, alembic/, models.py
 │   ├── tests/
 │   └── pyproject.toml
-├── frontend/           → bun workspace member; React + Vite
+├── frontend-features/  → bun workspace member; React + Vite (was frontend/ until 2026-10-06)
 │   ├── src/, tests/, playwright.config.ts, openapi-ts.config.ts
 │   └── package.json
 ├── packages/           → bun workspaces target (declared in root package.json)
@@ -27,7 +31,7 @@ ozbrands/
 └── pyproject.toml      → uv workspace root, members = ["backend"]
 ```
 
-Root `package.json` declares `workspaces: ["frontend", "packages/*"]`; root `pyproject.toml` declares
+Root `package.json` declares `workspaces: ["frontend-features", "packages/*"]`; root `pyproject.toml` declares
 `[tool.uv.workspace] members = ["backend"]`.
 
 Renaming to `apps/*` would break `compose*.yml` paths, the uv workspace membership, the bun workspace
@@ -40,7 +44,7 @@ membership, the `openapi-ts` output path, Dockerfiles, and the existing CI workf
 | Source contract workspace | Here | Notes |
 |---|---|---|
 | `apps/backend` | `backend/` | uv workspace member |
-| `apps/frontend` | `frontend/` | bun workspace member |
+| `apps/frontend` | `frontend-features/` | bun workspace member |
 | `apps/worker` | `backend/app/worker/` — a second entrypoint in the same Python package | Same codebase, different entrypoint, as the source contract itself specifies: *"The backend and worker are the same codebase with different entrypoints"* (`21-technical-design.md` §8) |
 | `packages/shared` | `packages/` | Add `packages/shared/` when the first genuinely shared artefact appears |
 

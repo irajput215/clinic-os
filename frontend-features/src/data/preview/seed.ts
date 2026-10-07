@@ -3,7 +3,6 @@ import type {
   Appointment,
   AppointmentStatus,
   AppointmentType,
-  ClinicalRecordSummary,
   Practitioner,
   Product,
   Script,
@@ -16,7 +15,7 @@ import { previewMatch } from "./gate"
 import { clinicInstant, plusMinutes } from "./time"
 
 export interface PreviewState {
-  version: 2
+  version: 3
   seededFor: string
   seededOn: string
   me: string
@@ -24,12 +23,26 @@ export interface PreviewState {
   products: Product[]
   appointments: Appointment[]
   scripts: Script[]
+  /**
+   * Sample approvals for the script queue's safety gate and the Today page ONLY. The approvals
+   * screens themselves read the API (`tgaApprovals: "api"`); these never appear there. They go when
+   * the prescriptions and dashboard modules land and the server evaluates the gate.
+   */
   approvals: TgaApproval[]
-  records: ClinicalRecordSummary[]
 }
 
-/** A UUID v4, from the platform's CSPRNG. */
-export const uuid = () => crypto.randomUUID()
+/**
+ * A UUID v4, from the platform's CSPRNG. Built from `getRandomValues`, not `crypto.randomUUID`:
+ * the latter exists only in a secure context, so on a plain-HTTP origin other than localhost (CI's
+ * `http://backend:8000`, an internal host) it is undefined and every preview screen failed to load.
+ */
+export const uuid = () => {
+  const b = crypto.getRandomValues(new Uint8Array(16))
+  b[6] = (b[6] & 0x0f) | 0x40
+  b[8] = (b[8] & 0x3f) | 0x80
+  const h = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("")
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`
+}
 
 export const PRODUCTS: Product[] = [
   {
@@ -137,7 +150,7 @@ export const seedPreview = (
   const nurse = practitioners[3]
 
   const state: PreviewState = {
-    version: 2,
+    version: 3,
     seededFor: me.id,
     seededOn: today,
     me: me.id,
@@ -146,7 +159,6 @@ export const seedPreview = (
     appointments: [],
     scripts: [],
     approvals: [],
-    records: [],
   }
   if (patients.length === 0) return state
 
@@ -441,44 +453,6 @@ export const seedPreview = (
       booking(pick(d + 2), whitfield, date, "11:00", "INITIAL_CONSULT"),
       booking(pick(d + 3), dunn, date, "13:15", "NURSE_TRIAGE"),
     )
-  }
-
-  // ---- A signed consult note for the first two patients ---------------------------------------
-  for (const [i, body] of [
-    [
-      0,
-      "S: Chronic lumbar pain, 7/10 most days. Sleep improved on current regimen.\nO: Alert, mobile, no sedation. BP 124/78.\nA: Stable on Category 5 flower; approval renewal due within the month.\nP: Continue current dose. Lodge SAS-B renewal. Review in 4 weeks.",
-    ],
-    [
-      1,
-      "S: Generalised anxiety, partial response to SSRIs over 9 months.\nO: Calm, engaged. GAD-7 13.\nA: Eligible for Category 1 CBD trial.\nP: Calmleaf CBD 100, 0.5 mL nocte, titrate weekly. Review in 2 weeks.",
-    ],
-  ] as const) {
-    const patient = pick(i)
-    const id = uuid()
-    const created = plusMinutes(now, -1440 * (i + 3))
-    state.records.push({
-      id,
-      patient_id: patient.id,
-      record_type: "NOTE",
-      author_id: me.id,
-      current_version: 1,
-      signed_at: created,
-      deleted_at: null,
-      created_at: created,
-      latest_version: {
-        id: uuid(),
-        clinical_record_id: id,
-        version: 1,
-        body,
-        body_format: "PLAIN",
-        author_id: me.id,
-        signed_at: created,
-        supersedes_version: null,
-        amendment_reason: null,
-        created_at: created,
-      },
-    })
   }
 
   return state

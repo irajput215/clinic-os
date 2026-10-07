@@ -16,6 +16,8 @@ Record (with the D-006 note), Verify (summary plus re-type the reference), Revok
 
 ## States
 
+The register's list needs `GET /api/v1/tga-approvals`, which does not exist. Until it does, the register replaces its filters and table with a designed refusal that names the endpoint and links to Patients, where each patient's approvals are live. Record approval still works from the register.
+
 Refusals are shown inline with the server's sentence: `VERIFIER_CANNOT_BE_CREATOR`, `TGA_APPLICATION_NUMBER_MISMATCH`, `TGA_OVERLAPPING_ACTIVE_APPROVAL`, `ILLEGAL_STATE_TRANSITION`.
 
 ## Data flow

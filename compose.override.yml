@@ -52,18 +52,21 @@ services:
             - .venv
         - path: ./backend/pyproject.toml
           action: rebuild
-        - path: ./frontend
+        - path: ./frontend-features
           action: rebuild
           ignore:
-            - ./frontend/node_modules
-            - ./frontend/dist
-            - ./frontend/blob-report
-            - ./frontend/test-results
+            - ./frontend-features/node_modules
+            - ./frontend-features/blob-report
+            - ./frontend-features/test-results
+            - ./frontend-features/playwright-report
+            - ./frontend-features/playwright
     # TODO: remove once coverage is done locally
     volumes:
       - ./backend/htmlcov:/app/backend/htmlcov
     environment:
       FASTAPI_ENV: "development"
+      # The backend serves the app at `/`, so emailed links (password reset) point back at it.
+      FRONTEND_HOST: "http://localhost:8000"
       SMTP_HOST: "mailpit"
       SMTP_PORT: "1025"
       SMTP_TLS: "false"
@@ -77,7 +80,7 @@ services:
   playwright:
     build:
       context: .
-      dockerfile: frontend/Dockerfile.playwright
+      dockerfile: frontend-features/Dockerfile.playwright
       args:
         - NODE_ENV=production
     ipc: host
@@ -87,14 +90,14 @@ services:
     environment:
       - FIRST_SUPERUSER=${FIRST_SUPERUSER:?Variable not set}
       - FIRST_SUPERUSER_PASSWORD=${FIRST_SUPERUSER_PASSWORD:?Variable not set}
+      # The backend serves the built app and the API from one origin; no dev server is involved.
       - PLAYWRIGHT_BASE_URL=http://backend:8000
-      - VITE_API_URL=http://backend:8000
       - MAILPIT_HOST=http://mailpit:8025
       # For the reports when run locally
       - PLAYWRIGHT_HTML_HOST=0.0.0.0
       - CI=${CI:-}
     volumes:
-      - ./frontend/blob-report:/app/frontend/blob-report
-      - ./frontend/test-results:/app/frontend/test-results
+      - ./frontend-features/blob-report:/app/frontend-features/blob-report
+      - ./frontend-features/test-results:/app/frontend-features/test-results
     ports:
       - 9323:9323

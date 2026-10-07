@@ -23,7 +23,7 @@ This repo has:
 
 - `compose.yml`, `compose.override.yml`, `compose.deploy.yml` — a Docker Compose deployment
 - `.env` at the repo root (committed — the source contract forbids secrets in the repo; this needs review)
-- `backend/Dockerfile`, `frontend/Dockerfile.playwright`
+- `backend/Dockerfile` (which also builds the frontend), `frontend-features/Dockerfile.playwright`
 - `.github/workflows/` CI, `.pre-commit-config.yaml`
 - **No Terraform, no AWS resource definitions, no region pin anywhere**
 
@@ -38,6 +38,12 @@ INV-6 is not currently true or false — it is unimplemented. That is a Gate 1 (
 Gate 6 gap.
 
 ## Decision
+
+> **Narrowed 2026-10-06** ([ADR-F005](../../../docs2/adr/ADR-F005-one-app-served-by-the-backend.md),
+> owner decision D-A): there is one frontend and the backend image serves it at `/`, so a second
+> static origin for the frontend (with `VITE_API_URL` and a CORS entry) is out under every option.
+> The platform choice below stays open; FastAPI Cloud + Neon, which is what runs today, matches none
+> of the options as written.
 
 **NOT YET MADE.** Recorded as an open decision so that no phase 4 work, and no control-matrix row claiming
 residency, depends on it silently.

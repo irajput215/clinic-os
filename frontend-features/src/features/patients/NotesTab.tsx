@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Loader2, Lock, PenLine } from "lucide-react"
-import { useState } from "react"
+import { useId, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import {
@@ -11,7 +11,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { isPreview } from "@/data/capabilities"
 import { parseSoap, patientRecordsQuery, recordsRepo } from "@/data/records"
 import type { ClinicalRecordSummary, SoapNote } from "@/data/types"
 import {
@@ -20,7 +19,6 @@ import {
   ErrorState,
   Field,
   Pill,
-  PreviewBanner,
   SkeletonRows,
 } from "@/design/primitives"
 import { formatDayMonthTime } from "@/lib/format"
@@ -45,12 +43,15 @@ function SoapEditor({
   value: SoapNote
   onChange: (v: SoapNote) => void
 }) {
+  // Two editors can be on the page at once (the new note and the amend dialog), so ids are unique
+  // per instance; otherwise a label in the dialog would point at the textarea behind it.
+  const id = useId()
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       {SECTIONS.map(([key, label, hint]) => (
-        <Field key={key} label={label} htmlFor={`soap-${key}`}>
+        <Field key={key} label={label} htmlFor={`${id}-${key}`}>
           <textarea
-            id={`soap-${key}`}
+            id={`${id}-${key}`}
             rows={3}
             placeholder={hint}
             className="field-input min-h-[84px] resize-y leading-relaxed"
@@ -96,15 +97,12 @@ export function NotesTab({ patientId }: { patientId: string }) {
 
   return (
     <div className="space-y-3.5">
-      {isPreview("clinicalRecords") ? (
-        <PreviewBanner what="Consult notes here are sample notes." />
-      ) : null}
       <Card title="New consult note">
         <SoapEditor value={draft} onChange={setDraft} />
         <div className="mt-3.5 flex items-center justify-between gap-3">
           <p className="text-xs text-stone">
-            Saved notes stay editable until signed. A signed note is permanent;
-            corrections are added as amendments with a reason.
+            A saved note is a draft until you sign it. A signed note is
+            permanent; corrections are added as amendments with a reason.
           </p>
           <Button
             disabled={isEmpty(draft) || create.isPending}

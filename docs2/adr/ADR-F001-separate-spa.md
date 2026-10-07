@@ -1,7 +1,11 @@
 # ADR-F001: A separate SPA beside `frontend/`
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-F005](ADR-F005-one-app-served-by-the-backend.md)
 - **Date:** 2026-10-06
+
+> Superseded on 2026-10-06. `frontend-features/` is now the only app; it builds into the backend
+> image and is served at `/`, and `frontend/` has been deleted. Kept for the record of why the two
+> apps once ran side by side.
 
 ## Context
 

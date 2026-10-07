@@ -20,6 +20,13 @@
 - R7 Patient quick-find filters the loaded patients in memory. Nothing typed is sent or put in a URL.
 - R8 Sign-out clears the token, the query cache and the preview store.
 - R9 Below 1024 px the sidebar is a drawer. No page scrolls horizontally at any width.
+- R10 Organisation signup (`/signup`) posts `POST /users/signup` with a `clinic_name`, which creates the tenant and makes the signer its Practice Owner, then signs them in. Field rules mirror the API (`UserRegister`: password 8 to 128 characters, names and email at most 255).
+- R11 Password recovery (`/recover-password`) posts `POST /password-recovery/{email}` and confirms in words that never say whether the address has an account.
+- R12 Password reset (`/reset-password?token=`) is where the emailed link lands (`{FRONTEND_HOST}/reset-password?token=...`, `backend/app/utils.py`). It posts `POST /reset-password/`; an invalid or expired token offers a new link. The token is sent only in the request body.
+- R13 A signed-in visitor to sign in, signup or recovery goes to the app instead.
+- R14 Administration (`/admin`) has three tabs. **Roles and permissions** shows every role against the full permission catalogue read from `GET /permissions` (21 codes today), with advisory grantability. **User access** lists an account's roles and effective permissions and grants or revokes a role behind a confirmation; `LAST_ADMINISTRATOR` and `GRANT_EXCEEDS_ACTOR` refusals are shown in the API's terms. **Accounts** (list, add, edit, deactivate) is offered only to the platform superuser, because the accounts API is superuser-only.
+- R15 The Administration nav entry is shown only when `GET /users/me/permissions` includes `users:manage`; when that answer is unknown the entry is shown and the server's `403` is the refusal. A `429` on the administrative budget (20/min) is waited out and retried, never shown as a failure on the first refusal.
+- R16 Settings (`/settings`) lets any signed-in person update their own name and email (`PATCH /users/me`), change their password (`PATCH /users/me/password`, current password required), and deactivate their own account (`DELETE /users/me`) behind a confirmation that then signs them out. The sidebar reads the same account, so a saved name shows there without a reload.
 
 ## Non-functional
 
@@ -29,4 +36,3 @@
 ## Out of scope (this phase)
 
 - MFA, refresh tokens and SSO (blocked on D-003).
-- Password recovery screens (exist in `frontend/`; to be ported).

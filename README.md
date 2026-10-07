@@ -65,7 +65,7 @@ Backend docs: [backend/README.md](./backend/README.md).
 
 ## Frontend Development
 
-Frontend docs: [frontend/README.md](./frontend/README.md).
+Frontend docs: [frontend-features/README.md](./frontend-features/README.md) and [docs2/](./docs2/README.md).
 
 ## Deployment
 

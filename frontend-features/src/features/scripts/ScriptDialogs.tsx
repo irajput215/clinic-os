@@ -16,7 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { practitionersQuery } from "@/data/appointments"
-import { approvalsRepo, categoryShort, formLabel } from "@/data/approvals"
+import { categoryShort, formLabel } from "@/data/approvals"
 import { patientName, patientsQuery } from "@/data/patients"
 import { productsQuery, scriptsRepo } from "@/data/scripts"
 import {
@@ -385,13 +385,7 @@ export function ReviewSignDialog({
 
   const gate = useQuery({
     queryKey: ["gate", script?.id, script?.date_of_service],
-    queryFn: () =>
-      approvalsRepo.match({
-        patient_id: script!.patient_id,
-        tga_category: script!.tga_category,
-        dosage_form: script!.dosage_form,
-        date_of_service: script!.date_of_service,
-      }),
+    queryFn: () => scriptsRepo.gate(script!),
     enabled: script !== null,
     staleTime: 0,
   })

@@ -36,8 +36,9 @@ test("a practitioner cannot be double-booked", async ({ signedIn: page }) => {
 
 test("a public booking reaches the clinic's calendar", async ({
   signedIn: page,
+  clinic,
 }) => {
-  await page.goto("/book/banksia-family-medical")
+  await page.goto(`/book/${clinic.slug}`)
   await page.getByRole("button", { name: "Continue" }).click()
 
   await page.getByRole("button", { name: "Choose a time" }).click()

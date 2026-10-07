@@ -199,7 +199,7 @@ def list_patient_tga_approvals(
         )
     except service.InvalidCursor as error:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={"code": "INVALID_CURSOR", "message": str(error)},
         ) from error
 

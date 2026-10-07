@@ -11,10 +11,15 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as RecoverPasswordRouteImport } from './routes/recover-password'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as SignupRouteImport } from './routes/signup'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as AppAdminRouteImport } from './routes/_app/admin'
 import { Route as AppApprovalsRouteImport } from './routes/_app/approvals'
 import { Route as AppCalendarRouteImport } from './routes/_app/calendar'
 import { Route as AppScriptsRouteImport } from './routes/_app/scripts'
+import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as BookClinicSlugRouteImport } from './routes/book.$clinicSlug'
 import { Route as AppPatientsIndexRouteImport } from './routes/_app/patients.index'
 import { Route as AppPatientsPatientIdRouteImport } from './routes/_app/patients.$patientId'
@@ -28,9 +33,29 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RecoverPasswordRoute = RecoverPasswordRouteImport.update({
+  id: '/recover-password',
+  path: '/recover-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAdminRoute = AppAdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => AppRoute,
 } as any)
 const AppApprovalsRoute = AppApprovalsRouteImport.update({
@@ -46,6 +71,11 @@ const AppCalendarRoute = AppCalendarRouteImport.update({
 const AppScriptsRoute = AppScriptsRouteImport.update({
   id: '/scripts',
   path: '/scripts',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSettingsRoute = AppSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => AppRoute,
 } as any)
 const BookClinicSlugRoute = BookClinicSlugRouteImport.update({
@@ -67,18 +97,28 @@ const AppPatientsPatientIdRoute = AppPatientsPatientIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/login': typeof LoginRoute
+  '/recover-password': typeof RecoverPasswordRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/signup': typeof SignupRoute
+  '/admin': typeof AppAdminRoute
   '/approvals': typeof AppApprovalsRoute
   '/calendar': typeof AppCalendarRoute
   '/scripts': typeof AppScriptsRoute
+  '/settings': typeof AppSettingsRoute
   '/book/$clinicSlug': typeof BookClinicSlugRoute
   '/patients/$patientId': typeof AppPatientsPatientIdRoute
   '/patients/': typeof AppPatientsIndexRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
+  '/recover-password': typeof RecoverPasswordRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/signup': typeof SignupRoute
+  '/admin': typeof AppAdminRoute
   '/approvals': typeof AppApprovalsRoute
   '/calendar': typeof AppCalendarRoute
   '/scripts': typeof AppScriptsRoute
+  '/settings': typeof AppSettingsRoute
   '/book/$clinicSlug': typeof BookClinicSlugRoute
   '/': typeof AppIndexRoute
   '/patients/$patientId': typeof AppPatientsPatientIdRoute
@@ -88,9 +128,14 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
+  '/recover-password': typeof RecoverPasswordRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/signup': typeof SignupRoute
+  '/_app/admin': typeof AppAdminRoute
   '/_app/approvals': typeof AppApprovalsRoute
   '/_app/calendar': typeof AppCalendarRoute
   '/_app/scripts': typeof AppScriptsRoute
+  '/_app/settings': typeof AppSettingsRoute
   '/book/$clinicSlug': typeof BookClinicSlugRoute
   '/_app/': typeof AppIndexRoute
   '/_app/patients/$patientId': typeof AppPatientsPatientIdRoute
@@ -101,18 +146,28 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/recover-password'
+    | '/reset-password'
+    | '/signup'
+    | '/admin'
     | '/approvals'
     | '/calendar'
     | '/scripts'
+    | '/settings'
     | '/book/$clinicSlug'
     | '/patients/$patientId'
     | '/patients/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
+    | '/recover-password'
+    | '/reset-password'
+    | '/signup'
+    | '/admin'
     | '/approvals'
     | '/calendar'
     | '/scripts'
+    | '/settings'
     | '/book/$clinicSlug'
     | '/'
     | '/patients/$patientId'
@@ -121,9 +176,14 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_app'
     | '/login'
+    | '/recover-password'
+    | '/reset-password'
+    | '/signup'
+    | '/_app/admin'
     | '/_app/approvals'
     | '/_app/calendar'
     | '/_app/scripts'
+    | '/_app/settings'
     | '/book/$clinicSlug'
     | '/_app/'
     | '/_app/patients/$patientId'
@@ -133,6 +193,9 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
+  RecoverPasswordRoute: typeof RecoverPasswordRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
+  SignupRoute: typeof SignupRoute
   BookClinicSlugRoute: typeof BookClinicSlugRoute
 }
 
@@ -152,11 +215,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/recover-password': {
+      id: '/recover-password'
+      path: '/recover-password'
+      fullPath: '/recover-password'
+      preLoaderRoute: typeof RecoverPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app/': {
       id: '/_app/'
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/admin': {
+      id: '/_app/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AppAdminRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/approvals': {
@@ -178,6 +269,13 @@ declare module '@tanstack/react-router' {
       path: '/scripts'
       fullPath: '/scripts'
       preLoaderRoute: typeof AppScriptsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/settings': {
+      id: '/_app/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AppSettingsRouteImport
       parentRoute: typeof AppRoute
     }
     '/book/$clinicSlug': {
@@ -205,18 +303,22 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteChildren {
+  AppAdminRoute: typeof AppAdminRoute
   AppApprovalsRoute: typeof AppApprovalsRoute
   AppCalendarRoute: typeof AppCalendarRoute
   AppScriptsRoute: typeof AppScriptsRoute
+  AppSettingsRoute: typeof AppSettingsRoute
   AppIndexRoute: typeof AppIndexRoute
   AppPatientsPatientIdRoute: typeof AppPatientsPatientIdRoute
   AppPatientsIndexRoute: typeof AppPatientsIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAdminRoute: AppAdminRoute,
   AppApprovalsRoute: AppApprovalsRoute,
   AppCalendarRoute: AppCalendarRoute,
   AppScriptsRoute: AppScriptsRoute,
+  AppSettingsRoute: AppSettingsRoute,
   AppIndexRoute: AppIndexRoute,
   AppPatientsPatientIdRoute: AppPatientsPatientIdRoute,
   AppPatientsIndexRoute: AppPatientsIndexRoute,
@@ -227,6 +329,9 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
+  RecoverPasswordRoute: RecoverPasswordRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
+  SignupRoute: SignupRoute,
   BookClinicSlugRoute: BookClinicSlugRoute,
 }
 export const routeTree = rootRouteImport

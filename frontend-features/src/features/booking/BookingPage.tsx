@@ -131,12 +131,15 @@ export function BookingPage({ clinicSlug }: { clinicSlug: string }) {
                     {i < index ? <Check className="size-3.5" /> : i + 1}
                   </span>
                   <span
-                    className={i === index ? "text-ink" : "text-stone-faint"}
+                    className={cn(
+                      "whitespace-nowrap",
+                      i === index ? "text-ink" : "text-stone-faint",
+                    )}
                   >
                     {label}
                   </span>
                   {i < steps.length - 1 ? (
-                    <span className="mx-1 h-px w-6 bg-line" />
+                    <span className="mx-1 h-px w-3 shrink-0 bg-line sm:w-6" />
                   ) : null}
                 </li>
               ))}
@@ -238,9 +241,9 @@ export function BookingPage({ clinicSlug }: { clinicSlug: string }) {
           ) : null}
         </div>
 
-        <p className="mt-5 text-center font-mono text-[10.5px] tracking-[0.04em] text-stone-faint uppercase">
-          AU data residency · Your information is handled under the Privacy Act
-          1988
+        <p className="mt-5 text-center text-balance font-mono text-[10.5px] tracking-[0.04em] text-stone-faint uppercase">
+          AU data residency · Your information is handled under the Privacy
+          Act&nbsp;1988
         </p>
       </div>
     </div>

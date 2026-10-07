@@ -7,7 +7,7 @@
 
 The API issues a 15-minute HS256 access token from `POST /login/access-token` and has no refresh
 token (D-003 is open on managed OIDC vs self-hosted; MFA and refresh rotation are blocked behind
-it). The existing `frontend/` keeps the token in `localStorage`.
+it). The template UI this app replaced kept the token in `localStorage`.
 
 Signing a prescription needs step-up authentication. No step-up endpoint exists.
 

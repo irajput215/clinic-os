@@ -70,7 +70,7 @@ updates:
   - package-ecosystem: docker
     directories:
       - /backend
-      - /frontend
+      - /frontend-features
     schedule:
       interval: "monthly"
     cooldown:

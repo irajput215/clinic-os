@@ -1,183 +1,71 @@
 import { queryOptions } from "@tanstack/react-query"
 import { apiCall } from "@/data/api"
-import { sourceOf } from "@/data/capabilities"
-import { previewMatch } from "@/data/preview/gate"
-import { uuid } from "@/data/preview/seed"
-import { readPreview, writePreview } from "@/data/preview/store"
-import type {
-  TgaApproval,
-  TgaApprovalCreate,
-  TgaMatchResponse,
-} from "@/data/types"
-import { clinicToday } from "@/lib/format"
+import type { TgaApproval, TgaApprovalCreate } from "@/data/types"
 import { Refusal } from "@/lib/http"
 
 /**
- * TGA approvals. API routes (feat/tga-approvals-engine, backend/app/modules/tga_approvals/router.py):
+ * TGA approvals, served by backend/app/modules/tga_approvals/router.py:
  *   GET  /patients/{id}/tga-approvals     POST /tga-approvals
- *   GET  /tga-approvals/{id}              POST /tga-approvals/{id}/verify
- *   POST /tga-approvals/{id}/revoke       POST /tga-approvals/match
- * The tenant-wide register (`listAll`) has no route yet; it is proposed in
- * docs2/sdlc/05-approvals/api.md and served by the preview until then.
+ *   POST /tga-approvals/{id}/verify       POST /tga-approvals/{id}/revoke
+ * Refusals come back as RFC 7807 with `detail.code` (VERIFIER_CANNOT_BE_CREATOR,
+ * TGA_APPLICATION_NUMBER_MISMATCH, TGA_OVERLAPPING_ACTIVE_APPROVAL, ILLEGAL_STATE_TRANSITION) and
+ * are worded in lib/http.ts.
+ *
+ * The practice-wide register has no route: `GET /tga-approvals` is proposed in
+ * docs2/sdlc/05-approvals/api.md. Until it lands, `listAll` is a designed refusal rather than a
+ * guess, and the register screen says so.
  */
-interface ApprovalsRepo {
-  listAll(): Promise<TgaApproval[]>
-  listForPatient(patientId: string): Promise<TgaApproval[]>
-  create(body: TgaApprovalCreate): Promise<TgaApproval>
-  verify(id: string, applicationNumber: string): Promise<TgaApproval>
-  revoke(id: string, reasonCode: string): Promise<TgaApproval>
-  match(q: {
-    patient_id: string
-    tga_category: string
-    dosage_form: string
-    date_of_service: string
-  }): Promise<TgaMatchResponse>
+
+/** The API's largest page (tga_approvals/service.py `MAX_PAGE_SIZE`). */
+const PAGE_SIZE = 100
+
+/** The refusal code `listAll` raises while `GET /tga-approvals` does not exist. */
+export const REGISTER_NOT_AVAILABLE = "NOT_AVAILABLE"
+
+interface ApprovalsPage {
+  data: TgaApproval[]
+  count: number
+  next_cursor: string | null
 }
 
-const api: ApprovalsRepo = {
-  listAll: async () => {
+export const approvalsRepo = {
+  listAll: async (): Promise<TgaApproval[]> => {
     throw new Refusal(
-      "NOT_AVAILABLE",
-      "The approvals register needs GET /tga-approvals, which the API does not serve yet.",
+      REGISTER_NOT_AVAILABLE,
+      "The practice-wide register needs GET /api/v1/tga-approvals, which the API doesn't serve yet.",
     )
   },
-  listForPatient: async (patientId) =>
-    (
-      await apiCall<{ data: TgaApproval[] }>(
+  /** Every approval on file for the patient: all keyset pages, so none is silently dropped. */
+  listForPatient: async (patientId: string) => {
+    const approvals: TgaApproval[] = []
+    let cursor: string | undefined
+    do {
+      const page = await apiCall<ApprovalsPage>(
         "GET",
         "/api/v1/patients/{patient_id}/tga-approvals",
-        { path: { patient_id: patientId } },
+        {
+          path: { patient_id: patientId },
+          query: { limit: PAGE_SIZE, cursor },
+        },
       )
-    ).data,
-  create: (body) => apiCall("POST", "/api/v1/tga-approvals", { body }),
-  verify: (id, applicationNumber) =>
-    apiCall("POST", "/api/v1/tga-approvals/{approval_id}/verify", {
+      approvals.push(...page.data)
+      cursor = page.next_cursor ?? undefined
+    } while (cursor)
+    return approvals
+  },
+  create: (body: TgaApprovalCreate) =>
+    apiCall<TgaApproval>("POST", "/api/v1/tga-approvals", { body }),
+  verify: (id: string, applicationNumber: string) =>
+    apiCall<TgaApproval>("POST", "/api/v1/tga-approvals/{approval_id}/verify", {
       path: { approval_id: id },
-      body: { tga_application_number: applicationNumber },
+      body: { tga_application_number: applicationNumber.trim() },
     }),
-  revoke: (id, reasonCode) =>
-    apiCall("POST", "/api/v1/tga-approvals/{approval_id}/revoke", {
+  revoke: (id: string, reasonCode: string) =>
+    apiCall<TgaApproval>("POST", "/api/v1/tga-approvals/{approval_id}/revoke", {
       path: { approval_id: id },
       body: { reason_code: reasonCode },
     }),
-  match: (q) => apiCall("POST", "/api/v1/tga-approvals/match", { body: q }),
 }
-
-const MAX_YEARS = 2
-
-const preview: ApprovalsRepo = {
-  listAll: async () => (await readPreview()).approvals,
-  listForPatient: async (patientId) =>
-    (await readPreview()).approvals.filter((a) => a.patient_id === patientId),
-  create: (body) =>
-    writePreview((s) => {
-      if (body.valid_to <= body.valid_from)
-        throw new Refusal(
-          "ERR_WINDOW_NOT_FORWARD",
-          "The end date must be after the start date.",
-        )
-      const max = `${Number(body.valid_from.slice(0, 4)) + MAX_YEARS}${body.valid_from.slice(4)}`
-      if (body.valid_to > max)
-        throw new Refusal(
-          "ERR_WINDOW_EXCEEDS_MAX_DURATION",
-          "An approval can't be valid for more than two years.",
-        )
-      const now = new Date().toISOString()
-      const row: TgaApproval = {
-        id: uuid(),
-        tenant_id: "",
-        ...body,
-        state: "PENDING",
-        source: "MANUAL_ENTRY",
-        created_by: s.me,
-        verified_by: null,
-        verified_at: null,
-        revoked_by: null,
-        revoked_at: null,
-        revoked_reason_code: null,
-        superseded_by_id: null,
-        supersedes_id: null,
-        created_at: now,
-        updated_at: now,
-      }
-      s.approvals.unshift(row)
-      return row
-    }),
-  verify: (id, applicationNumber) =>
-    writePreview((s) => {
-      const row = s.approvals.find((a) => a.id === id)
-      if (!row)
-        throw new Refusal(
-          "TGA_APPROVAL_NOT_FOUND",
-          "That approval isn't available.",
-        )
-      if (row.state !== "PENDING")
-        throw new Refusal(
-          "ILLEGAL_STATE_TRANSITION",
-          "Only a pending approval can be verified.",
-        )
-      if (row.created_by === s.me)
-        throw new Refusal(
-          "VERIFIER_CANNOT_BE_CREATOR",
-          "You entered this approval, so a second clinician must verify it.",
-        )
-      if (applicationNumber.trim() !== row.approval_reference)
-        throw new Refusal(
-          "TGA_APPLICATION_NUMBER_MISMATCH",
-          "That reference doesn't match the approval. Re-enter it from the TGA letter.",
-        )
-      const overlaps = s.approvals.some(
-        (a) =>
-          a.id !== row.id &&
-          a.state === "ACTIVE" &&
-          a.patient_id === row.patient_id &&
-          a.tga_category === row.tga_category &&
-          a.dosage_form === row.dosage_form &&
-          a.valid_from < row.valid_to &&
-          row.valid_from < a.valid_to,
-      )
-      if (overlaps)
-        throw new Refusal(
-          "TGA_OVERLAPPING_ACTIVE_APPROVAL",
-          "An active approval already covers these dates for this category and form. Supersede it instead.",
-        )
-      const now = new Date().toISOString()
-      Object.assign(row, {
-        state: row.valid_to <= clinicToday() ? "EXPIRED" : "ACTIVE",
-        verified_by: s.me,
-        verified_at: now,
-        updated_at: now,
-      })
-      return row
-    }),
-  revoke: (id, reasonCode) =>
-    writePreview((s) => {
-      const row = s.approvals.find((a) => a.id === id)
-      if (!row)
-        throw new Refusal(
-          "TGA_APPROVAL_NOT_FOUND",
-          "That approval isn't available.",
-        )
-      if (row.state !== "PENDING" && row.state !== "ACTIVE")
-        throw new Refusal(
-          "ILLEGAL_STATE_TRANSITION",
-          "This approval can no longer be revoked.",
-        )
-      const now = new Date().toISOString()
-      Object.assign(row, {
-        state: "REVOKED",
-        revoked_by: s.me,
-        revoked_at: now,
-        revoked_reason_code: reasonCode,
-        updated_at: now,
-      })
-      return row
-    }),
-  match: async (q) => previewMatch((await readPreview()).approvals, q),
-}
-
-export const approvalsRepo: ApprovalsRepo =
-  sourceOf("tgaApprovals") === "api" ? api : preview
 
 export const approvalsQuery = queryOptions({
   queryKey: ["approvals", "all"],

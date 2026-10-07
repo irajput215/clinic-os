@@ -65,6 +65,22 @@ ignore = [
 # Preserve types, even if a file imports `from __future__ import annotations`.
 keep-runtime-typing = true
 
+[tool.pytest.ini_options]
+# Zero warnings: any warning fails the run, so a new one is fixed at its root, not accumulated.
+# Each exception below is narrow (message and category) and says why it cannot be fixed here.
+filterwarnings = [
+    "error",
+    # Third party, upstream: Starlette 1.x deprecates `httpx` for `starlette.testclient` in favour
+    # of `httpx2` (encode/starlette#3291). The fix is a new dev dependency (`httpx2`), which
+    # AGENTS.md puts behind "ask first"; drop this line once `httpx2` is in the dev group.
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning",
+    # Local environment, not code: `app.core.config` warns under `FASTAPI_ENV=development` when a
+    # secret is still the `changethis` placeholder, and raises outside development. A local `.env`
+    # whose compose database password is `changethis` reaches the suite through `DATABASE_URL`; a
+    # test run is not a deployment, and the production check is unchanged (it still raises).
+    'ignore:The value of .+ is "changethis":UserWarning:app.core.config',
+]
+
 [tool.coverage.run]
 source = ["app"]
 dynamic_context = "test_function"

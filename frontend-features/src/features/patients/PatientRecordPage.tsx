@@ -9,7 +9,6 @@ import {
 } from "@/data/appointments"
 import { patientApprovalsQuery } from "@/data/approvals"
 import { actionLabel, resourceAuditQuery } from "@/data/audit"
-import { isPreview } from "@/data/capabilities"
 import { patientName, patientQuery } from "@/data/patients"
 import { isActionable, scriptsQuery } from "@/data/scripts"
 import { APPOINTMENT_TYPES, type Script } from "@/data/types"
@@ -244,9 +243,6 @@ function ApprovalsTab({ patientId }: { patientId: string }) {
   const [recording, setRecording] = useState(false)
   return (
     <>
-      {isPreview("tgaApprovals") ? (
-        <PreviewBanner what="Approvals here are sample grants." />
-      ) : null}
       <Card
         title="TGA approvals"
         action={

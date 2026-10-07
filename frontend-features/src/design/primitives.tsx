@@ -329,6 +329,57 @@ export function Field({
   )
 }
 
+/** An underlined tab row. The selected tab lives in the URL; `onSelect` navigates. */
+export function TabBar<T extends string>({
+  label,
+  tabs,
+  value,
+  onSelect,
+}: {
+  label: string
+  tabs: ReadonlyArray<{ key: T; label: string }>
+  value: T
+  onSelect: (key: T) => void
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label={label}
+      className="mb-5 flex gap-1 overflow-x-auto border-line border-b"
+    >
+      {tabs.map((tab) => (
+        <button
+          key={tab.key}
+          type="button"
+          role="tab"
+          aria-selected={value === tab.key}
+          onClick={() => onSelect(tab.key)}
+          className={cn(
+            "-mb-px shrink-0 border-b-2 px-3 py-2.5 text-[13.5px] font-medium transition-colors",
+            value === tab.key
+              ? "border-clay text-clay-deep"
+              : "border-transparent text-stone hover:text-ink",
+          )}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** An inline refusal or failure inside a form or dialog, in the API's own words where it has them. */
+export function FormAlert({ children }: { children: ReactNode }) {
+  return (
+    <p
+      role="alert"
+      className="rounded-btn bg-danger-tint px-3 py-2.5 text-[13px] text-danger-deep"
+    >
+      {children}
+    </p>
+  )
+}
+
 /** Route-level pending and error screens, so every page loads and fails the same way. */
 export function PagePending() {
   return (

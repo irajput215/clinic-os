@@ -1,7 +1,9 @@
 # frontend-features
 
-The ClinicOS clinic app: Today, Calendar, Patients, Script queue, TGA approvals and public booking,
-following the Banksia reference design and running against this repository's FastAPI backend.
+The ClinicOS app, and the only frontend in this repository: Today, Calendar, Patients, Script queue,
+TGA approvals, public booking, sign in, organisation signup, password recovery, Administration and
+Settings, following the Banksia reference design. The backend image builds it and serves it at `/`
+([ADR-F005](../docs2/adr/ADR-F005-one-app-served-by-the-backend.md)).
 
 All documentation is in [`../docs2/`](../docs2/README.md): architecture, design system, which
 screens use the real API, ADRs, and per-feature requirements, design, API contract, test plan and DoD.
@@ -13,8 +15,9 @@ bun run dev                  # http://127.0.0.1:5174
 
 bun run lint                 # biome (writes fixes)
 bun run typecheck
-bun run build                # dist/, with a strict CSP injected
-bun run test                 # Playwright against the running backend
+bun run build                # ../backend/app/frontend (served at /), with a strict CSP injected
+bun run test                 # Playwright via the dev server, against the running backend
+PLAYWRIGHT_BASE_URL=http://127.0.0.1:8000 bun run test   # against the backend serving the build
 bun run generate-client      # regenerate src/client from openapi.json
 ```
 

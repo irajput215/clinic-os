@@ -7,6 +7,10 @@ export interface Clinic {
   email: string
   password: string
   fullName: string
+  /** The organisation's routing slug, as the server derives it from the clinic name at signup. */
+  slug: string
+  /** The owner's access token, from the setup project's one sign-in. */
+  token: string
 }
 
 export const readClinic = (): Clinic =>
@@ -16,26 +20,19 @@ export const readClinic = (): Clinic =>
  * `signedIn` is a page that arrives signed in. The app keeps its token in sessionStorage, which
  * Playwright's storageState does not capture, so the token is seeded before the first document loads.
  *
- * One sign-in per worker, not per test: `POST /login/access-token` is rate limited (20/min), and a
- * suite that signs in per test trips it. Tokens live 15 minutes, far longer than a worker.
+ * One sign-in per run, not per test or per worker: `POST /login/access-token` is rate limited
+ * (20/min per client address), every worker shares that address, and the specs that sign in through
+ * the UI on purpose spend most of the budget. The setup project signs in once and leaves the token
+ * beside the clinic. Tokens live 15 minutes, longer than a run (CI bounds a shard at 13).
  */
 export const test = base.extend<
   { clinic: Clinic; signedIn: Page },
   { workerToken: string }
 >({
   workerToken: [
-    async ({ playwright }, use, workerInfo) => {
-      const clinic = readClinic()
-      const api = await playwright.request.newContext({
-        baseURL: workerInfo.project.use.baseURL,
-      })
-      const res = await api.post("/api/v1/login/access-token", {
-        form: { username: clinic.email, password: clinic.password },
-      })
-      expect(res.ok(), `sign-in failed: ${res.status()}`).toBeTruthy()
-      const { access_token } = await res.json()
-      await api.dispose()
-      await use(access_token as string)
+    // biome-ignore lint/correctness/noEmptyPattern: Playwright reads fixture dependencies from this pattern
+    async ({}, use) => {
+      await use(readClinic().token)
     },
     { scope: "worker" },
   ],

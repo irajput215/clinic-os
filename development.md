@@ -23,7 +23,7 @@ Start the FastAPI development server:
 uv run fastapi dev
 ```
 
-In another terminal, from the project root, install the frontend dependencies and start the Vite development server:
+In another terminal, from the project root, install the frontend dependencies and start the Vite development server for the app in `frontend-features/`:
 
 ```bash
 bun install
@@ -32,7 +32,7 @@ bun run dev
 
 Now you can open these URLs:
 
-Frontend development server: <http://localhost:5173>
+Frontend development server: <http://localhost:5174>
 
 Backend API: <http://localhost:8000>
 
@@ -40,17 +40,23 @@ Automatic interactive API documentation with Swagger UI: <http://localhost:8000/
 
 Mailpit: <http://localhost:8025>
 
-The frontend development server uses the backend at `http://localhost:8000`, as configured in `frontend/.env`.
+The frontend development server proxies `/api` to the backend at `http://127.0.0.1:8000` (`VITE_API_PROXY_TARGET` in `frontend-features/.env.local`, see `frontend-features/.env.example`), so the app and the API share an origin and no CORS setting is needed.
 
 ### Frontend Served by FastAPI
 
-Build the frontend from the `frontend` directory:
+Build the frontend from the project root:
 
 ```bash
 bun run build
 ```
 
-The build is written to `backend/app/frontend` and served by FastAPI at <http://localhost:8000>. Rebuild the frontend after making frontend changes.
+The build is written to `backend/app/frontend` and served by FastAPI at <http://localhost:8000>, which is how it is deployed. Rebuild the frontend after making frontend changes. Set `FRONTEND_HOST` to the URL that serves the app, so links in emails (password reset) point at it.
+
+To run the Playwright suite against the served build instead of the development server:
+
+```bash
+PLAYWRIGHT_BASE_URL=http://127.0.0.1:8000 bun run test
+```
 
 ## Full Stack with Docker Compose
 

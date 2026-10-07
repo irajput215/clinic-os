@@ -9,8 +9,10 @@ import {
 import { ArrowLeft, ArrowRight, Menu, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import { approvalsQuery } from "@/data/approvals"
+import { useCanAdminister } from "@/data/permissions"
 import { resetPreview } from "@/data/preview/store"
 import { isActionable, scriptsQuery } from "@/data/scripts"
+import { useClinicSlug } from "@/data/tenant"
 import { formatLongDay } from "@/lib/format"
 import { currentUserQuery, displayName, signOut } from "@/lib/session"
 import { cn } from "@/lib/utils"
@@ -29,6 +31,8 @@ function useNavCounts(): Record<CountKey, number | undefined> {
 
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const counts = useNavCounts()
+  const canAdminister = useCanAdminister()
+  const clinicSlug = useClinicSlug()
   const { data: me } = useQuery(currentUserQuery)
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -52,8 +56,12 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           <span className="block font-serif text-[19px] leading-tight font-semibold tracking-[-0.01em]">
             Clinic OS
           </span>
-          <span className="block truncate text-xs text-stone">
-            Banksia Family Medical
+          {/* The line is always laid out, so the block does not shift when the slug arrives. */}
+          <span
+            className="block h-4 truncate text-xs text-stone"
+            data-testid="sidebar-clinic"
+          >
+            {clinicSlug}
           </span>
         </span>
       </Link>
@@ -66,6 +74,8 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             </div>
             <ul className="space-y-px">
               {items.map((item) => {
+                if (item.requiresAdmin && !canAdminister) return null
+                if (item.bookingPage && !clinicSlug) return null
                 const Icon = item.icon
                 const count = item.count ? counts[item.count] : undefined
                 const inner = (
@@ -100,11 +110,11 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                       </Link>
                     </li>
                   )
-                if (item.href)
+                if (item.bookingPage)
                   return (
                     <li key={item.label}>
                       <a
-                        href={item.href}
+                        href={`/book/${clinicSlug}`}
                         target="_blank"
                         rel="noopener"
                         className={cn(base, "text-ink hover:bg-fill")}
@@ -135,10 +145,15 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
       <div className="border-line border-t px-[18px] pt-3.5 pb-4 text-sm">
         {me ? (
-          <>
+          <Link
+            to="/settings"
+            onClick={onNavigate}
+            title="Your settings"
+            className="-mx-2 -my-1 block rounded-btn px-2 py-1 hover:bg-fill"
+          >
             <div className="truncate font-semibold">{displayName(me)}</div>
             <div className="truncate text-xs text-stone">{me.email}</div>
-          </>
+          </Link>
         ) : (
           <div className="h-9 animate-pulse rounded bg-fill" />
         )}
