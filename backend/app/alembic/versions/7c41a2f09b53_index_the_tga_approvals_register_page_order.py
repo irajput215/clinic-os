@@ -1,6 +1,6 @@
 """index the tga approvals register page order
 
-Revision ID: 39b9d178ede9
+Revision ID: 7c41a2f09b53
 Revises: 9a21387b450c
 Create Date: 2026-10-07 14:41:03.152037
 
@@ -17,7 +17,7 @@ non-superuser owner can apply it (HANDOFF section 4 trap 1).
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision = "39b9d178ede9"
+revision = "7c41a2f09b53"
 down_revision = "9a21387b450c"
 branch_labels = None
 depends_on = None
