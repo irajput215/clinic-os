@@ -456,6 +456,32 @@ function DetailsStep({
   )
 }
 
+/** The day strip and time grid's own shape while the times load, so nothing jumps when they arrive. */
+function SlotsPending() {
+  return (
+    <div role="status" aria-busy="true" aria-label="Loading times">
+      <div className="mt-5 flex gap-2 overflow-hidden pb-1">
+        {Array.from({ length: 6 }, (_, i) => (
+          <div
+            key={i}
+            className="h-[57px] w-[52px] shrink-0 animate-pulse rounded-inner bg-fill/70"
+            style={{ animationDelay: `${i * 80}ms` }}
+          />
+        ))}
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4">
+        {Array.from({ length: 8 }, (_, i) => (
+          <div
+            key={i}
+            className="h-[54px] animate-pulse rounded-btn bg-fill/70"
+            style={{ animationDelay: `${i * 60}ms` }}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function TimeStep({
   clinicSlug,
   visit,
@@ -530,13 +556,7 @@ function TimeStep({
           </button>
         </div>
       ) : slots.isPending ? (
-        <div
-          className="mt-6 flex justify-center text-stone"
-          role="status"
-          aria-label="Loading times"
-        >
-          <Loader2 className="animate-spin" />
-        </div>
+        <SlotsPending />
       ) : days.length === 0 ? (
         <p className="mt-5 rounded-btn bg-oat px-3 py-2.5 text-[13px] text-stone">
           No online times are free in the next two weeks for this visit. Please
