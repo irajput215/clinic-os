@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.build.json && vite build",
+    "check:budget": "node scripts/check-bundle-budget.mjs",
     "typecheck": "tsc -p tsconfig.build.json --noEmit",
     "lint": "biome check --write --unsafe --no-errors-on-unmatched --files-ignore-unknown=true ./",
     "lint:ci": "biome ci --no-errors-on-unmatched --files-ignore-unknown=true ./",

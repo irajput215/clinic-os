@@ -86,6 +86,12 @@ jobs:
         # a test environment with an ephemeral database, so it opts in.
         printf '\nUSERS_OPEN_REGISTRATION=true\n' >> .env
     - run: bash scripts/generate-client.sh
+    # The bundle budget (frontend/scripts/check-bundle-budget.mjs): entry JS, initial JS, the
+    # largest lazy chunk and the CSS, gzipped. The image builds the app again in its own stage;
+    # this build on the runner is only measured. Once per run, not once per shard.
+    - name: Check the bundle budget
+      if: ${{ matrix.shardIndex == 1 }}
+      run: bun run build && bun run check:budget
     - run: docker compose build
     - run: docker compose down -v --remove-orphans
     - run: docker compose run --rm backend bash scripts/prestart.sh
