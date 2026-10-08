@@ -43,6 +43,7 @@ import {
 } from "@/lib/format"
 import { describeError, refusalCode, validationMessages } from "@/lib/http"
 import { currentUserQuery } from "@/lib/session"
+import { uuid } from "@/lib/uuid"
 import { z } from "@/lib/zod"
 import type { ScriptAction } from "./ScriptCard"
 
@@ -495,12 +496,12 @@ export function ReviewSignDialog({
   const queryClient = useQueryClient()
   const [password, setPassword] = useState("")
   // One intent per opening of the dialog: a retry of the same click reuses it (server idempotency).
-  const [intent, setIntent] = useState(() => crypto.randomUUID())
+  const [intent, setIntent] = useState(() => uuid())
   const [forScript, setForScript] = useState(script?.id)
   if (script?.id !== forScript) {
     setForScript(script?.id)
     setPassword("")
-    setIntent(crypto.randomUUID())
+    setIntent(uuid())
   }
 
   const submit = useMutation({
