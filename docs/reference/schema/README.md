@@ -18,6 +18,7 @@
 | [public.prescriptions](public.prescriptions.md) | 21 |  | BASE TABLE |
 | [public.role_permissions](public.role_permissions.md) | 3 |  | BASE TABLE |
 | [public.roles](public.roles.md) | 7 |  | BASE TABLE |
+| [public.signup_requests](public.signup_requests.md) | 11 |  | BASE TABLE |
 | [public.staff_invitations](public.staff_invitations.md) | 8 |  | BASE TABLE |
 | [public.step_up_grants](public.step_up_grants.md) | 9 |  | BASE TABLE |
 | [public.tenants](public.tenants.md) | 8 |  | BASE TABLE |
@@ -492,6 +493,19 @@ erDiagram
   varchar name
   uuid tenant_id FK
   timestamp_with_time_zone updated_at
+}
+"public.signup_requests" {
+  varchar_255_ clinic_name
+  timestamp_with_time_zone created_at
+  varchar_255_ email
+  varchar_255_ email_key
+  timestamp_with_time_zone expires_at
+  varchar_255_ full_name
+  varchar hashed_password
+  uuid id
+  uuid link_id
+  integer send_count
+  timestamp_with_time_zone sent_at
 }
 "public.staff_invitations" {
   timestamp_with_time_zone accepted_at
