@@ -33,6 +33,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
 from app.core.db import tenant_transaction
+from app.core.reads import ReadBatch
 from app.modules.appointments.models import (
     APPOINTMENT_STATUSES,
     APPOINTMENT_TYPES,
@@ -265,9 +266,12 @@ def day_schedule(session: Session, *, tenant_id: uuid.UUID, day: date) -> DaySch
         .limit(MAX_DAY_SCHEDULE)
     ).all()
     reads = _reads(session, tenant_id=tenant_id, rows=rows)
-    names = users_roles.display_names(
-        tenant_id=tenant_id, user_ids=[read.practitioner_id for read in reads]
+    batch = ReadBatch()
+    practitioner_names = users_roles.queue_display_names(
+        batch, tenant_id=tenant_id, user_ids=[read.practitioner_id for read in reads]
     )
+    batch.send(session)
+    names = practitioner_names.value
     by_status = dict.fromkeys(APPOINTMENT_STATUSES, 0)
     for read in reads:
         by_status[read.status] += 1

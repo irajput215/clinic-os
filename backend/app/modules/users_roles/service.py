@@ -37,13 +37,16 @@ import uuid
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Final
+from typing import Any, Final
 
-from sqlalchemy import text
+from sqlalchemy import and_, text
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import aliased
+from sqlalchemy.orm.util import AliasedClass
 from sqlmodel import Session, col, func, select
 
 from app.core.db import driver_sql, engine, tenant_read, tenant_transaction
+from app.core.reads import Pending, ReadBatch
 from app.core.security import get_password_hash
 from app.models import User
 
@@ -102,7 +105,6 @@ __all__ = [
     "authorize_grant",
     "can",
     "can_grant",
-    "display_names",
     "effective_permissions",
     "enforce",
     "holders_of",
@@ -114,6 +116,7 @@ __all__ = [
     "provision_tenant",
     "provision_tenant_in_transaction",
     "provision_tenant_roles",
+    "queue_display_names",
     "read_user_roles",
     "record_invitation_denial",
     "resolve_permissions",
@@ -467,31 +470,56 @@ def list_roles(*, tenant_id: uuid.UUID) -> RolesPublic:
 
     The tenant is the one the session resolved, so the list is the organisation's seven system roles
     (plus any custom role of that tenant), not the roles the caller's own account holds. RLS scopes
-    the query as well, and the explicit `tenant_id` predicate keeps it scoped for the current owner
+    the query as well, and the explicit `tenant_id` predicates keep it scoped for the current owner
     connection.
+
+    One statement: every role joined to its grants and their catalogue entries, rather than one
+    query per role (each round trip costs the full app-to-database latency,
+    `docs/reference/performance.md`). A bundle lists its permissions in catalogue order.
     """
     with tenant_transaction(tenant_id=tenant_id) as session:
-        by_id, order = _permission_reads(session)
-        roles: Sequence[Role] = session.exec(
-            select(Role).where(Role.tenant_id == tenant_id).order_by(Role.code)
-        ).all()
-        data = [
-            RoleRead(
-                id=role.id,
-                code=role.code,
-                name=role.name,
-                is_system=role.is_system,
-                permissions=_role_bundle(
-                    session,
-                    tenant_id=tenant_id,
-                    role_id=role.id,
-                    by_id=by_id,
-                    order=order,
+        rows = session.exec(
+            select(Role, Permission)
+            .outerjoin(
+                RolePermission,
+                and_(
+                    col(RolePermission.role_id) == col(Role.id),
+                    col(RolePermission.tenant_id) == tenant_id,
                 ),
             )
-            for role in roles
-        ]
-        return RolesPublic(data=data, count=len(data))
+            .outerjoin(
+                Permission, col(Permission.id) == col(RolePermission.permission_id)
+            )
+            .where(col(Role.tenant_id) == tenant_id)
+            .order_by(col(Role.code), col(Role.id))
+        ).all()
+        roles: dict[uuid.UUID, RoleRead] = {}
+        for role, permission in rows:
+            read = roles.get(role.id)
+            if read is None:
+                read = roles[role.id] = RoleRead(
+                    id=role.id,
+                    code=role.code,
+                    name=role.name,
+                    is_system=role.is_system,
+                    permissions=[],
+                )
+            # A role with no grant joins to no permission (`OUTER JOIN`).
+            if permission is not None:
+                read.permissions.append(
+                    PermissionRead(
+                        code=permission.code, description=permission.description
+                    )
+                )
+    for read in roles.values():
+        read.permissions.sort(key=lambda entry: _catalogue_position(entry.code))
+    data = list(roles.values())
+    return RolesPublic(data=data, count=len(data))
+
+
+def _catalogue_position(code: str) -> tuple[int, str]:
+    """Where a permission sits in the catalogue's declared order; an unknown code sorts last."""
+    return _CATALOGUE_ORDER.get(code, len(_CATALOGUE_ORDER)), code
 
 
 def list_permissions(*, tenant_id: uuid.UUID) -> PermissionsPublic:
@@ -809,34 +837,13 @@ def revoke_role(
 # --------------------------------------------------------------------------------------------
 
 
-def _staff_roles(
-    session: Session, *, tenant_id: uuid.UUID, user_ids: Sequence[uuid.UUID]
-) -> dict[uuid.UUID, list[StaffRoleRead]]:
-    """The roles each of these accounts holds in this tenant, sorted by role name."""
-    if not user_ids:
-        return {}
-    roles: Sequence[Role] = session.exec(
-        select(Role).where(Role.tenant_id == tenant_id)
-    ).all()
-    role_by_id = {role.id: role for role in roles}
-    held: dict[uuid.UUID, list[StaffRoleRead]] = {user_id: [] for user_id in user_ids}
-    assignments: Sequence[UserRole] = session.exec(
-        select(UserRole).where(
-            UserRole.tenant_id == tenant_id,
-            col(UserRole.user_id).in_(user_ids),
-        )
-    ).all()
-    for assignment in assignments:
-        role = role_by_id.get(assignment.role_id)
-        if role is None:
-            # Unreachable under the composite foreign key and RLS; dropping the edge is fail-safe.
-            continue
-        held[assignment.user_id].append(
-            StaffRoleRead(role_id=role.id, code=role.code, name=role.name)
-        )
-    for entries in held.values():
-        entries.sort(key=lambda entry: (entry.name, entry.code))
-    return held
+def _staff_order(member: type[User] | AliasedClass[User]) -> tuple[Any, ...]:
+    """Staff are listed by name, then email, then id, so a page boundary is stable."""
+    return (
+        func.lower(func.coalesce(member.full_name, member.email)),
+        func.lower(member.email),
+        member.id,
+    )
 
 
 def _staff_member(user: User, roles: list[StaffRoleRead]) -> StaffMemberRead:
@@ -858,26 +865,61 @@ def list_staff(*, tenant_id: uuid.UUID, skip: int, limit: int) -> StaffPublic:
     the accounts, exactly as in `_tenant_user`; the role and assignment reads run under forced RLS as
     well. Ordered by name, then email, then id, so a page boundary is stable. `count` is the
     organisation's total, which `skip`/`limit` do not change.
+
+    One statement: the page of accounts (with the organisation's total as a window count, taken
+    before `OFFSET`/`LIMIT`) joined to the roles each holds. Only a page past the end, which has no
+    row to carry the total, counts separately.
     """
     with tenant_transaction(tenant_id=tenant_id) as session:
-        scope = User.tenant_id == tenant_id
-        count = session.exec(select(func.count()).select_from(User).where(scope)).one()
-        users: Sequence[User] = session.exec(
-            select(User)
+        scope = col(User.tenant_id) == tenant_id
+        page = (
+            select(User, func.count().over().label("total"))
             .where(scope)
-            .order_by(
-                func.lower(func.coalesce(col(User.full_name), col(User.email))),
-                func.lower(col(User.email)),
-                col(User.id),
-            )
+            .order_by(*_staff_order(User))
             .offset(skip)
             .limit(limit)
-        ).all()
-        held = _staff_roles(
-            session, tenant_id=tenant_id, user_ids=[user.id for user in users]
+            .subquery()
         )
+        member = aliased(User, page)
+        rows = session.exec(
+            select(member, page.c.total, Role)
+            .outerjoin(
+                UserRole,
+                and_(
+                    col(UserRole.user_id) == member.id,
+                    col(UserRole.tenant_id) == tenant_id,
+                ),
+            )
+            .outerjoin(
+                Role,
+                and_(
+                    col(Role.id) == col(UserRole.role_id),
+                    col(Role.tenant_id) == tenant_id,
+                ),
+            )
+            .order_by(*_staff_order(member))
+        ).all()
+        users: dict[uuid.UUID, User] = {}
+        held: dict[uuid.UUID, list[StaffRoleRead]] = {}
+        count = 0
+        for user, total, role in rows:
+            count = total
+            users.setdefault(user.id, user)
+            roles = held.setdefault(user.id, [])
+            # An account with no role joins to none (`OUTER JOIN`).
+            if role is not None:
+                roles.append(
+                    StaffRoleRead(role_id=role.id, code=role.code, name=role.name)
+                )
+        if not rows and skip > 0:
+            count = session.exec(
+                select(func.count()).select_from(User).where(scope)
+            ).one()
+        for roles in held.values():
+            roles.sort(key=lambda entry: (entry.name, entry.code))
         return StaffPublic(
-            data=[_staff_member(user, held[user.id]) for user in users], count=count
+            data=[_staff_member(user, held[user.id]) for user in users.values()],
+            count=count,
         )
 
 
@@ -901,48 +943,43 @@ def active_staff_holding(
     roster) can decide on the same snapshot it writes under. The account table has no RLS (T1-03), so
     the explicit `tenant_id` predicate is the isolation control for it, exactly as in `list_staff`;
     the role and assignment reads run under forced RLS as well. Ordered by name, then email, then id.
+    One statement: the accounts joined to the wanted roles they hold.
     """
-    wanted = frozenset(role_codes)
-    roles: Sequence[Role] = session.exec(
-        select(Role).where(Role.tenant_id == tenant_id, col(Role.code).in_(wanted))
-    ).all()
-    if not roles:
+    wanted = sorted(set(role_codes))
+    if not wanted:
         return []
-    role_by_id = {role.id: role for role in roles}
-    assignments: Sequence[UserRole] = session.exec(
-        select(UserRole).where(
-            UserRole.tenant_id == tenant_id,
-            col(UserRole.role_id).in_(list(role_by_id)),
+    rows = session.exec(
+        select(User, Role)
+        .join(
+            UserRole,
+            and_(
+                col(UserRole.user_id) == col(User.id),
+                col(UserRole.tenant_id) == tenant_id,
+            ),
         )
-    ).all()
-    held: dict[uuid.UUID, dict[str, str]] = {}
-    for assignment in assignments:
-        role = role_by_id[assignment.role_id]
-        held.setdefault(assignment.user_id, {})[role.code] = role.name
-    if not held:
-        return []
-    users: Sequence[User] = session.exec(
-        select(User)
+        .join(
+            Role,
+            and_(
+                col(Role.id) == col(UserRole.role_id),
+                col(Role.tenant_id) == tenant_id,
+            ),
+        )
         .where(
-            User.tenant_id == tenant_id,
+            col(User.tenant_id) == tenant_id,
             col(User.is_active).is_(True),
-            col(User.id).in_(list(held)),
+            col(Role.code).in_(wanted),
         )
-        .order_by(
-            func.lower(func.coalesce(col(User.full_name), col(User.email))),
-            func.lower(col(User.email)),
-            col(User.id),
-        )
+        .order_by(*_staff_order(User), col(Role.code))
     ).all()
-    return [
-        StaffHoldingRoles(
-            user_id=user.id,
-            full_name=user.full_name,
-            email=user.email,
-            roles=held[user.id],
-        )
-        for user in users
-    ]
+    members: dict[uuid.UUID, StaffHoldingRoles] = {}
+    for user, role in rows:
+        member = members.get(user.id)
+        if member is None:
+            member = members[user.id] = StaffHoldingRoles(
+                user_id=user.id, full_name=user.full_name, email=user.email, roles={}
+            )
+        member.roles[role.code] = role.name
+    return list(members.values())
 
 
 class InvitationOutcome(StrEnum):
@@ -1218,52 +1255,55 @@ def holders_of(*, tenant_id: uuid.UUID, permission: str) -> dict[uuid.UUID, str]
 
     The legacy `user` table carries no RLS (T1-03, blocked by D-003), so the explicit `tenant_id`
     predicate is the isolation control for the accounts, as in `list_staff`; the RBAC reads run under
-    forced RLS as well. An unknown permission code is held by nobody.
+    forced RLS as well. An unknown permission code is held by nobody. One statement: the accounts
+    joined through their grants to the permission.
     """
     with tenant_transaction(tenant_id=tenant_id) as session:
-        granting_role_ids = set(
-            session.exec(
-                select(RolePermission.role_id)
-                .join(
-                    Permission, col(Permission.id) == col(RolePermission.permission_id)
-                )
-                .where(
-                    RolePermission.tenant_id == tenant_id,
-                    Permission.code == permission,
-                )
-            ).all()
-        )
-        if not granting_role_ids:
-            return {}
-        holder_ids = set(
-            session.exec(
-                select(UserRole.user_id).where(
-                    UserRole.tenant_id == tenant_id,
-                    col(UserRole.role_id).in_(granting_role_ids),
-                )
-            ).all()
-        )
-        if not holder_ids:
-            return {}
         users: Sequence[User] = session.exec(
-            select(User).where(
-                User.tenant_id == tenant_id,
+            select(User)
+            .distinct()
+            .join(
+                UserRole,
+                and_(
+                    col(UserRole.user_id) == col(User.id),
+                    col(UserRole.tenant_id) == tenant_id,
+                ),
+            )
+            .join(
+                RolePermission,
+                and_(
+                    col(RolePermission.role_id) == col(UserRole.role_id),
+                    col(RolePermission.tenant_id) == tenant_id,
+                ),
+            )
+            .join(Permission, col(Permission.id) == col(RolePermission.permission_id))
+            .where(
+                col(User.tenant_id) == tenant_id,
                 col(User.is_active).is_(True),
-                col(User.id).in_(holder_ids),
+                col(Permission.code) == permission,
             )
         ).all()
         return {user.id: _display_name(user) for user in users}
 
 
-def display_names(
-    *, tenant_id: uuid.UUID, user_ids: Iterable[uuid.UUID]
-) -> dict[uuid.UUID, str]:
-    """Display names for accounts of **this** organisation; another tenant's id is simply absent."""
-    wanted = set(user_ids)
+def queue_display_names(
+    batch: ReadBatch, *, tenant_id: uuid.UUID, user_ids: Iterable[uuid.UUID]
+) -> Pending[dict[uuid.UUID, str]]:
+    """Display names for accounts of **this** organisation; another tenant's id is simply absent.
+
+    Queued on the caller's batch, so the names travel with the caller's other reads, on its
+    transaction (`app.core.reads`). No ids, no statement.
+    """
+    wanted = sorted(set(user_ids))
     if not wanted:
-        return {}
-    with tenant_transaction(tenant_id=tenant_id) as session:
-        users: Sequence[User] = session.exec(
-            select(User).where(User.tenant_id == tenant_id, col(User.id).in_(wanted))
-        ).all()
-        return {user.id: _display_name(user) for user in users}
+        return Pending.ready({})
+    rows = batch.rows(
+        select(col(User.id), col(User.full_name), col(User.email)).where(
+            col(User.tenant_id) == tenant_id, col(User.id).in_(wanted)
+        )
+    )
+    return rows.then(
+        lambda found: {
+            user_id: full_name or email for user_id, full_name, email in found
+        }
+    )

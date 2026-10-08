@@ -40,6 +40,7 @@ from sqlmodel import Session, col, select
 
 from app.core.config import settings
 from app.core.db import tenant_transaction
+from app.core.reads import ReadBatch
 from app.modules.audit import service as audit
 from app.modules.identity_tenancy import service as identity
 from app.modules.patients import service as patients_service
@@ -259,10 +260,14 @@ def _reads(
     patient_names = patients_service.display_names(
         session, tenant_id=tenant_id, patient_ids=[row.patient_id for row in rows]
     )
-    people = users_roles.display_names(
+    batch = ReadBatch()
+    people_names = users_roles.queue_display_names(
+        batch,
         tenant_id=tenant_id,
         user_ids=[row.prescriber_id for row in rows] + [row.drafted_by for row in rows],
     )
+    batch.send(session)
+    people = people_names.value
     attempts = _latest_attempts(
         session, tenant_id=tenant_id, prescription_ids=[row.id for row in rows]
     )
