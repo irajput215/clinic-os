@@ -114,6 +114,24 @@ runner in North America in about 120 ms including a fresh TLS handshake, which p
 in North America too. **The app and the database are not co-located**: the database is in Sydney
 and the app is not.
 
+### The database itself (Neon, read-only inspection, 2026-10-08)
+
+- **Size**: every user table together is 1.8 MB; the largest index is 16 kB. Query execution is not
+  where the time goes: a statement runs in well under a millisecond, the round trip around it costs
+  ~216 ms.
+- **Buffer cache hit ratio** (`pg_statio_user_tables`): 95.9% for tables, 90.0% for indexes, on a
+  compute that suspends after five idle minutes and restarts cold.
+- **Sequential scans** dominate (`user` 377, `permissions` 169, `role_permissions` 157): at this size
+  the planner prefers them and is right to. The indexes reported "unused" (patient name keys, audit
+  partitions) are unused because there is almost no data yet, not because they are wrong; none is
+  dropped.
+- **Slow-query statistics are not available**: `pg_stat_statements` and the `neon` extension are not
+  installed on `neondb`. Installing them writes to the production database, so it is listed as an
+  owner action (section 5) rather than done here.
+- Query plans for the hot reads were checked against the local seeded database instead: each hot
+  read is now one or two statements per flight, all on indexed tenant keys
+  (`tests/performance/test_round_trips.py` pins the counts).
+
 ## 3. Hypotheses
 
 | # | Hypothesis | How it was tested | Verdict |
@@ -203,7 +221,10 @@ hot endpoint in `tests/performance/test_round_trips.py`.
    `PROBE_EMAIL` and `PROBE_PASSWORD` (a new address and a strong password); Measure Production then
    registers one clinic named "Performance probe (synthetic, no patients)" on first use and times the
    authenticated reads after every deploy.
-4. **`DATABASE_URL` host**: no change needed. The direct (non-pooler) host is fine: warm requests reuse
+4. **Query statistics** (optional): enable `pg_stat_statements` on `neondb` from the Neon console SQL
+   editor (`CREATE EXTENSION IF NOT EXISTS pg_stat_statements;`) so slow-query statistics exist when
+   real traffic arrives. It writes to the production database, so it was not done from here.
+5. **`DATABASE_URL` host**: no change needed. The direct (non-pooler) host is fine: warm requests reuse
    pooled connections, and transaction-scoped context works on either host. If the owner switches to
    the pooled host for connection limits, the value shape is
    `postgresql://<role>:<password>@ep-blue-truth-a7e0s0il-pooler.ap-southeast-2.aws.neon.tech/<db>?sslmode=require`;
