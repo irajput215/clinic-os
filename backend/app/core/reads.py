@@ -11,8 +11,9 @@ Three pieces:
 
 - `ReadBatch` queues reads and sends them in one flight. Each queued read hands back a `Pending`
   whose `value` exists once the batch was sent. Rows are decoded with the statement's own column
-  types (the result processing SQLAlchemy itself applies), and a `select(Model)` comes back as
-  `Model` instances, detached, exactly like rows loaded by a session that has since closed.
+  types (the result processing SQLAlchemy itself applies) and shaped the way `session.exec` shapes
+  them: tuples for several columns, values for one, and `Model` instances for `select(Model)`,
+  detached, exactly like rows loaded by a session that has since closed.
 - A `Plan` is a generator that yields one `ReadBatch` per step and returns its result. It reads like
   sequential code: queue the reads, `yield` the batch, use the values, queue the next step.
 - `Lockstep` advances several plans together, so the n-th step of every plan shares one flight. This
@@ -27,9 +28,10 @@ session's pending changes exactly as an autoflushing query would.
 from collections.abc import Callable, Generator, Sequence
 from typing import Any, Final, cast
 
-from sqlalchemy import Select, inspect
+from sqlalchemy import inspect
 from sqlalchemy.orm import Mapper, make_transient_to_detached
 from sqlmodel import Session
+from sqlmodel.sql.expression import Select, SelectOfScalar
 
 from app.core.db import driver_statement, engine, run_pipelined_described
 
@@ -69,7 +71,9 @@ class Pending[T]:
         return Pending(lambda: transform(self.value))
 
 
-def _row_decoder(statement: Select[Any]) -> Callable[[list[int], _Rows], _Rows]:
+def _row_decoder(
+    statement: Select[Any] | SelectOfScalar[Any],
+) -> Callable[[list[int], _Rows], _Rows]:
     """Decode raw driver rows with each selected column's own type, as SQLAlchemy's result does."""
     dialect = engine.dialect
     types = [column.type.dialect_impl(dialect) for column in statement.selected_columns]
@@ -98,7 +102,9 @@ class ReadBatch:
         self._decoders: list[_Decoder] = []
         self._results: list[Any] | None = None
 
-    def _queue(self, statement: Select[Any], decode: _Decoder) -> Callable[[], Any]:
+    def _queue(
+        self, statement: Select[Any] | SelectOfScalar[Any], decode: _Decoder
+    ) -> Callable[[], Any]:
         index = len(self._statements)
         self._statements.append(driver_statement(statement))
         self._decoders.append(decode)
@@ -111,24 +117,31 @@ class ReadBatch:
         return result
 
     def rows[TP: tuple[Any, ...]](self, statement: Select[TP]) -> Pending[list[TP]]:
-        """Queue a select of columns; its rows come back as tuples, decoded by type."""
+        """Queue a select of several columns; its rows come back as tuples, decoded by type."""
         return Pending(self._queue(statement, _row_decoder(statement)))
 
-    def entities[M](self, statement: Select[tuple[M]]) -> Pending[list[M]]:
-        """Queue a `select(Model)`; its rows come back as detached `Model` instances."""
+    def scalars[T](self, statement: SelectOfScalar[T]) -> Pending[list[T]]:
+        """Queue a select of one column or one mapped class, read as `session.exec` reads it.
+
+        A column comes back as its decoded values; `select(Model)` comes back as detached `Model`
+        instances, the way a session that has since closed leaves the rows it loaded.
+        """
+        decode_rows = _row_decoder(statement)
         [description] = statement.column_descriptions
-        mapper = inspect(description["entity"])
-        if not isinstance(
-            mapper, Mapper
-        ):  # pragma: no cover - a misuse, found in development
-            raise TypeError("entities() reads a select of exactly one mapped class")
+        mapper = inspect(description["expr"], raiseerr=False)
+        if not isinstance(mapper, Mapper):
+
+            def decode_values(type_codes: list[int], rows: _Rows) -> list[Any]:
+                return [value for (value,) in decode_rows(type_codes, rows)]
+
+            return Pending(self._queue(statement, decode_values))
+
         keys = [
             mapper.get_property_by_column(column).key
             for column in statement.selected_columns
         ]
-        decode_rows = _row_decoder(statement)
 
-        def decode(type_codes: list[int], rows: _Rows) -> list[Any]:
+        def decode_instances(type_codes: list[int], rows: _Rows) -> list[Any]:
             instances = []
             for row in decode_rows(type_codes, rows):
                 instance = mapper.class_(**dict(zip(keys, row, strict=True)))
@@ -136,7 +149,7 @@ class ReadBatch:
                 instances.append(instance)
             return instances
 
-        return Pending(self._queue(statement, decode))
+        return Pending(self._queue(statement, decode_instances))
 
     def send(self, session: Session) -> None:
         """Send every queued read in one flight. An empty batch costs nothing."""

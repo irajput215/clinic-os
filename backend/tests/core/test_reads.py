@@ -60,7 +60,7 @@ def test_rows_are_decoded_as_a_session_decodes_them() -> None:
     assert row[1].lower == date(2026, 1, 1)
 
 
-def test_entities_are_the_rows_a_session_loads(
+def test_a_mapped_class_comes_back_as_the_instances_a_session_loads(
     two_tenants: dict[str, uuid.UUID],
 ) -> None:
     tenant_id = two_tenants["a"]
@@ -72,7 +72,7 @@ def test_entities_are_the_rows_a_session_loads(
             select(Clinic).where(col(Clinic.id).in_(ids)).order_by(col(Clinic.name))
         )
         batch = ReadBatch()
-        batched = batch.entities(statement)
+        batched = batch.scalars(statement)
         batch.send(session)
         loaded = [clinic.model_dump() for clinic in session.exec(statement).all()]
 
@@ -91,12 +91,12 @@ def test_batched_reads_run_under_the_transactions_tenant_context(
     with tenant_transaction(tenant_id=two_tenants["b"]) as session:
         session.connection().execute(AS_APP_ROLE)
         batch = ReadBatch()
-        names = batch.rows(select(Clinic.name).order_by(col(Clinic.name)))
-        setting = batch.rows(select(func.current_setting("app.tenant_id", True)))
+        names = batch.scalars(select(Clinic.name).order_by(col(Clinic.name)))
+        setting = batch.scalars(select(func.current_setting("app.tenant_id", True)))
         batch.send(session)
 
-    assert names.value == [("Beta Reads Site",)]
-    assert setting.value == [(str(two_tenants["b"]),)]
+    assert names.value == ["Beta Reads Site"]
+    assert setting.value == [str(two_tenants["b"])]
 
 
 def test_a_batch_is_one_round_trip_and_an_empty_one_is_none() -> None:
@@ -106,7 +106,7 @@ def test_a_batch_is_one_round_trip_and_an_empty_one_is_none() -> None:
         try:
             batch = ReadBatch()
             for value in range(5):
-                batch.rows(select(literal(value)))
+                batch.scalars(select(literal(value)))
             batch.send(session)
             ReadBatch().send(session)
         finally:
@@ -117,13 +117,13 @@ def test_a_batch_is_one_round_trip_and_an_empty_one_is_none() -> None:
 
 def _two_step_plan(label: str, log: list[str]) -> Plan[tuple[str, int]]:
     first = ReadBatch()
-    word = first.rows(select(literal(label)))
+    word = first.scalars(select(literal(label)))
     yield first
     log.append(f"{label}: first step read")
     second = ReadBatch()
-    length = second.rows(select(func.length(literal(word.value[0][0]))))
+    length = second.scalars(select(func.length(literal(word.value[0]))))
     yield second
-    return word.value[0][0], length.value[0][0]
+    return word.value[0], length.value[0]
 
 
 def _no_step_plan() -> Plan[str]:
@@ -161,7 +161,7 @@ def test_run_plan_runs_one_plan_to_its_end() -> None:
 
 def test_a_value_read_before_its_batch_was_sent_raises() -> None:
     batch = ReadBatch()
-    pending = batch.rows(select(literal(1)))
+    pending = batch.scalars(select(literal(1)))
     with pytest.raises(Unsent):
         _ = pending.value
     lockstep = Lockstep()
@@ -173,7 +173,7 @@ def test_a_value_read_before_its_batch_was_sent_raises() -> None:
 def test_a_batch_is_sent_once() -> None:
     with tenant_transaction(tenant_id=uuid.uuid4()) as session:
         batch = ReadBatch()
-        batch.rows(select(literal(1)))
+        batch.scalars(select(literal(1)))
         batch.send(session)
         with pytest.raises(RuntimeError):
             batch.send(session)
