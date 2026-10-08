@@ -150,7 +150,7 @@ was rebuilt around round trips:
 | Change | Where | Round trips saved |
 |---|---|---|
 | No `pool_pre_ping`; a checkout discards a connection the server closed by checking its socket (no network) | `app/core/db.py` `_refuse_dead_connection` | 1 per checkout |
-| `pool_recycle` 240 s (inside Neon's 5-minute suspend), TCP keepalives, two connections warmed at start-up | `app/core/db.py`, `app/main.py` | the connect (~6) on the first requests after a deploy |
+| TCP keepalives; the whole pool (five connections) opened together at start-up; `pool_recycle` one hour, as a backstop only (the socket check catches closed connections at any age) | `app/core/db.py`, `app/main.py` | the connect (~6, 1.2 s) on the first requests after a deploy, on the first burst of concurrent requests, and every few minutes per connection that a short recycle would have cost |
 | The session prelude (account, organisation status, tenant context resolved by the database from the account row, grants, `COMMIT`) is one pipelined flight | `app/api/deps.py` `get_session_account` | from 3 (auth) + 11 (actor) to 1 |
 | `tenant_transaction` sends `BEGIN` and one `set_config` statement for tenant, actor and request in the same flight as the transaction's first statement | `app/core/db.py` `_DeferredContext` | from 4 to 0 per tenant transaction |
 | The audit chain's lock and head read travel in one flight (still two statements, so the head is read after the lock is held) | `app/modules/audit/service.py` `record` | 2 per audited event |
