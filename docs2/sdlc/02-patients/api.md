@@ -7,8 +7,11 @@ Status: **Agreed 2026-10-07 (owner)**, as amended below to follow `docs/features
 | `GET` | `/api/v1/patients?limit=1..25&cursor=` | `backend/app/modules/patients/router.py` | Keyset page `{data, count, next_cursor}`. Any other query parameter is `422 UNSUPPORTED_QUERY_PARAMETER` |
 | `POST` | `/api/v1/patients/search` | same | Body `{q, cursor?, limit?}`; same response shape. Rate limited 120/min per session |
 | `POST` | `/api/v1/patients` | same | `PatientCreate`; `201` gives `PatientRead` |
-| `GET` | `/api/v1/patients/{patient_id}` | same | `404` when absent or another tenant's |
-| `PATCH` | `/api/v1/patients/{patient_id}` | same | `PatientUpdate`, unknown fields rejected |
+| `GET` | `/api/v1/patients/{patient_id}` | same | `404` when absent or another tenant's; `403 AUTHZ_CARE_RELATIONSHIP_DENIED` for a relationship-bound reader without a care relationship (T1-34). Audited. Rate limited 300/min |
+| `PATCH` | `/api/v1/patients/{patient_id}` | same | `PatientUpdate`, unknown fields rejected; the same relationship rule |
+| `GET` | `/api/v1/patients/{patient_id}/care-relationships` | `backend/app/modules/care_relationships/router.py` | The care team: `{data: CareTeamMember[], count}` (T1-34, D-007) |
+| `POST` | `/api/v1/patients/{patient_id}/care-relationships` | same | `{practitioner_id}`; `201` gives the team. `409 ALREADY_IN_CARE_TEAM`, `422 PRACTITIONER_NOT_FOUND` |
+| `POST` | `/api/v1/patients/{patient_id}/care-relationships/{care_relationship_id}/end` | same | Ends it now; `404 RELATIONSHIP_NOT_FOUND` when not active |
 
 ## The agreed search and paging contract
 
@@ -45,3 +48,43 @@ The term is never logged.
 
 **Index.** `(tenant_id, lower(<name>) text_pattern_ops)` on the three name columns, migration
 `b9fa64996260`; the EXPLAIN evidence is in its docstring.
+
+## The treating-relationship rule (T1-34, agreed 2026-10-08; decision D-007)
+
+`docs/features/05-patients` R7 and `06-clinical-records` R11, as built:
+
+- **Who it binds.** The matrix's `cr` grants: a `DOCTOR`'s or `NURSE`'s `patient:read`,
+  `patient:update`, `clinical_record:read` and `clinical_record:write`. An account that holds the code
+  through any other role (owner, authorised prescriber, administrator) is not bound. `GET
+  /users/me/permissions` adds `relationship_bound: string[]` (advisory) so the screen can explain.
+- **Where.** `GET`/`PATCH /patients/{id}`, every clinical-record route, a patient's appointments,
+  scripts (`GET /prescriptions?patient_id=`) and TGA approvals, and staging a script. Across a tenant
+  boundary the answer stays `404`; inside the tenant without a relationship it is
+  `403 {code: "AUTHZ_CARE_RELATIONSHIP_DENIED"}`. The relationship is resolved in the route's first
+  statement (no extra round trip), under the request's RLS policy.
+- **Lists.** For a bound reader, `GET /patients` and `POST /patients/search` return only the patients
+  they have an active relationship with, and `count` counts only those.
+- **Audit.** A direct read writes `patient.read` `SUCCESS` with `care_relationship_id` (when one
+  authorised it) and `purpose` (`TREATMENT` when a relationship authorised the read,
+  `PRACTICE_ADMINISTRATION` when an unconditional grant did; server-derived, never sent by the client).
+  Lists and searches add `purpose` too. Every refusal - not found, permission, relationship - is
+  `DENIED` with its reason.
+
+## Care team (T1-34, interim source of truth; decision D-007)
+
+Who maintains `care_relationships` is OPEN (open-questions C13). Until it is decided, a relationship
+exists only because somebody recorded it on the patient's **Care team** card: an account whose own
+`patient:update` is not relationship-bound (owner, authorised prescriber, administrator); everybody
+else is `403 PERMISSION_NOT_HELD`. The practitioner must be an active doctor, authorised prescriber or
+nurse of the practice. Nothing creates a relationship implicitly (not a booking, not a consult note).
+
+| Shape | Fields |
+|---|---|
+| `CareRelationshipCreate` | `practitioner_id` (unknown fields `422`) |
+| `CareTeamMember` | `id`, `practitioner_id`, `practitioner_name` (`null` for a former staff member), `active_from`, `source` |
+| `CareTeamPublic` | `data`, `count` |
+
+Audited on the same transaction: `care_relationship.create` (`care_relationship_id`, `target_user_id`,
+`source`) and `care_relationship.end` (`care_relationship_id`, `target_user_id`); the list writes
+`patient.read` with `query_filters: ["care_team"]`. Writes are rate limited 20/min per session (the
+administrative class). An ended relationship keeps its row (`active_to`); there is no delete.

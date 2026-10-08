@@ -69,16 +69,16 @@ This list is closed:
 | Resource type | Actions |
 | --- | --- |
 | `SESSION` | `auth.login`, `auth.logout`, `auth.login_failed`, `auth.step_up`, `auth.step_up_failed` |
-| `PATIENT` | `patient.read`, `patient.create`, `patient.update`, `patient.export` |
+| `PATIENT` | `patient.read`, `patient.create`, `patient.update`, `patient.export`, `care_relationship.create`, `care_relationship.end` |
 | `CLINICAL_RECORD` | `clinical_record.read`, `clinical_record.write` |
-| `PRESCRIPTION` | `prescription.create`, `prescription.modify`, `prescription.sign`, `prescription.dispatch`, `prescription.dispatch_blocked`, `prescription.reject`, `prescription.dispatch_failed` |
+| `PRESCRIPTION` | `prescription.create`, `prescription.read`, `prescription.modify`, `prescription.sign`, `prescription.dispatch`, `prescription.dispatch_blocked`, `prescription.reject`, `prescription.dispatch_failed` |
 | `TGA_APPROVAL` | `tga_approval.create`, `tga_approval.modify`, `tga_approval.state_change`, `tga_approval.match`, `tga_approval.verify`, `tga_approval.read` |
 | `TGA_DOCUMENT` | `tga_document.ingest`, `tga_document.extract` |
 | `USER` | `user.permission_change`, `user.create`, `user.deactivate` |
 | `TENANT` | `tenant.security_config_change` |
 | `INTEGRATION` | `integration.request` |
 | `AUDIT` | `audit.read` |
-| `APPOINTMENT` | `appointment.create`, `appointment.state_change` |
+| `APPOINTMENT` | `appointment.create`, `appointment.state_change`, `appointment.read` |
 
 **No new action name may be invented.** A new action must be registered in doc 07 §1 first, by a change
 to the source contract, before any code emits it.
@@ -96,6 +96,16 @@ coverage test asserts the list.
 module (`docs2/sdlc/04-calendar-and-booking/api.md`): `appointment.create` carries `patient_id` and
 `source` (`STAFF` or `PUBLIC_BOOKING`), `appointment.state_change` carries `from_state` and
 `to_state` (status codes). No time, name or contact detail is ever in either payload.
+
+Four actions were registered on 2026-10-08 with task T1-34 (decision D-007), each listed under
+"Controls changed" in its PR: `prescription.read` (`11-prescribing/02-user-stories.md`: "`prescription.read`-class
+access recorded per patient, not per row") and `appointment.read` (the booking reads
+`docs2/sdlc/04-calendar-and-booking/api.md` deferred "with `patient.read` (T1-34)") carry `patient_id`,
+`care_relationship_id` and `purpose` on a patient-level read, `query_filters` (kinds only) and
+`result_count` on a practice-wide one; `care_relationship.create` (`care_relationship_id`,
+`target_user_id`, `source`) and `care_relationship.end` (`care_relationship_id`, `target_user_id`)
+record the interim care-team upkeep, with the patient as the resource. `tga_approval.read` gained
+`care_relationship_id` and `purpose` for a patient-level read.
 
 Events beyond the envelope carry the mandatory per-action fields from doc 07 §1 — for example
 `prescription.dispatch_blocked` carries `block_reason` and `approval_id`, and `audit.read` carries

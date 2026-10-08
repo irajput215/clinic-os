@@ -320,13 +320,25 @@ reference; the file name is the repo-side artefact.
   - Evidence: test output including the negative (no second chart) case
   - Blocked by: none for the union rule; the refusal threshold is **OPEN** (Head of Product)
 
-- [ ] **T1-34 — Treating-relationship rule and the care-relationship source**
+- [x] **T1-34 — Treating-relationship rule and the care-relationship source**
   - Acceptance: a clinician with no active care relationship receives `403` with the care-relationship reason class and an audited denial; an accepted read records the relationship id and the purpose; the rule runs under the same RLS policy as the request and never widens to the tenant.
   - Verify: `uv run pytest tests/api/test_patients_relationship.py -v`
   - Files: `backend/app/core/policy.py`; `backend/app/modules/patients/service.py`; `backend/tests/api/test_patients_relationship.py`
   - Controls: 2 Authorisation · 3 Tenant isolation · 6 Audit logging
   - Evidence: test output; the `care_relationships` table specification
   - Blocked by: **care-relationships** — the table is not defined in the source schema contract
+  - Done 2026-10-08 (branch `m4/care-relationship-rule`): the rule binds the matrix's `cr` grants
+    (`users_roles/catalog.py`, `policy.py`) and runs in the statement that loads the row on the patient,
+    clinical-record, appointment, prescription and TGA-approval patient routes; every read is audited
+    with `care_relationship_id` and a server-derived `purpose`, every refusal `DENIED`. Evidence:
+    `uv run pytest tests/api/test_patients_relationship.py -v` (deny paths, audit fields, `404`
+    across tenants, a relationship filed under another tenant authorises nothing, successes),
+    `tests/prescriptions/test_care_relationship.py`, `tests/clinical_records/test_authorisation.py`,
+    `frontend/tests/care-team.spec.ts`. The source of truth stays OPEN (C13): the interim, explicit
+    care-team upkeep, the purpose vocabulary and the roles bound are decision
+    [D-007](../reference/decisions/D-007-treating-relationship-rule.md). Contract:
+    `docs2/sdlc/02-patients/api.md`. The file named above as `backend/app/core/policy.py` is
+    `backend/app/modules/users_roles/policy.py` (the central policy layer's actual home).
 
 - [ ] **T1-35 — Cursor pagination, closed sort map and search filters**
   - Acceptance: every list is cursor-based; the cursor is opaque and signed and cannot be replayed across tenants; `limit` is capped at the server maximum; sort columns come from a closed mapping; `LIKE` wildcards are escaped before binding; the result cap is 25 on the patient list.

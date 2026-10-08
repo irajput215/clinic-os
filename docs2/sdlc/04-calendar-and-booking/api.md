@@ -49,6 +49,11 @@ errors with `detail.code`. A `tenant_id` in a body or query string is ignored an
   through its service facade.
 - **Audit catalogue** (`docs/features/04-audit-log/05-data-and-audit.md`): resource type `APPOINTMENT`,
   actions `appointment.create` (`patient_id`, `source`) and `appointment.state_change`
-  (`from_state`, `to_state`). Reads are not audited, deferred with `patient.read` (T1-34).
+  (`from_state`, `to_state`). Reads are audited since T1-34 as `appointment.read`
+  (registered 2026-10-08): the calendar with `query_filters` (`range`, `practitioner`) and
+  `result_count`; a patient's bookings (`GET /patients/{id}/appointments`) with `patient_id`,
+  `care_relationship_id` and `purpose`, under the treating-relationship rule (`403
+  AUTHZ_CARE_RELATIONSHIP_DENIED` for a doctor or nurse off the patient's care team, `404` across
+  tenants, both audited `DENIED`).
 - **Deferred:** CAPTCHA (a new third-party data flow, needs its own decision); confirmations by SMS or
   email (out of scope in requirements); rate limits are in-process (`app/core/rate_limit.py` notes).

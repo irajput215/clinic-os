@@ -102,6 +102,8 @@ patient_id)` in the central policy layer (`06` §10) reads `care_relationships(t
 patient_id, clinic_id, active_from, active_to, source)` under the same RLS policy; it is never inferred
 from clinic membership and never widened to the tenant. Denial is `403 AUTHZ_CARE_RELATIONSHIP_DENIED`;
 a tenant mismatch is decided first and returns `404`. `care_relationships` has no ERD table (OPEN-3).
+Built with T1-34 (2026-10-08) on every route of this feature; the interim source of truth and the
+purpose vocabulary are decision [D-007](../../reference/decisions/D-007-treating-relationship-rule.md).
 
 ## Endpoints
 

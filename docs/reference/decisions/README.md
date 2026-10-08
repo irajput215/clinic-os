@@ -26,6 +26,7 @@ that is a defect.
 | [D-004](D-004-deployment-target.md) | Deployment target is unresolved between compose and the source's AWS shape | **OPEN — requires a decision** | **Yes — Gate 6** |
 | [D-005](D-005-route-path-convention.md) | Routes carry the `/api/v1` prefix; provider webhooks are the one exception | **Accepted** | No |
 | [D-006](D-006-approval-grain-and-validity-boundary.md) | Approval grain enforced by a partial GiST exclusion constraint; `valid_to` boundary is half-open **as an interim fail-safe** | **Accepted** for the mechanism · 🔴 **OPEN** for the boundary | **Gate 2** (mechanism) · **Gate 4 re-run** (boundary) |
+| [D-007](D-007-treating-relationship-rule.md) | The treating-relationship rule: the matrix's `cr` grants are bound; relationships are recorded explicitly by an unbound role (interim source); purpose is server-derived | **Accepted** for the mechanism · 🔴 **OPEN** for the source, the purpose vocabulary and the roles bound | No - fail-safe interim |
 | [D-008](D-008-signup-email-verification.md) | Organisation signup is verified by email; one answer for every address; the organisation is created on verification | **Accepted** | No |
 
 Two records resolve contradictions **inside** the source contract rather than divergences from it. They
