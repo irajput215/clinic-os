@@ -4,25 +4,20 @@
 
 | Name | Type | Default | Nullable | Children | Parents | Comment |
 | ---- | ---- | ------- | -------- | -------- | ------- | ------- |
-| closes_at | time without time zone |  | false |  |  |  |
 | created_at | timestamp with time zone |  | false |  |  |  |
-| opens_at | time without time zone |  | false |  |  |  |
-| tenant_id | uuid |  | false |  | [public.tenants](public.tenants.md) |  |
+| slot_minutes | smallint | '15'::smallint | false |  |  |  |
+| tenant_id | uuid |  | false | [public.appointment_hours](public.appointment_hours.md) | [public.tenants](public.tenants.md) |  |
 | updated_at | timestamp with time zone |  | false |  |  |  |
-| working_days | smallint[] |  | false |  |  |  |
 
 ## Constraints
 
 | Name | Type | Definition |
 | ---- | ---- | ---------- |
-| appointment_settings_closes_at_not_null | n | NOT NULL closes_at |
 | appointment_settings_created_at_not_null | n | NOT NULL created_at |
-| appointment_settings_opens_at_not_null | n | NOT NULL opens_at |
+| appointment_settings_slot_minutes_not_null | n | NOT NULL slot_minutes |
 | appointment_settings_tenant_id_not_null | n | NOT NULL tenant_id |
 | appointment_settings_updated_at_not_null | n | NOT NULL updated_at |
-| appointment_settings_working_days_not_null | n | NOT NULL working_days |
-| ck_appointment_settings_hours | CHECK | CHECK ((closes_at > opens_at)) |
-| ck_appointment_settings_working_days | CHECK | CHECK ((((cardinality(working_days) >= 1) AND (cardinality(working_days) <= 7)) AND (working_days <@ ARRAY[(1)::smallint, (2)::smallint, (3)::smallint, (4)::smallint, (5)::smallint, (6)::smallint, (7)::smallint]))) |
+| ck_appointment_settings_slot_minutes | CHECK | CHECK ((slot_minutes = ANY (ARRAY[10, 15, 20, 30, 60]))) |
 | fk_appointment_settings_tenant_id_tenants | FOREIGN KEY | FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT |
 | pk_appointment_settings | PRIMARY KEY | PRIMARY KEY (tenant_id) |
 
@@ -38,14 +33,13 @@
 erDiagram
 
 "public.appointment_settings" |o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.appointment_hours" }o--|| "public.appointment_settings" : "FOREIGN KEY (tenant_id) REFERENCES appointment_settings(tenant_id) ON DELETE CASCADE"
 
 "public.appointment_settings" {
-  time_without_time_zone closes_at
   timestamp_with_time_zone created_at
-  time_without_time_zone opens_at
+  smallint slot_minutes
   uuid tenant_id FK
   timestamp_with_time_zone updated_at
-  smallint__ working_days
 }
 "public.tenants" {
   timestamp_with_time_zone created_at
@@ -57,6 +51,12 @@ erDiagram
   varchar_64_ slug
   varchar_16_ status
   timestamp_with_time_zone updated_at
+}
+"public.appointment_hours" {
+  time_without_time_zone closes_at
+  time_without_time_zone opens_at
+  uuid tenant_id FK
+  smallint weekday
 }
 ```
 

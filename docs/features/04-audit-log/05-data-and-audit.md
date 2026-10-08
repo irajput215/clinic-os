@@ -115,7 +115,11 @@ names it (`01-tenancy-and-clinics/05-data-and-audit.md`, "Audit events emitted")
 no action for a tenant setting that is not a security setting. It carries `changed_fields` (field names
 only, e.g. `["display_name"]`) and `step_up`, and nothing else (`backend/app/modules/audit/actions.py`).
 Feature 01 describes the event as "a security setting change with step-up"; the display name is not a
-security setting and is written with `step_up: false`. That widening is recorded here and in
+security setting and is written with `step_up: false`. Since the same date it also records a change to the clinic's
+opening hours or slot length (`changed_fields`: `hours`, `slot_minutes`;
+`docs2/sdlc/04-calendar-and-booking/api.md`), and each booking email sent is one
+`integration.request` (`provider: SMTP`, `outcome_class`), the existing action for an outbound provider
+call: no further action was added. That widening is recorded here and in
 `docs2/sdlc/01-auth-and-shell/api.md` for the Security Lead to confirm (OPEN until confirmed).
 
 Events beyond the envelope carry the mandatory per-action fields from doc 07 §1 — for example

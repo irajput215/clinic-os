@@ -8,13 +8,13 @@
 | created_by | uuid |  | true |  |  |  |
 | during | tstzrange |  | false |  |  |  |
 | ends_at | timestamp with time zone |  | false |  |  |  |
-| id | uuid | gen_random_uuid() | false |  |  |  |
+| id | uuid | gen_random_uuid() | false | [public.appointment_notifications](public.appointment_notifications.md) |  |  |
 | patient_id | uuid |  | false |  | [public.patients](public.patients.md) |  |
 | practitioner_id | uuid |  | false |  |  |  |
 | source | varchar |  | false |  |  |  |
 | starts_at | timestamp with time zone |  | false |  |  |  |
 | status | varchar |  | false |  |  |  |
-| tenant_id | uuid |  | false |  | [public.tenants](public.tenants.md) [public.patients](public.patients.md) |  |
+| tenant_id | uuid |  | false | [public.appointment_notifications](public.appointment_notifications.md) | [public.tenants](public.tenants.md) [public.patients](public.patients.md) |  |
 | type | varchar |  | false |  |  |  |
 | updated_at | timestamp with time zone |  | false |  |  |  |
 
@@ -67,6 +67,7 @@
 ```mermaid
 erDiagram
 
+"public.appointment_notifications" }o--|| "public.appointments" : "FOREIGN KEY (tenant_id, appointment_id) REFERENCES appointments(tenant_id, id) ON DELETE RESTRICT"
 "public.appointments" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
 "public.appointments" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 
@@ -83,6 +84,20 @@ erDiagram
   varchar status
   uuid tenant_id FK
   varchar type
+  timestamp_with_time_zone updated_at
+}
+"public.appointment_notifications" {
+  uuid appointment_id FK
+  smallint attempts
+  timestamp_with_time_zone claimed_at
+  timestamp_with_time_zone created_at
+  timestamp_with_time_zone due_at
+  uuid id
+  varchar kind
+  varchar outcome
+  timestamp_with_time_zone sent_at
+  varchar status
+  uuid tenant_id FK
   timestamp_with_time_zone updated_at
 }
 "public.patients" {

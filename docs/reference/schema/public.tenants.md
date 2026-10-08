@@ -7,7 +7,7 @@
 | created_at | timestamp with time zone |  | false |  |  |  |
 | data_region | varchar(32) |  | false |  |  |  |
 | display_name | varchar(120) |  | false |  |  |  |
-| id | uuid | gen_random_uuid() | false | [public.appointment_settings](public.appointment_settings.md) [public.appointments](public.appointments.md) [public.care_relationships](public.care_relationships.md) [public.clinical_record_versions](public.clinical_record_versions.md) [public.clinical_records](public.clinical_records.md) [public.clinics](public.clinics.md) [public.dispatch_attempts](public.dispatch_attempts.md) [public.patients](public.patients.md) [public.prescription_events](public.prescription_events.md) [public.prescriptions](public.prescriptions.md) [public.role_permissions](public.role_permissions.md) [public.roles](public.roles.md) [public.staff_invitations](public.staff_invitations.md) [public.step_up_grants](public.step_up_grants.md) [public.tga_approval_events](public.tga_approval_events.md) [public.tga_approvals](public.tga_approvals.md) [public.user](public.user.md) [public.user_roles](public.user_roles.md) |  |  |
+| id | uuid | gen_random_uuid() | false | [public.appointment_notifications](public.appointment_notifications.md) [public.appointment_settings](public.appointment_settings.md) [public.appointments](public.appointments.md) [public.care_relationships](public.care_relationships.md) [public.clinical_record_versions](public.clinical_record_versions.md) [public.clinical_records](public.clinical_records.md) [public.clinics](public.clinics.md) [public.dispatch_attempts](public.dispatch_attempts.md) [public.patients](public.patients.md) [public.prescription_events](public.prescription_events.md) [public.prescriptions](public.prescriptions.md) [public.role_permissions](public.role_permissions.md) [public.roles](public.roles.md) [public.staff_invitations](public.staff_invitations.md) [public.step_up_grants](public.step_up_grants.md) [public.tga_approval_events](public.tga_approval_events.md) [public.tga_approvals](public.tga_approvals.md) [public.user](public.user.md) [public.user_roles](public.user_roles.md) |  |  |
 | legal_name | varchar(255) |  | false |  |  |  |
 | retention_profile | varchar(64) |  | false |  |  |  |
 | slug | varchar(64) |  | false |  |  |  |
@@ -44,6 +44,7 @@
 ```mermaid
 erDiagram
 
+"public.appointment_notifications" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.appointment_settings" |o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.appointments" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.care_relationships" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
@@ -74,13 +75,25 @@ erDiagram
   varchar_16_ status
   timestamp_with_time_zone updated_at
 }
-"public.appointment_settings" {
-  time_without_time_zone closes_at
+"public.appointment_notifications" {
+  uuid appointment_id FK
+  smallint attempts
+  timestamp_with_time_zone claimed_at
   timestamp_with_time_zone created_at
-  time_without_time_zone opens_at
+  timestamp_with_time_zone due_at
+  uuid id
+  varchar kind
+  varchar outcome
+  timestamp_with_time_zone sent_at
+  varchar status
   uuid tenant_id FK
   timestamp_with_time_zone updated_at
-  smallint__ working_days
+}
+"public.appointment_settings" {
+  timestamp_with_time_zone created_at
+  smallint slot_minutes
+  uuid tenant_id FK
+  timestamp_with_time_zone updated_at
 }
 "public.appointments" {
   timestamp_with_time_zone created_at

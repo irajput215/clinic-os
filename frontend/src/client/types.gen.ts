@@ -75,6 +75,75 @@ export type AppointmentRead = {
 };
 
 /**
+ * AppointmentSettingsRead
+ *
+ * `GET /appointment-settings`: the slot length and seven days of hours, Monday first.
+ */
+export type AppointmentSettingsRead = {
+    /**
+     * Slot Minutes
+     */
+    slot_minutes: number;
+    /**
+     * Hours
+     */
+    hours: Array<DayHours_Output>;
+    /**
+     * Is Default
+     */
+    is_default: boolean;
+};
+
+/**
+ * AppointmentSettingsSaved
+ *
+ * `PUT /appointment-settings`: the saved settings, and how many upcoming live bookings now fall
+ * outside the hours. Those bookings are kept; the count lets the screen say so.
+ */
+export type AppointmentSettingsSaved = {
+    /**
+     * Slot Minutes
+     */
+    slot_minutes: number;
+    /**
+     * Hours
+     */
+    hours: Array<DayHours_Output>;
+    /**
+     * Is Default
+     */
+    is_default: boolean;
+    /**
+     * Bookings Outside Hours
+     */
+    bookings_outside_hours: number;
+};
+
+/**
+ * AppointmentSettingsUpdate
+ *
+ * `PUT /appointment-settings`. Strict; every rule is a `422` naming the day it is about.
+ */
+export type AppointmentSettingsUpdate = {
+    /**
+     * Slot Minutes
+     */
+    slot_minutes: 10 | 15 | 20 | 30 | 60;
+    /**
+     * Hours
+     */
+    hours: [
+        DayHours_Input,
+        DayHours_Input,
+        DayHours_Input,
+        DayHours_Input,
+        DayHours_Input,
+        DayHours_Input,
+        DayHours_Input
+    ];
+};
+
+/**
  * AppointmentStatusUpdate
  *
  * `POST /appointments/{id}/status`.
@@ -537,6 +606,50 @@ export type DayAppointment = {
 };
 
 /**
+ * DayHours
+ *
+ * One weekday's hours. Closed is both times `null`.
+ */
+export type DayHours_Input = {
+    /**
+     * Weekday
+     *
+     * ISO weekday, Monday = 1
+     */
+    weekday: number;
+    /**
+     * Opens At
+     */
+    opens_at?: string | null;
+    /**
+     * Closes At
+     */
+    closes_at?: string | null;
+};
+
+/**
+ * DayHours
+ *
+ * One weekday's hours. Closed is both times `null`.
+ */
+export type DayHours_Output = {
+    /**
+     * Weekday
+     *
+     * ISO weekday, Monday = 1
+     */
+    weekday: number;
+    /**
+     * Opens At
+     */
+    opens_at?: string | null;
+    /**
+     * Closes At
+     */
+    closes_at?: string | null;
+};
+
+/**
  * DaySchedule
  *
  * One clinic day's bookings, earliest first, and how many are in each status.
@@ -662,6 +775,30 @@ export type NewPassword = {
      * New Password
      */
     new_password: string;
+};
+
+/**
+ * NotificationRunReport
+ *
+ * What one run of the booking-email job did, in counts only.
+ */
+export type NotificationRunReport = {
+    /**
+     * Sent
+     */
+    sent?: number;
+    /**
+     * Skipped
+     */
+    skipped?: number;
+    /**
+     * Failed
+     */
+    failed?: number;
+    /**
+     * Retried
+     */
+    retried?: number;
 };
 
 /**
@@ -4663,6 +4800,94 @@ export type publicBookingCreatePublicBookingResponses = {
 };
 
 export type publicBookingCreatePublicBookingResponse = publicBookingCreatePublicBookingResponses[keyof publicBookingCreatePublicBookingResponses];
+
+export type appointmentsReadAppointmentSettingsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/appointment-settings';
+};
+
+export type appointmentsReadAppointmentSettingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: AppointmentSettingsRead;
+};
+
+export type appointmentsReadAppointmentSettingsResponse = appointmentsReadAppointmentSettingsResponses[keyof appointmentsReadAppointmentSettingsResponses];
+
+export type appointmentsUpdateAppointmentSettingsData = {
+    body: AppointmentSettingsUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/appointment-settings';
+};
+
+export type appointmentsUpdateAppointmentSettingsErrors = {
+    /**
+     * `PERMISSION_NOT_HELD`: changing the hours needs `tenant:configure`. Audited; nothing changes.
+     */
+    403: unknown;
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type appointmentsUpdateAppointmentSettingsError = appointmentsUpdateAppointmentSettingsErrors[keyof appointmentsUpdateAppointmentSettingsErrors];
+
+export type appointmentsUpdateAppointmentSettingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: AppointmentSettingsSaved;
+};
+
+export type appointmentsUpdateAppointmentSettingsResponse = appointmentsUpdateAppointmentSettingsResponses[keyof appointmentsUpdateAppointmentSettingsResponses];
+
+export type internalRunBookingNotificationsData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/internal/booking-notifications/run';
+};
+
+export type internalRunBookingNotificationsErrors = {
+    /**
+     * Wrong or missing token
+     */
+    401: unknown;
+    /**
+     * The job endpoint is not enabled on this server
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+    /**
+     * `EMAIL_NOT_CONFIGURED`: outgoing email is off
+     */
+    503: unknown;
+};
+
+export type internalRunBookingNotificationsError = internalRunBookingNotificationsErrors[keyof internalRunBookingNotificationsErrors];
+
+export type internalRunBookingNotificationsResponses = {
+    /**
+     * Successful Response
+     */
+    200: NotificationRunReport;
+};
+
+export type internalRunBookingNotificationsResponse = internalRunBookingNotificationsResponses[keyof internalRunBookingNotificationsResponses];
 
 export type authStepUpData = {
     body: StepUpRequest;
