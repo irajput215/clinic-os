@@ -37,11 +37,13 @@ import uuid
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Final
 
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, func, select
 
-from app.core.db import engine, tenant_transaction
+from app.core.db import driver_sql, engine, tenant_read, tenant_transaction
 from app.core.security import get_password_hash
 from app.models import User
 
@@ -256,19 +258,70 @@ def provision_tenant(*, tenant_id: uuid.UUID, owner_user_id: uuid.UUID) -> None:
         )
 
 
-def _held_role_ids(
+#: The permission codes and role codes an account holds in one tenant: a row per held role and granted
+#: permission. A role with no grants still yields its code; a grant whose permission is not in the
+#: catalogue yields none. Every join is pinned to the tenant, and every table is also read under the
+#: caller's forced RLS context. `{tenant}` is one of the two constant expressions below.
+_HELD_GRANTS_TEMPLATE: Final = """
+    SELECT roles.code AS role_code, permissions.code AS permission_code
+    FROM user_roles
+    LEFT JOIN roles
+        ON roles.id = user_roles.role_id AND roles.tenant_id = {tenant}
+    LEFT JOIN role_permissions
+        ON role_permissions.role_id = user_roles.role_id
+        AND role_permissions.tenant_id = {tenant}
+    LEFT JOIN permissions ON permissions.id = role_permissions.permission_id
+    WHERE user_roles.user_id = :user_id AND user_roles.tenant_id = {tenant}
+"""
+#: For a caller that names the tenant the session resolved.
+_HELD_GRANTS = text(_HELD_GRANTS_TEMPLATE.format(tenant=":tenant_id"))
+#: For the request's first transaction, where the tenant is the one its context already holds
+#: (`app.core.db.account_context_statement`); no context matches nothing.
+_HELD_GRANTS_IN_CONTEXT = text(
+    _HELD_GRANTS_TEMPLATE.format(
+        tenant="NULLIF(current_setting('app.tenant_id', true), '')::uuid"
+    )
+)
+_GRANTS_DRIVER_SQL = driver_sql(_HELD_GRANTS)
+_GRANTS_IN_CONTEXT_DRIVER_SQL = driver_sql(_HELD_GRANTS_IN_CONTEXT)
+
+
+def held_grants_in_context_statement(
+    user_id: uuid.UUID,
+) -> tuple[str, dict[str, uuid.UUID]]:
+    """The account's grants in the transaction's own tenant, as one driver statement.
+
+    Pipelined by `app.api.deps` with the account read and its context, so resolving the request's
+    actor costs no round trip of its own. Read the rows with `grants_from_rows`.
+    """
+    return _GRANTS_IN_CONTEXT_DRIVER_SQL, {"user_id": user_id}
+
+
+def grants_from_rows(
+    rows: Iterable[Sequence[str | None]],
+) -> tuple[frozenset[str], frozenset[str]]:
+    permissions: set[str] = set()
+    role_codes: set[str] = set()
+    for role_code, permission_code in rows:
+        if role_code:
+            role_codes.add(role_code)
+        if permission_code:
+            permissions.add(permission_code)
+    return frozenset(permissions), frozenset(role_codes)
+
+
+def _held_grants(
     session: Session, *, user_id: uuid.UUID, tenant_id: uuid.UUID
-) -> set[uuid.UUID]:
-    """The role ids this account holds in this tenant, under the caller's RLS context."""
-    return {
-        granted.role_id
-        for granted in session.exec(
-            select(UserRole).where(
-                UserRole.user_id == user_id,
-                UserRole.tenant_id == tenant_id,
-            )
-        ).all()
-    }
+) -> tuple[frozenset[str], frozenset[str]]:
+    """The permission codes and role codes this account holds in this tenant, in one query.
+
+    One statement instead of one per table: each round trip to the database costs the full
+    app-to-database latency (`docs/reference/performance.md`).
+    """
+    rows = session.connection().execute(
+        _HELD_GRANTS, {"tenant_id": tenant_id, "user_id": user_id}
+    )
+    return grants_from_rows(rows.tuples())
 
 
 def resolve_permissions(
@@ -279,19 +332,8 @@ def resolve_permissions(
     The caller supplies the tenant the session resolved, never a request value; the query runs under
     forced RLS as well.
     """
-    permissions: Sequence[Permission] = session.exec(select(Permission)).all()
-    code_by_id = {permission.id: permission.code for permission in permissions}
-    held_role_ids = _held_role_ids(session, user_id=user_id, tenant_id=tenant_id)
-    if not held_role_ids:
-        return frozenset()
-    grants: Sequence[RolePermission] = session.exec(
-        select(RolePermission).where(RolePermission.tenant_id == tenant_id)
-    ).all()
-    return frozenset(
-        code_by_id[grant.permission_id]
-        for grant in grants
-        if grant.role_id in held_role_ids and grant.permission_id in code_by_id
-    )
+    permissions, _ = _held_grants(session, user_id=user_id, tenant_id=tenant_id)
+    return permissions
 
 
 def resolve_role_codes(
@@ -300,16 +342,12 @@ def resolve_role_codes(
     """The codes of the roles this account holds — the audit envelope's `actor_role` at this moment.
 
     Separate from `resolve_permissions` because it answers a different question: permissions are what
-    a decision reads, role codes are what the trail records. Reading both in one transaction is what
-    makes `actor_role` "the role held at decision time" rather than the role held a moment later.
+    a decision reads, role codes are what the trail records. `actor_for` reads both from one
+    statement, which is what makes `actor_role` "the role held at decision time" rather than the role
+    held a moment later.
     """
-    held = _held_role_ids(session, user_id=user_id, tenant_id=tenant_id)
-    if not held:
-        return frozenset()
-    roles: Sequence[Role] = session.exec(
-        select(Role).where(Role.tenant_id == tenant_id)
-    ).all()
-    return frozenset(role.code for role in roles if role.id in held)
+    _, role_codes = _held_grants(session, user_id=user_id, tenant_id=tenant_id)
+    return role_codes
 
 
 def actor_for(
@@ -327,9 +365,16 @@ def actor_for(
     `actor_role` an audit event will carry is the role held at the moment of the decision rather than
     a value re-read afterwards.
     """
-    with tenant_transaction(tenant_id=tenant_id, actor_id=user_id) as session:
-        permissions = resolve_permissions(session, user_id=user_id, tenant_id=tenant_id)
-        role_codes = resolve_role_codes(session, user_id=user_id, tenant_id=tenant_id)
+    # Every authenticated request resolves its actor, so the whole transaction (`BEGIN`, the tenant
+    # context, the grants and `COMMIT`) travels in one round trip.
+    permissions, role_codes = grants_from_rows(
+        tenant_read(
+            tenant_id=tenant_id,
+            actor_id=user_id,
+            statement=_GRANTS_DRIVER_SQL,
+            parameters={"tenant_id": tenant_id, "user_id": user_id},
+        )
+    )
     return Actor(
         user_id=user_id,
         tenant_id=tenant_id,

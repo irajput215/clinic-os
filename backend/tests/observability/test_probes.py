@@ -28,7 +28,7 @@ class _UnreachableEngine:
 @pytest.fixture
 def unreachable_database(monkeypatch: pytest.MonkeyPatch) -> None:
     """Make every readiness check fail to connect."""
-    monkeypatch.setattr("app.core.health.engine", _UnreachableEngine())
+    monkeypatch.setattr("app.core.health.autocommit_engine", _UnreachableEngine())
 
 
 # --- The denial path comes first: a probe that cannot report failure is not a probe. ---

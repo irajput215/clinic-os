@@ -1,6 +1,9 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import sentry_sdk
+from anyio import to_thread
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from starlette.middleware.cors import CORSMiddleware
@@ -8,6 +11,7 @@ from starlette.middleware.cors import CORSMiddleware
 from app.api.main import api_router
 from app.core.config import settings
 from app.core.correlation import CorrelationIdMiddleware
+from app.core.db import warm_pool
 from app.core.errors import install_exception_handlers
 from app.core.logging import configure_logging
 from app.core.security_headers import SecurityHeadersMiddleware
@@ -29,8 +33,18 @@ def custom_generate_unique_id(route: APIRoute) -> str:
 if settings.SENTRY_DSN and settings.FASTAPI_ENV != "development":
     sentry_sdk.init(dsn=str(settings.SENTRY_DSN), enable_tracing=True)
 
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    # Open pooled connections (and wake a suspended Neon compute) before the first request needs
+    # them, off the event loop; never fails start-up (`app.core.db.warm_pool`).
+    await to_thread.run_sync(warm_pool)
+    yield
+
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
+    lifespan=lifespan,
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     generate_unique_id_function=custom_generate_unique_id,
 )

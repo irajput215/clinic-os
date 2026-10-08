@@ -18,7 +18,7 @@ import logging
 
 from sqlalchemy import text
 
-from app.core.db import engine
+from app.core.db import autocommit_engine
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,9 @@ def database_is_ready() -> bool:
     log line with no interpolated data.
     """
     try:
-        with engine.connect() as connection:
+        # Outside a transaction: `BEGIN` and `ROLLBACK` around one `SELECT` would triple the probe's
+        # round trips, and the probe's figure is what the deploy gate and the performance record read.
+        with autocommit_engine.connect() as connection:
             connection.execute(_READY_PROBE)
     except Exception:  # noqa: BLE001 - a probe must answer, never propagate
         # Constant message only: the underlying driver error can name the host and role, and this

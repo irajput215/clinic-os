@@ -166,9 +166,9 @@ def test_the_database_session_of_a_real_request_carries_the_handle(
     recorded: dict[str, str] = {}
     real_set_context = db_module._set_context
 
-    def spy(session: object, key: str, value: str) -> None:
-        recorded[key] = value
-        real_set_context(session, key, value)  # type: ignore[arg-type]
+    def spy(session: object, values: dict[str, str]) -> None:
+        recorded.update(values)
+        real_set_context(session, values)  # type: ignore[arg-type]
 
     monkeypatch.setattr(db_module, "_set_context", spy)
     try:

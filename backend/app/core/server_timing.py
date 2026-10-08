@@ -28,7 +28,8 @@ opted in.
 """
 
 import os
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
+from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from time import monotonic, perf_counter
@@ -36,7 +37,7 @@ from typing import Any, Final
 from uuid import uuid4
 
 import psycopg
-from psycopg.pq import TransactionStatus
+from psycopg.pq import PipelineStatus, TransactionStatus
 from sqlalchemy import Engine, event
 from sqlalchemy.pool import ConnectionPoolEntry
 from starlette.datastructures import MutableHeaders
@@ -173,8 +174,12 @@ class TimedConnection(psycopg.Connection[Any]):
         timings = _current.get()
         if timings is None:
             return super().wait(gen, *args, **kwargs)
+        # A pipeline sends its statements and reads their results across several waits; it is one
+        # flight, counted once by `pipeline` below.
+        pipelined = self.pgconn.pipeline_status != PipelineStatus.OFF
         opens_transaction = (
-            not self.autocommit
+            not pipelined
+            and not self.autocommit
             and self.pgconn.transaction_status == TransactionStatus.IDLE
         )
         waited = _Waited()
@@ -183,7 +188,7 @@ class TimedConnection(psycopg.Connection[Any]):
             return super().wait(_observe(gen, waited), *args, **kwargs)
         finally:
             timings.db_ms += (perf_counter() - started) * 1000
-            if waited.flag:
+            if waited.flag and not pipelined:
                 timings.db_round_trips += 1
             # psycopg sends the implicit BEGIN as its own command ahead of the first statement of
             # a transaction, so that statement costs two round trips, not one.
@@ -192,6 +197,15 @@ class TimedConnection(psycopg.Connection[Any]):
                 TransactionStatus.INERROR,
             ):
                 timings.db_round_trips += 1
+
+    @contextmanager
+    def pipeline(self) -> Iterator[psycopg.Pipeline]:
+        """One round trip for everything queued in the pipeline (this app never syncs mid-way)."""
+        timings = _current.get()
+        with super().pipeline() as pipeline:
+            yield pipeline
+        if timings is not None:
+            timings.db_round_trips += 1
 
 
 def instrument_engine(engine: Engine) -> None:
