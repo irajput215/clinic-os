@@ -6,7 +6,7 @@
 | ---- | ---- | ------- | -------- | -------- | ------- | ------- |
 | created_at | timestamp with time zone |  | false |  |  |  |
 | data_region | varchar(32) |  | false |  |  |  |
-| id | uuid | gen_random_uuid() | false | [public.appointment_settings](public.appointment_settings.md) [public.appointments](public.appointments.md) [public.care_relationships](public.care_relationships.md) [public.clinical_record_versions](public.clinical_record_versions.md) [public.clinical_records](public.clinical_records.md) [public.clinics](public.clinics.md) [public.patients](public.patients.md) [public.role_permissions](public.role_permissions.md) [public.roles](public.roles.md) [public.tga_approval_events](public.tga_approval_events.md) [public.tga_approvals](public.tga_approvals.md) [public.user](public.user.md) [public.user_roles](public.user_roles.md) |  |  |
+| id | uuid | gen_random_uuid() | false | [public.appointment_settings](public.appointment_settings.md) [public.appointments](public.appointments.md) [public.care_relationships](public.care_relationships.md) [public.clinical_record_versions](public.clinical_record_versions.md) [public.clinical_records](public.clinical_records.md) [public.clinics](public.clinics.md) [public.dispatch_attempts](public.dispatch_attempts.md) [public.patients](public.patients.md) [public.prescription_events](public.prescription_events.md) [public.prescriptions](public.prescriptions.md) [public.role_permissions](public.role_permissions.md) [public.roles](public.roles.md) [public.step_up_grants](public.step_up_grants.md) [public.tga_approval_events](public.tga_approval_events.md) [public.tga_approvals](public.tga_approvals.md) [public.user](public.user.md) [public.user_roles](public.user_roles.md) |  |  |
 | legal_name | varchar(255) |  | false |  |  |  |
 | retention_profile | varchar(64) |  | false |  |  |  |
 | slug | varchar(64) |  | false |  |  |  |
@@ -47,9 +47,13 @@ erDiagram
 "public.clinical_record_versions" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.clinical_records" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.clinics" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.dispatch_attempts" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.patients" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.prescription_events" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.prescriptions" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.role_permissions" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.roles" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.step_up_grants" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE"
 "public.tga_approval_events" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.tga_approvals" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.user" }o--o| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL"
@@ -134,6 +138,26 @@ erDiagram
   uuid tenant_id FK
   timestamp_with_time_zone updated_at
 }
+"public.dispatch_attempts" {
+  uuid approval_id FK
+  integer attempt_seq
+  timestamp_with_time_zone claimed_at
+  varchar error_class
+  uuid id
+  varchar idempotency_key
+  integer latency_ms
+  varchar outcome_class
+  uuid prescription_id FK
+  varchar provider
+  varchar provider_reference
+  varchar request_payload_hash
+  timestamp_with_time_zone requested_at
+  uuid requested_by
+  varchar resolution_reason
+  timestamp_with_time_zone resolved_at
+  varchar state
+  uuid tenant_id FK
+}
 "public.patients" {
   varchar address_line
   timestamp_with_time_zone created_at
@@ -159,6 +183,39 @@ erDiagram
   uuid tenant_id FK
   timestamp_with_time_zone updated_at
 }
+"public.prescription_events" {
+  uuid actor_id
+  varchar from_state
+  uuid id
+  timestamp_with_time_zone occurred_at
+  uuid prescription_id FK
+  varchar reason
+  uuid tenant_id FK
+  varchar to_state
+}
+"public.prescriptions" {
+  uuid approval_id FK
+  varchar conventional_therapy
+  timestamp_with_time_zone created_at
+  date date_of_service
+  varchar dosage_form
+  varchar dose_instruction
+  uuid drafted_by
+  uuid id
+  varchar medicine_name
+  uuid patient_id FK
+  varchar payload_hash
+  uuid prescriber_id
+  numeric_10_2_ quantity
+  smallint repeats
+  timestamp_with_time_zone signed_at
+  uuid signed_by
+  varchar state
+  uuid tenant_id FK
+  varchar tga_category
+  varchar triage_outcome
+  timestamp_with_time_zone updated_at
+}
 "public.role_permissions" {
   uuid permission_id FK
   uuid role_id FK
@@ -172,6 +229,17 @@ erDiagram
   varchar name
   uuid tenant_id FK
   timestamp_with_time_zone updated_at
+}
+"public.step_up_grants" {
+  timestamp_with_time_zone consumed_at
+  timestamp_with_time_zone expires_at
+  uuid id
+  timestamp_with_time_zone issued_at
+  varchar operation
+  uuid resource_id
+  uuid tenant_id FK
+  varchar token_hash
+  uuid user_id FK
 }
 "public.tga_approval_events" {
   uuid actor_id

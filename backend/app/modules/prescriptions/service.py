@@ -253,8 +253,7 @@ def _reads(
 ) -> list[PrescriptionRead]:
     """Convert rows inside the transaction, with names, the latest dispatch and the live gate."""
     patient_names = patients_service.display_names(
-        session,
-        tenant_id=tenant_id, patient_ids=[row.patient_id for row in rows]
+        session, tenant_id=tenant_id, patient_ids=[row.patient_id for row in rows]
     )
     people = users_roles.display_names(
         tenant_id=tenant_id,

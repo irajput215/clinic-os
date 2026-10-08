@@ -13,7 +13,7 @@
 | family_name | varchar |  | false |  |  |  |
 | gender_identity | varchar |  | true |  |  |  |
 | given_name | varchar |  | false |  |  |  |
-| id | uuid | gen_random_uuid() | false | [public.appointments](public.appointments.md) [public.care_relationships](public.care_relationships.md) [public.clinical_records](public.clinical_records.md) [public.patients](public.patients.md) [public.tga_approvals](public.tga_approvals.md) |  |  |
+| id | uuid | gen_random_uuid() | false | [public.appointments](public.appointments.md) [public.care_relationships](public.care_relationships.md) [public.clinical_records](public.clinical_records.md) [public.patients](public.patients.md) [public.prescriptions](public.prescriptions.md) [public.tga_approvals](public.tga_approvals.md) |  |  |
 | ihi | bytea |  | true |  |  |  |
 | ihi_blind_index | bytea |  | true |  |  |  |
 | medicare_blind_index | bytea |  | true |  |  |  |
@@ -25,7 +25,7 @@
 | sex_at_birth | varchar |  | true |  |  |  |
 | state | varchar |  | true |  |  |  |
 | suburb | varchar |  | true |  |  |  |
-| tenant_id | uuid |  | false | [public.appointments](public.appointments.md) [public.clinical_records](public.clinical_records.md) [public.tga_approvals](public.tga_approvals.md) | [public.tenants](public.tenants.md) |  |
+| tenant_id | uuid |  | false | [public.appointments](public.appointments.md) [public.clinical_records](public.clinical_records.md) [public.prescriptions](public.prescriptions.md) [public.tga_approvals](public.tga_approvals.md) | [public.tenants](public.tenants.md) |  |
 | updated_at | timestamp with time zone |  | false |  |  |  |
 
 ## Constraints
@@ -69,6 +69,7 @@ erDiagram
 "public.care_relationships" }o--|| "public.patients" : "FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE RESTRICT"
 "public.clinical_records" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
 "public.patients" }o--o| "public.patients" : "FOREIGN KEY (merged_into_patient_id) REFERENCES patients(id) ON DELETE RESTRICT"
+"public.prescriptions" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
 "public.tga_approvals" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
 "public.patients" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 
@@ -134,6 +135,29 @@ erDiagram
   varchar record_type
   timestamp_with_time_zone signed_at
   uuid tenant_id FK
+}
+"public.prescriptions" {
+  uuid approval_id FK
+  varchar conventional_therapy
+  timestamp_with_time_zone created_at
+  date date_of_service
+  varchar dosage_form
+  varchar dose_instruction
+  uuid drafted_by
+  uuid id
+  varchar medicine_name
+  uuid patient_id FK
+  varchar payload_hash
+  uuid prescriber_id
+  numeric_10_2_ quantity
+  smallint repeats
+  timestamp_with_time_zone signed_at
+  uuid signed_by
+  varchar state
+  uuid tenant_id FK
+  varchar tga_category
+  varchar triage_outcome
+  timestamp_with_time_zone updated_at
 }
 "public.tga_approvals" {
   varchar approval_reference

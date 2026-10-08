@@ -24,9 +24,9 @@ export interface PreviewState {
   appointments: Appointment[]
   scripts: Script[]
   /**
-   * Sample approvals for the script queue's safety gate and the Today page ONLY. The approvals
-   * screens themselves read the API (`tgaApprovals: "api"`); these never appear there. They go when
-   * the prescriptions and dashboard modules land and the server evaluates the gate.
+   * Sample approvals and scripts for the Today page ONLY. The approvals screens and the script queue
+   * read the API (`tgaApprovals`, `prescriptions`); these never appear there. They go when the
+   * dashboard module lands.
    */
   approvals: TgaApproval[]
 }
