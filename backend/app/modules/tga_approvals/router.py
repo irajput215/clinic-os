@@ -131,28 +131,18 @@ def _authorize(
     enforce(decision)
 
 
-def _patient_exists(
-    actor: Actor, patient_id: uuid.UUID, *, audit_action: str | None = None
-) -> None:
+def _patient_exists(actor: Actor, patient_id: uuid.UUID) -> None:
     """`404` unless the patient is one of the caller's own, resolved through the patients service.
 
-    This module never reads the `patients` table — it reaches the patient through the other module's
+    This module never reads the `patients` table - it reaches the patient through the other module's
     facade (`docs/reference/build-contract.md` §7), and `None` is that facade's answer for "absent"
-    and "another tenant's" alike, so the refusal discloses nothing (R8). With `audit_action`, the
-    refusal is written down first as `CROSS_TENANT`, the way a read of a missing approval is.
+    and "another tenant's" alike, so the refusal discloses nothing (R8). A patient's approval list
+    resolves its patient inside its own transaction instead (`service.list_approvals`).
     """
     if (
         patients_service.get_patient(tenant_id=actor.tenant_id, patient_id=patient_id)
         is None
     ):
-        if audit_action is not None:
-            service.audit_denial(
-                tenant_id=actor.tenant_id,
-                actor_id=actor.user_id,
-                actor_role=actor.actor_role,
-                action=audit_action,
-                reason=service.CROSS_TENANT,
-            )
         raise _not_found()
 
 
@@ -197,9 +187,8 @@ def list_patient_tga_approvals(
 ) -> TgaApprovalsPublic:
     """A patient's approvals, keyset-paginated, tenant-scoped by RLS (F15, US-2)."""
     _authorize(actor, TGA_APPROVAL_READ, action=service.APPROVAL_READ)
-    _patient_exists(actor, patient_id, audit_action=service.APPROVAL_READ)
     try:
-        return service.list_approvals(
+        page = service.list_approvals(
             tenant_id=actor.tenant_id,
             patient_id=patient_id,
             limit=limit,
@@ -209,6 +198,10 @@ def list_patient_tga_approvals(
         )
     except service.InvalidCursor as error:
         raise _invalid_cursor(error) from error
+    if page is None:
+        # Not one of the caller's patients; the refusal was audited `CROSS_TENANT` (R8).
+        raise _not_found()
+    return page
 
 
 @router.get("", response_model=TgaApprovalRegister)

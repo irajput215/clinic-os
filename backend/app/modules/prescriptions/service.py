@@ -40,6 +40,7 @@ from sqlmodel import Session, col, select
 
 from app.core.config import settings
 from app.core.db import tenant_transaction
+from app.core.reads import Pending, Plan, ReadBatch
 from app.modules.audit import service as audit
 from app.modules.identity_tenancy import service as identity
 from app.modules.patients import service as patients_service
@@ -61,6 +62,7 @@ from app.modules.prescriptions.schemas import (
     PrescriptionsPublic,
 )
 from app.modules.prescriptions.transport import configured_transport
+from app.modules.tga_approvals.schemas import TgaMatchResponse
 from app.modules.users_roles import service as users_roles
 from app.modules.users_roles.catalog import PRESCRIPTION_PERMISSIONS
 
@@ -236,80 +238,119 @@ def _lock(
     ).first()
 
 
-def _latest_attempts(
-    session: Session, *, tenant_id: uuid.UUID, prescription_ids: Sequence[uuid.UUID]
-) -> dict[uuid.UUID, DispatchAttempt]:
+def _queue_latest_attempts(
+    batch: ReadBatch, *, tenant_id: uuid.UUID, prescription_ids: Sequence[uuid.UUID]
+) -> Pending[dict[uuid.UUID, DispatchAttempt]]:
+    """Each prescription's latest dispatch attempt, queued on the caller's batch."""
     if not prescription_ids:
-        return {}
-    rows: Sequence[DispatchAttempt] = session.exec(
+        return Pending.ready({})
+    attempts = batch.scalars(
         select(DispatchAttempt)
         .where(
             DispatchAttempt.tenant_id == tenant_id,
             col(DispatchAttempt.prescription_id).in_(prescription_ids),
         )
         .order_by(col(DispatchAttempt.attempt_seq))
-    ).all()
-    return {row.prescription_id: row for row in rows}
+    )
+    # Ascending `attempt_seq`, so the last row of each prescription is its latest attempt.
+    return attempts.then(lambda rows: {row.prescription_id: row for row in rows})
+
+
+def _queue_reads(
+    batch: ReadBatch, *, tenant_id: uuid.UUID, rows: Sequence[Prescription]
+) -> Pending[list[PrescriptionRead]]:
+    """Queue what converting `rows` needs: names, the latest dispatch and the live gate.
+
+    Every lookup is one statement for the whole list, all of them in the caller's batch, so a page
+    of prescriptions costs one round trip beyond its own read, however long it is.
+    """
+    patient_names = patients_service.queue_display_names(
+        batch, tenant_id=tenant_id, patient_ids=[row.patient_id for row in rows]
+    )
+    people = users_roles.queue_display_names(
+        batch,
+        tenant_id=tenant_id,
+        user_ids=[row.prescriber_id for row in rows] + [row.drafted_by for row in rows],
+    )
+    attempts = _queue_latest_attempts(
+        batch, tenant_id=tenant_id, prescription_ids=[row.id for row in rows]
+    )
+    gates = gate.advise_many(
+        batch, [row for row in rows if row.state in ACTIONABLE_STATES]
+    )
+    transport_configured = configured_transport() is not None
+
+    def convert() -> list[PrescriptionRead]:
+        return [
+            _read_row(
+                row,
+                patient_name=patient_names.value.get(row.patient_id),
+                people=people.value,
+                attempt=attempts.value.get(row.id),
+                gate_answer=gates.value.get(row.id),
+                transport_configured=transport_configured,
+            )
+            for row in rows
+        ]
+
+    return Pending(convert)
+
+
+def _read_row(
+    row: Prescription,
+    *,
+    patient_name: str | None,
+    people: dict[uuid.UUID, str],
+    attempt: DispatchAttempt | None,
+    gate_answer: TgaMatchResponse | None,
+    transport_configured: bool,
+) -> PrescriptionRead:
+    return PrescriptionRead(
+        id=row.id,
+        patient_id=row.patient_id,
+        patient_name=patient_name,
+        prescriber_id=row.prescriber_id,
+        prescriber_name=people.get(row.prescriber_id),
+        drafted_by=row.drafted_by,
+        drafted_by_name=people.get(row.drafted_by),
+        medicine_name=row.medicine_name,
+        tga_category=row.tga_category,
+        dosage_form=row.dosage_form,
+        dose_instruction=row.dose_instruction,
+        quantity=row.quantity,
+        repeats=row.repeats,
+        triage_outcome=row.triage_outcome,
+        conventional_therapy=row.conventional_therapy,
+        date_of_service=row.date_of_service,
+        state=row.state,
+        approval_id=row.approval_id,
+        created_at=row.created_at,
+        signed_at=row.signed_at,
+        # Only an actionable prescription carries the gate (`ACTIONABLE_STATES`).
+        gate=gate_answer,
+        dispatch=None
+        if attempt is None
+        else DispatchRead(
+            state=attempt.state,
+            attempt_seq=attempt.attempt_seq,
+            provider=attempt.provider,
+            provider_reference=attempt.provider_reference,
+            outcome_class=attempt.outcome_class,
+            requested_at=attempt.requested_at,
+            resolved_at=attempt.resolved_at,
+            transport_configured=transport_configured,
+        ),
+    )
 
 
 def _reads(
     session: Session, *, tenant_id: uuid.UUID, rows: Sequence[Prescription]
 ) -> list[PrescriptionRead]:
     """Convert rows inside the transaction, with names, the latest dispatch and the live gate."""
-    patient_names = patients_service.display_names(
-        session, tenant_id=tenant_id, patient_ids=[row.patient_id for row in rows]
-    )
-    people = users_roles.display_names(
-        tenant_id=tenant_id,
-        user_ids=[row.prescriber_id for row in rows] + [row.drafted_by for row in rows],
-    )
-    attempts = _latest_attempts(
-        session, tenant_id=tenant_id, prescription_ids=[row.id for row in rows]
-    )
-    transport_configured = configured_transport() is not None
-    reads: list[PrescriptionRead] = []
-    for row in rows:
-        attempt = attempts.get(row.id)
-        reads.append(
-            PrescriptionRead(
-                id=row.id,
-                patient_id=row.patient_id,
-                patient_name=patient_names.get(row.patient_id),
-                prescriber_id=row.prescriber_id,
-                prescriber_name=people.get(row.prescriber_id),
-                drafted_by=row.drafted_by,
-                drafted_by_name=people.get(row.drafted_by),
-                medicine_name=row.medicine_name,
-                tga_category=row.tga_category,
-                dosage_form=row.dosage_form,
-                dose_instruction=row.dose_instruction,
-                quantity=row.quantity,
-                repeats=row.repeats,
-                triage_outcome=row.triage_outcome,
-                conventional_therapy=row.conventional_therapy,
-                date_of_service=row.date_of_service,
-                state=row.state,
-                approval_id=row.approval_id,
-                created_at=row.created_at,
-                signed_at=row.signed_at,
-                gate=gate.advise(session, row)
-                if row.state in ACTIONABLE_STATES
-                else None,
-                dispatch=None
-                if attempt is None
-                else DispatchRead(
-                    state=attempt.state,
-                    attempt_seq=attempt.attempt_seq,
-                    provider=attempt.provider,
-                    provider_reference=attempt.provider_reference,
-                    outcome_class=attempt.outcome_class,
-                    requested_at=attempt.requested_at,
-                    resolved_at=attempt.resolved_at,
-                    transport_configured=transport_configured,
-                ),
-            )
-        )
-    return reads
+    batch = ReadBatch()
+    reads = _queue_reads(batch, tenant_id=tenant_id, rows=rows)
+    batch.send(session)
+    return reads.value
 
 
 def _read_one(session: Session, row: Prescription) -> PrescriptionRead:
@@ -398,25 +439,26 @@ def list_prescriptions(
         )
 
 
-def queue_summary(
-    session: Session, *, tenant_id: uuid.UUID, limit: int
-) -> PrescriptionQueueSummary:
+def queue_summary_plan(
+    *, tenant_id: uuid.UUID, limit: int
+) -> Plan[PrescriptionQueueSummary]:
     """The queue at a glance, on the caller's transaction: every state's count, the newest `limit`
     prescriptions still needing a human action with the gate's answer **now**, and how many of the
     newest `GATE_SCAN_LIMIT` actionable ones that answer refuses.
 
-    For the Today page (`dashboard` module). The gate here is `gate.advise`, which authorises
-    nothing: signing and dispatch re-ask `gate.decide` on their own transaction. The scan is bounded
-    so a page load costs at most `GATE_SCAN_LIMIT` lookups, and `gate_checked` says how many it made.
+    For the Today page (`dashboard` module), as a read plan (`app.core.reads`): the counts and the
+    actionable rows are one step; the shown rows' names and dispatch, and the gate's answer for every
+    scanned row, are the next. The gate here is `gate.advise_many`, which authorises nothing: signing
+    and dispatch re-ask `gate.decide` on their own transaction. The scan is bounded, and
+    `gate_checked` says how many prescriptions it asked about.
     """
-    by_state = dict.fromkeys(PRESCRIPTION_STATES, 0)
-    for state, total in session.exec(
+    first = ReadBatch()
+    counts = first.rows(
         select(col(Prescription.state), func.count())
         .where(col(Prescription.tenant_id) == tenant_id)
         .group_by(col(Prescription.state))
-    ).all():
-        by_state[state] = total
-    rows: Sequence[Prescription] = session.exec(
+    )
+    actionable = first.scalars(
         select(Prescription)
         .where(
             col(Prescription.tenant_id) == tenant_id,
@@ -424,16 +466,26 @@ def queue_summary(
         )
         .order_by(col(Prescription.created_at).desc(), col(Prescription.id).desc())
         .limit(max(limit, GATE_SCAN_LIMIT))
-    ).all()
-    shown = _reads(session, tenant_id=tenant_id, rows=rows[:limit])
-    refused = sum(
-        1 for read in shown if read.gate is not None and not read.gate.matched
     )
-    refused += sum(1 for row in rows[limit:] if not gate.advise(session, row).matched)
+    yield first
+
+    rows = actionable.value
+    second = ReadBatch()
+    shown = _queue_reads(second, tenant_id=tenant_id, rows=rows[:limit])
+    scanned = gate.advise_many(second, rows[limit:])
+    yield second
+
+    by_state = dict.fromkeys(PRESCRIPTION_STATES, 0)
+    for state, total in counts.value:
+        by_state[state] = total
+    refused = sum(
+        1 for read in shown.value if read.gate is not None and not read.gate.matched
+    )
+    refused += sum(1 for answer in scanned.value.values() if not answer.matched)
     return PrescriptionQueueSummary(
         by_state=by_state,
         transport_configured=configured_transport() is not None,
-        actionable=shown,
+        actionable=shown.value,
         gate_refused=refused,
         gate_checked=len(rows),
     )

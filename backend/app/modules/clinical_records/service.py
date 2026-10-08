@@ -53,13 +53,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Final
 
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, tuple_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql.elements import ColumnElement
 from sqlmodel import Session, col, func, select
 
 from app.core.config import settings
 from app.core.db import tenant_transaction
+from app.core.reads import Pending, ReadBatch
 
 # The audit module is reached through its service facade (`docs/reference/build-contract.md` §7).
 # The import is one-way — `audit` knows nothing about `clinical_records` — so there is no cycle.
@@ -78,6 +79,7 @@ from app.modules.clinical_records.schemas import (
     ClinicalRecordVersionRead,
     SoapNote,
 )
+from app.modules.patients import service as patients_service
 from app.modules.users_roles.policy import DecisionCode
 
 # The two actions this module emits. Both are already in the closed catalogue of
@@ -563,14 +565,17 @@ def list_timeline(
 ) -> TimelineOutcome:
     """One keyset page of a patient's records, newest first, with each record's current version.
 
-    The keyset is `(created_at, id)` — both NOT NULL, so the order is total and a page cannot repeat
+    `NOT_FOUND` when the patient is not one of the caller's own (absent and another tenant's alike,
+    R10): the refusal is audited `CROSS_TENANT` on this transaction before a cursor is judged, and the
+    router answers `404`. The patient is resolved through the patients facade (this module never
+    reads `patients`), in the same flight as the page; the page is only returned once the patient is.
+
+    The keyset is `(created_at, id)` - both NOT NULL, so the order is total and a page cannot repeat
     or skip a record even while rows are being appended. `created_at` rather than the design's
     `signed_at`: `03-design.md` records that choice as an open item, and `signed_at` is NULL for every
     unsigned record, so it cannot order a timeline that includes drafts. The page asks for one row
-    more than the caller wanted; that extra row is what proves whether a next page exists, without a
-    second count query.
+    more than the caller wanted; that extra row is what proves whether a next page exists.
     """
-    boundary = None if cursor is None else decode_cursor(cursor)
     with tenant_transaction(
         tenant_id=tenant_id,
         actor_id=context.actor_id,
@@ -579,40 +584,44 @@ def list_timeline(
         correlation_id=context.correlation_id,
         source_ip=context.source_ip,
     ) as session:
-        scope = (
-            ClinicalRecord.tenant_id == tenant_id,
-            ClinicalRecord.patient_id == patient_id,
-            col(ClinicalRecord.deleted_at).is_(None),
+        batch = ReadBatch()
+        patient = patients_service.queue_display_names(
+            batch, tenant_id=tenant_id, patient_ids=[patient_id]
         )
-        count = session.exec(
-            select(func.count()).select_from(ClinicalRecord).where(*scope)
-        ).one()
-        statement = (
-            select(ClinicalRecord)
-            .where(*scope)
-            .order_by(
-                col(ClinicalRecord.created_at).desc(), col(ClinicalRecord.id).desc()
+        refused_cursor: InvalidCursor | None = None
+        timeline: _TimelineReads | None = None
+        try:
+            boundary = None if cursor is None else decode_cursor(cursor)
+        except InvalidCursor as error:
+            refused_cursor = error
+        else:
+            timeline = _queue_timeline(
+                batch,
+                tenant_id=tenant_id,
+                patient_id=patient_id,
+                limit=limit,
+                boundary=boundary,
             )
-            .limit(limit + 1)
-        )
-        if boundary is not None:
-            statement = statement.where(_before(boundary))
-        rows = list(session.exec(statement).all())
+        batch.send(session)
+        if patient_id not in patient.value:
+            _audit(
+                session,
+                action=RECORD_READ_ACTION,
+                result="DENIED",
+                payload={"patient_id": str(patient_id)},
+                reason=AUTHZ_DENIED_CROSS_TENANT,
+            )
+            return TimelineOutcome(status=STATUS_NOT_FOUND)
+        if refused_cursor is not None:
+            raise refused_cursor
+        assert timeline is not None, "the page is read whenever the cursor decodes"
 
+        rows = timeline.records.value
         has_more = len(rows) > limit
         page_rows = rows[:limit]
-        # One second query for the current versions of the page, rather than a join per record: the
-        # timeline is bounded by `limit`, so this is a single index lookup on the unique constraint.
         current_versions = {
             (row.clinical_record_id, row.version): row
-            for row in session.exec(
-                select(ClinicalRecordVersion).where(
-                    ClinicalRecordVersion.tenant_id == tenant_id,
-                    col(ClinicalRecordVersion.clinical_record_id).in_(
-                        [record.id for record in page_rows]
-                    ),
-                )
-            ).all()
+            for row in timeline.current_versions.value
         }
         _audit(
             session,
@@ -633,12 +642,71 @@ def list_timeline(
             status=STATUS_OK,
             page=ClinicalRecordsPublic(
                 data=page,
-                count=count,
+                count=timeline.count.value,
                 next_cursor=(
                     encode_cursor(page_rows[-1]) if has_more and page_rows else None
                 ),
             ),
         )
+
+
+@dataclass(frozen=True)
+class _TimelineReads:
+    count: Pending[int]
+    records: Pending[list[ClinicalRecord]]
+    current_versions: Pending[list[ClinicalRecordVersion]]
+
+
+def _queue_timeline(
+    batch: ReadBatch,
+    *,
+    tenant_id: uuid.UUID,
+    patient_id: uuid.UUID,
+    limit: int,
+    boundary: tuple[datetime, uuid.UUID] | None,
+) -> _TimelineReads:
+    """The patient's live record total, one page of records, and the page's current versions.
+
+    Three independent statements for one flight. The versions are selected by the page's own
+    `(id, current_version)` pairs, a single index lookup on the unique constraint, rather than one
+    query per record.
+    """
+    scope = [
+        col(ClinicalRecord.tenant_id) == tenant_id,
+        col(ClinicalRecord.patient_id) == patient_id,
+        col(ClinicalRecord.deleted_at).is_(None),
+    ]
+    on_page = [*scope] if boundary is None else [*scope, _before(boundary)]
+    newest_first = (
+        col(ClinicalRecord.created_at).desc(),
+        col(ClinicalRecord.id).desc(),
+    )
+    page_keys = (
+        select(col(ClinicalRecord.id), col(ClinicalRecord.current_version))
+        .where(*on_page)
+        .order_by(*newest_first)
+        .limit(limit + 1)
+    )
+    return _TimelineReads(
+        count=batch.scalars(
+            select(func.count()).select_from(ClinicalRecord).where(*scope)
+        ).then(lambda found: found[0]),
+        records=batch.scalars(
+            select(ClinicalRecord)
+            .where(*on_page)
+            .order_by(*newest_first)
+            .limit(limit + 1)
+        ),
+        current_versions=batch.scalars(
+            select(ClinicalRecordVersion).where(
+                col(ClinicalRecordVersion.tenant_id) == tenant_id,
+                tuple_(
+                    col(ClinicalRecordVersion.clinical_record_id),
+                    col(ClinicalRecordVersion.version),
+                ).in_(page_keys),
+            )
+        ),
+    )
 
 
 def append_version(

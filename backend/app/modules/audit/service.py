@@ -43,6 +43,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from sqlmodel import Session, col, select, text
 
 from app.core.config import settings
+from app.core.db import driver_sql, run_pipelined
 from app.modules.audit.actions import (
     ACTIONS,
     PAYLOAD_ALLOW_LIST,
@@ -192,6 +193,18 @@ def compute_hash(entry: AuditLogEntry) -> str:
     ).hexdigest()
 
 
+_CHAIN_LOCK_SQL: Final = driver_sql(
+    text("SELECT pg_advisory_xact_lock(:class_id, :key)")
+)
+#: The head of one tenant's chain: the newest row by the primary key's order.
+_CHAIN_HEAD_SQL: Final = driver_sql(
+    text(
+        "SELECT hash FROM audit_log WHERE tenant_id = :tenant_id"
+        " ORDER BY timestamp DESC, event_id DESC LIMIT 1"
+    )
+)
+
+
 def _chain_lock_key(tenant_id: uuid.UUID) -> int:
     """The advisory-lock key for one tenant's chain, derived from the tenant id.
 
@@ -203,28 +216,23 @@ def _chain_lock_key(tenant_id: uuid.UUID) -> int:
     return int.from_bytes(digest[:4], "big") % (2**31)
 
 
-def _session_setting(session: Session, key: str) -> str | None:
-    """Read a `SET LOCAL` setting on the session's current transaction."""
-    value = (
-        session.connection()
-        .execute(text("SELECT current_setting(:key, true)"), {"key": key})
-        .scalar()
-    )
-    return None if value in (None, "") else str(value)
-
-
 def tenant_of(session: Session) -> uuid.UUID:
-    """The tenant `app.tenant_id` names on this session, or a refusal.
+    """The tenant this session's transaction was opened for, or a refusal.
 
     Public because [`record`][app.modules.audit.service.record] is not the only function that has to
     read the tenant from the transaction rather than take it as a parameter: the read API and the
     export do too, and *"the tenant is resolved, never supplied"* (INV-1) has to hold for every one of
     them. Refuses rather than guessing.
+
+    `app.core.db.tenant_transaction` records the tenant on the session at the same moment, and from
+    the same value, as it sets `app.tenant_id` on the transaction, so this reads the session's record
+    rather than asking the database again: the answer is identical and costs no round trip. A
+    session that was not opened by `tenant_transaction` has no record and is refused.
     """
-    raw = _session_setting(session, "app.tenant_id")
+    raw = _session_info(session, "tenant_id")
     if raw is None:
         raise AuditContextRequired(
-            "no app.tenant_id on this session; use app.core.db.tenant_transaction"
+            "no tenant context on this session; use app.core.db.tenant_transaction"
         )
     return uuid.UUID(raw)
 
@@ -332,20 +340,22 @@ def record(session: Session, event: AuditEvent) -> AuditLogEntry:
     # concurrent writers read the same `prev_hash` and insert two rows chaining to the same
     # predecessor: a fork, which verification reports as a break even though nothing was tampered
     # with. The lock is `xact`-scoped, so `COMMIT`/`ROLLBACK` releases it.
-    session.connection().execute(
-        text("SELECT pg_advisory_xact_lock(:class_id, :key)"),
-        {"class_id": _CHAIN_LOCK_CLASS, "key": _chain_lock_key(tenant_id)},
+    #
+    # The lock and the read of the head travel in one flight (`run_pipelined`), but they remain two
+    # statements: the read takes its snapshot only once the lock is held, so it always sees the
+    # head the previous writer committed. One statement holding both would read a snapshot taken
+    # before the wait and could fork the chain.
+    _, head = run_pipelined(
+        session,
+        [
+            (
+                _CHAIN_LOCK_SQL,
+                {"class_id": _CHAIN_LOCK_CLASS, "key": _chain_lock_key(tenant_id)},
+            ),
+            (_CHAIN_HEAD_SQL, {"tenant_id": tenant_id}),
+        ],
     )
-
-    previous = session.exec(
-        select(AuditLogEntry)
-        .where(AuditLogEntry.tenant_id == tenant_id)
-        .order_by(
-            col(AuditLogEntry.timestamp).desc(), col(AuditLogEntry.event_id).desc()
-        )
-        .limit(1)
-    ).first()
-    prev_hash = GENESIS_HASH if previous is None else previous.hash
+    prev_hash = GENESIS_HASH if not head else str(head[0][0])
 
     entry = _entry(
         event,

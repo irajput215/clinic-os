@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test"
+import type { Page, Response } from "@playwright/test"
 import { expect, test } from "./fixtures"
 
 /**
@@ -81,4 +81,65 @@ test("Today paints its largest content within budget", async ({
   ).toBeVisible()
 
   expect(await largestContentfulPaint(page)).toBeLessThan(LCP_BUDGET_MS)
+})
+
+/**
+ * Origin budgets, read from the app's own `Server-Timing` header (`app` = edge middleware to
+ * response start, measured in the backend process): readiness under 50 ms, and each API call the
+ * Today, patients, approvals, scripts and calendar screens make under 150 ms
+ * (docs/reference/performance.md). Each screen is opened twice and the second, warm load counted,
+ * so a process's first-request start-up is not mistaken for the steady state.
+ */
+const READY_BUDGET_MS = 50
+const SCREEN_API_BUDGET_MS = 150
+const SCREENS = ["/", "/patients", "/approvals", "/scripts", "/calendar"]
+const SCREEN_APIS =
+  /\/api\/v1\/(dashboard\/today|patients|tga-approvals|prescriptions|appointments)(\?|$)/
+
+function appTiming(header: string | undefined): number | undefined {
+  const match = header?.match(/(?:^|, )app;dur=([\d.]+)/)
+  return match ? Number(match[1]) : undefined
+}
+
+test("readiness answers within its origin budget", async ({ request }) => {
+  await request.get("/api/v1/health/ready/")
+  const response = await request.get("/api/v1/health/ready/")
+  expect(response.ok()).toBe(true)
+  const app = appTiming(response.headers()["server-timing"])
+  expect(app, "readiness sends Server-Timing").toBeDefined()
+  expect(app).toBeLessThan(READY_BUDGET_MS)
+})
+
+test("every screen's API calls answer within the origin budget", async ({
+  signedIn: page,
+}) => {
+  for (const screen of SCREENS) {
+    await page.goto(screen)
+    await page.waitForLoadState("networkidle")
+
+    const timings: { url: string; app: number }[] = []
+    const record = (response: Response) => {
+      if (!SCREEN_APIS.test(`${new URL(response.url()).pathname}?`)) return
+      const app = appTiming(response.headers()["server-timing"])
+      if (app !== undefined) timings.push({ url: response.url(), app })
+    }
+    page.on("response", record)
+    await page.reload()
+    await page.waitForLoadState("networkidle")
+    page.off("response", record)
+
+    expect(
+      timings.length,
+      `${screen} made a measured API call`,
+    ).toBeGreaterThan(0)
+    for (const { url, app } of timings) {
+      test.info().annotations.push({
+        type: "Server-Timing app",
+        description: `${new URL(url).pathname}: ${app} ms`,
+      })
+      expect(app, `${new URL(url).pathname} on ${screen}`).toBeLessThan(
+        SCREEN_API_BUDGET_MS,
+      )
+    }
+  }
 })

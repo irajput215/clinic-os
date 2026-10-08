@@ -15,15 +15,18 @@ import hashlib
 import re
 import secrets
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from itertools import islice
-from typing import Final
+from typing import Any, Final
 
 from sqlalchemy import func, insert, text, update
+from sqlalchemy import inspect as sa_inspect
+from sqlalchemy import select as sa_select
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, select
+from sqlalchemy.orm import make_transient_to_detached
+from sqlmodel import Session, col, select
 
-from app.core.db import tenant_transaction
+from app.core.db import driver_statement, tenant_transaction
 from app.core.security import verify_password
 from app.crud import DUMMY_HASH
 from app.models import User
@@ -94,6 +97,48 @@ def tenant_is_active(session: Session, *, tenant_id: uuid.UUID) -> bool:
     """
     tenant = session.get(Tenant, tenant_id)
     return tenant is not None and is_active_status(tenant.status)
+
+
+_ACCOUNT_COLUMNS: Final = tuple(sa_inspect(User).local_table.columns)
+
+
+def session_account_statement(user_id: uuid.UUID) -> tuple[str, dict[str, Any]]:
+    """The read of a session's account and its organisation's status, as one driver statement.
+
+    Every authenticated request starts here, so the account and its tenant are one read rather than
+    two, and it is pipelined with the request's actor resolution (`app.api.deps`). The tenant is the
+    account row's own, joined on the server: nothing from the request is read (INV-1).
+    """
+    return driver_statement(
+        sa_select(*_ACCOUNT_COLUMNS, col(Tenant.status))
+        .outerjoin(Tenant, col(Tenant.id) == col(User.tenant_id))
+        .where(col(User.id) == user_id)
+    )
+
+
+def session_account_from_rows(
+    rows: Sequence[Sequence[Any]],
+) -> tuple[User, bool] | None:
+    """The account `session_account_statement` read, and whether its organisation may transact.
+
+    `None` when the account does not exist. The account is returned detached, as if loaded and its
+    session closed, so a route that changes it attaches it to its own session and updates it.
+
+    The flag follows `tenant_is_active`: an account with no organisation has no status to enforce
+    (the platform administrator), and an organisation row that cannot be read is refused exactly as a
+    non-`ACTIVE` one is.
+    """
+    if not rows:
+        return None
+    *values, status = rows[0]
+    user = User(
+        **{
+            column.key: value
+            for column, value in zip(_ACCOUNT_COLUMNS, values, strict=True)
+        }
+    )
+    make_transient_to_detached(user)
+    return user, user.tenant_id is None or is_active_status(status)
 
 
 def tenant_display_name(session: Session, *, tenant_id: uuid.UUID) -> str | None:

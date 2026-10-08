@@ -91,12 +91,141 @@ Measured against the local PostgreSQL with the instrumentation above, before any
 Every round trip costs the full app-to-database latency. At 1 ms that is invisible; at the latency
 the readiness probe implies in production it dominates every screen.
 
+### Production, measured at the origin (Measure Production, 2026-10-08 11:36 UTC, 3A deployed)
+
+`scripts/measure-production.py`, 20 samples each, median / p90 / max, from a GitHub runner. The
+`upstream` and `Server-Timing` columns do not depend on where the runner is.
+
+| Request | upstream ms | app ms | db ms | db-connect ms | db round trips |
+|---|---|---|---|---|---|
+| readiness, first call after idle | 3932 | 3930 | 2597 | 1330 | 12 |
+| liveness (no database) | 2 / 3 / 3 | - | - | - | - |
+| readiness, sequential | 867 / 871 / 873 | 865 / 866 / 870 | 864 / 865 / 869 | 0 / 0 / 0 | 4 / 4 / 4 |
+| readiness, 5 concurrent | 878 / 2012 / 2054 | 875 / 2008 / 2052 | 867 / 888 / 892 | 0 / 1324 / 1348 | 4 / 4 / 4 |
+
+Static files at the same time: hashed `/assets/*` answered `cache-control: public, max-age=14400`,
+the app's HTML had no `cache-control`, and two small chunks were sent uncompressed.
+
+**What these numbers say.** Warm readiness spends 864 ms on four round trips with **no** connection
+opened: about **216 ms per round trip** between the app and the database. A `SELECT 1` on Neon
+takes well under a millisecond, so this is network distance, not database work. A new connection
+costs 1.33 s (about six round trips: TCP, TLS, startup and SCRAM). Liveness answers a GitHub-hosted
+runner in North America in about 120 ms including a fresh TLS handshake, which puts the app's origin
+in North America too. **The app and the database are not co-located**: the database is in Sydney
+and the app is not.
+
+### The database itself (Neon, read-only inspection, 2026-10-08)
+
+- **Size**: every user table together is 1.8 MB; the largest index is 16 kB. Query execution is not
+  where the time goes: a statement runs in well under a millisecond, the round trip around it costs
+  ~216 ms.
+- **Buffer cache hit ratio** (`pg_statio_user_tables`): 95.9% for tables, 90.0% for indexes, on a
+  compute that suspends after five idle minutes and restarts cold.
+- **Sequential scans** dominate (`user` 377, `permissions` 169, `role_permissions` 157): at this size
+  the planner prefers them and is right to. The indexes reported "unused" (patient name keys, audit
+  partitions) are unused because there is almost no data yet, not because they are wrong; none is
+  dropped.
+- **Slow-query statistics are not available**: `pg_stat_statements` and the `neon` extension are not
+  installed on `neondb`. Installing them writes to the production database, so it is listed as an
+  owner action (section 5) rather than done here.
+- Query plans for the hot reads were checked against the local seeded database instead: each hot
+  read is now one or two statements per flight, all on indexed tenant keys
+  (`tests/performance/test_round_trips.py` pins the counts).
+
 ## 3. Hypotheses
 
-| # | Hypothesis | How it is tested | Verdict |
+| # | Hypothesis | How it was tested | Verdict |
 |---|---|---|---|
-| H1 | Each request opens a new TLS + SCRAM connection (short-lived instances, or several workers with empty pools), so pooled connections are never reused | `db-connect` and `db_connections_opened` / `db_connections_reused` per request; `instance_uptime_s` in the log | pending production numbers |
-| H2 | `pool_pre_ping` adds a round trip to every checkout | local statement log: one `;` ping per checkout | **confirmed** (one round trip per checkout, three per Today request) |
-| H3 | Pooler vs direct endpoint, `sslmode` / channel binding add round trips to a connect | `db-connect` per new connection, compared across hosts | pending production numbers |
-| H4 | Neon autosuspend adds 1-2 s to the first request after about five idle minutes | first readiness call after idle vs warm | pending production numbers |
-| H5 | App and database are not co-located, so each round trip is long | `db` / `db-rt` on warm readiness (no connect) gives the per-round-trip latency | pending production numbers |
+| H1 | Each request opens a new TLS + SCRAM connection, so pooled connections are never reused | `db-connect`, `db_connections_opened` / `db_connections_reused`, 20 sequential readiness calls | **Refuted.** `db-connect` is 0 on every warm call: the instance stays up and its pool is reused. New connections appear only under concurrency beyond the pool's idle connections (5 concurrent: p90 `db-connect` 1324 ms) and after idle |
+| H2 | `pool_pre_ping` adds a round trip to every checkout | local statement log: one `;` ping per checkout; readiness 4 round trips = ping, `BEGIN`, `SELECT 1`, `ROLLBACK` | **Confirmed.** One round trip per checkout, three per Today request, each ~216 ms in production |
+| H3 | Pooler vs direct endpoint, `sslmode` / channel binding add round trips to a connect | `db-connect` per new connection | **Partly confirmed, minor.** A connect is ~6 round trips (1.33 s) whatever the endpoint, because the cost is distance. The pooled (`-pooler`) host would not shorten it. Since warm requests reuse connections, the connect cost matters at start-up, after idle and under bursts; it is addressed by warming the pool and keeping connections alive, not by changing hosts |
+| H4 | Neon autosuspend adds 1-2 s to the first request after about five idle minutes | first readiness call after idle | **Confirmed, and worse:** 2.6 s and 3.9 s observed (compute start plus a new connection at this distance). The Free plan cannot disable scale to zero (Neon API: HTTP 412 "modifying the suspend interval is not permitted on this account") |
+| H5 | App and database are not co-located | `db` / `db-rt` on warm readiness | **Confirmed: ~216 ms per round trip.** This is the dominant cost of every screen, and only the owner can remove it (section 5) |
+
+## 4. What was changed (3B)
+
+Every round trip costs ~216 ms until the app and the database share a region, so the request path
+was rebuilt around round trips:
+
+| Change | Where | Round trips saved |
+|---|---|---|
+| No `pool_pre_ping`; a checkout discards a connection the server closed by checking its socket (no network) | `app/core/db.py` `_refuse_dead_connection` | 1 per checkout |
+| `pool_recycle` 240 s (inside Neon's 5-minute suspend), TCP keepalives, two connections warmed at start-up | `app/core/db.py`, `app/main.py` | the connect (~6) on the first requests after a deploy |
+| The session prelude (account, organisation status, tenant context resolved by the database from the account row, grants, `COMMIT`) is one pipelined flight | `app/api/deps.py` `get_session_account` | from 3 (auth) + 11 (actor) to 1 |
+| `tenant_transaction` sends `BEGIN` and one `set_config` statement for tenant, actor and request in the same flight as the transaction's first statement | `app/core/db.py` `_DeferredContext` | from 4 to 0 per tenant transaction |
+| The audit chain's lock and head read travel in one flight (still two statements, so the head is read after the lock is held) | `app/modules/audit/service.py` `record` | 2 per audited event |
+| Permissions and role codes in one query | `app/modules/users_roles/service.py` | 4 per actor |
+| Readiness outside a transaction | `app/core/health.py` | 2 |
+
+Module work on the same branch then removed per-row lookups and redundant reads:
+
+- `app/core/reads.py` `ReadBatch` queues several SQLAlchemy selects and sends them in one flight,
+  decoded with each column's own result processor. `Lockstep` runs the Today page's three sections
+  through their own modules' facades, with the n-th step of every section sharing one flight.
+- The script queue's gate column was one read per prescription; it is one batched read with the
+  same decision matrix. The locked `gate.decide` used when signing and dispatching is unchanged.
+- Display names are read on the caller's transaction instead of a transaction of their own.
+- Today reads its date and day bounds in one statement.
+- Lists read their page and total in one statement or one flight.
+
+Round trips per request, local and measured with the instrumentation above. "Seeded" is a clinic
+with 3 staff, 25 patients, 15 appointments today, 10 approvals and 10 scripts; the final counts are
+pinned in `tests/performance/test_round_trips.py`, each with its breakdown. "Core only" is this
+branch after the core changes and before the module work.
+
+| Request | `main` before M3 (empty clinic) | Core only (seeded) | After (seeded) | After (empty) |
+|---|---|---|---|---|
+| `GET /health/ready/` | 4 | 1 | **1** | **1** |
+| `GET /users/me` | 4 | 1 | **1** | **1** |
+| `GET /users/me/permissions` | 15 | 1 | **1** | **1** |
+| `GET /dashboard/today` | 35 | 32 | **7** | **6** |
+| `GET /patients` | 16 | 6 | **5** | **5** |
+| `POST /patients/search` | not measured | 6 | **5** | **5** |
+| `GET /tga-approvals` | 29 | 9 | **7** | **6** |
+| `GET /prescriptions` | 21 | 17 | **4** | **3** |
+| `GET /appointments` (one week) | 21 | 4 | **4** | **3** |
+| `GET /users/staff` | 24 | 6 | **3** | **3** |
+| `GET /roles` | not measured | 11 | **3** | **3** |
+| `GET /practitioners` | 22 | 5 | **3** | **3** |
+
+"Core only" on a seeded clinic shows what the per-row lookups cost once there is data (Today 32,
+scripts 17): the empty-clinic counts hid them. A read above three round trips is an audited read
+(the audit event costs two: the chain lock with the head read, then the insert) or a read whose
+second step depends on the first (names for the page's ids).
+
+At ~216 ms per round trip, Today goes from about 7.6 s of database waiting (35 round trips) to about
+1.5 s (7); at a co-located ~1 ms it would be single-digit milliseconds either way.
+
+Recovery from a dropped connection is proven by `tests/core/test_pool_and_pipeline.py`, which kills
+pooled connections with `pg_terminate_backend` and requires the next request to succeed (it fails
+with `OperationalError` when the checkout check is removed). Tenant isolation over a shared pooled
+connection, including a failed first statement and an empty transaction, is proven in the same file;
+`SET LOCAL` semantics are unchanged and no session-level `SET` exists. Round trips are pinned per
+hot endpoint in `tests/performance/test_round_trips.py`.
+
+## 5. Owner actions
+
+1. **Co-locate the app and the database (the decisive fix).** Run the FastAPI Cloud app in an
+   Australian region next to Neon `aws-ap-southeast-2` (Sydney). This removes ~216 ms from every
+   round trip; nothing in code can. If FastAPI Cloud cannot run the app in Australia, the
+   alternatives are hosting the app elsewhere in Sydney, or moving the database next to the app,
+   which would move health information offshore and needs a privacy decision first (APP 8,
+   **REQUIRES LEGAL/REGULATORY VALIDATION**). Note that today the app already processes health
+   information in North America on every request, which is itself an APP 8 question for the owner.
+2. **Neon scale to zero.** The Free plan suspends after 5 minutes and cannot be changed. On the
+   Launch plan scale to zero can be disabled; an always-on 0.25 CU compute is
+   0.25 CU x ~730 h = ~182.5 CU-hours a month, at $0.106 per CU-hour about **US$19.35 a month**
+   (plus storage at $0.35/GB-month), more when autoscaling above 0.25 CU. Neon console: Project
+   `clinic-os` > Branches > main > Compute > Edit > Scale to zero: off.
+3. **Probe account for authenticated production timing** (optional). Add repository secrets
+   `PROBE_EMAIL` and `PROBE_PASSWORD` (a new address and a strong password); Measure Production then
+   registers one clinic named "Performance probe (synthetic, no patients)" on first use and times the
+   authenticated reads after every deploy.
+4. **Query statistics** (optional): enable `pg_stat_statements` on `neondb` from the Neon console SQL
+   editor (`CREATE EXTENSION IF NOT EXISTS pg_stat_statements;`) so slow-query statistics exist when
+   real traffic arrives. It writes to the production database, so it was not done from here.
+5. **`DATABASE_URL` host**: no change needed. The direct (non-pooler) host is fine: warm requests reuse
+   pooled connections, and transaction-scoped context works on either host. If the owner switches to
+   the pooled host for connection limits, the value shape is
+   `postgresql://<role>:<password>@ep-blue-truth-a7e0s0il-pooler.ap-southeast-2.aws.neon.tech/<db>?sslmode=require`;
+   the app is compatible (every tenant setting is `set_config(..., true)` inside the transaction).
