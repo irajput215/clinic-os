@@ -139,6 +139,45 @@ was rebuilt around round trips:
 | Permissions and role codes in one query | `app/modules/users_roles/service.py` | 4 per actor |
 | Readiness outside a transaction | `app/core/health.py` | 2 |
 
+Module work on the same branch then removed per-row lookups and redundant reads:
+
+- `app/core/reads.py` `ReadBatch` queues several SQLAlchemy selects and sends them in one flight,
+  decoded with each column's own result processor. `Lockstep` runs the Today page's three sections
+  through their own modules' facades, with the n-th step of every section sharing one flight.
+- The script queue's gate column was one read per prescription; it is one batched read with the
+  same decision matrix. The locked `gate.decide` used when signing and dispatching is unchanged.
+- Display names are read on the caller's transaction instead of a transaction of their own.
+- Today reads its date and day bounds in one statement.
+- Lists read their page and total in one statement or one flight.
+
+Round trips per request, local and measured with the instrumentation above. "Seeded" is a clinic
+with 3 staff, 25 patients, 15 appointments today, 10 approvals and 10 scripts; the final counts are
+pinned in `tests/performance/test_round_trips.py`, each with its breakdown. "Core only" is this
+branch after the core changes and before the module work.
+
+| Request | `main` before M3 (empty clinic) | Core only (seeded) | After (seeded) | After (empty) |
+|---|---|---|---|---|
+| `GET /health/ready/` | 4 | 1 | **1** | **1** |
+| `GET /users/me` | 4 | 1 | **1** | **1** |
+| `GET /users/me/permissions` | 15 | 1 | **1** | **1** |
+| `GET /dashboard/today` | 35 | 32 | **7** | **6** |
+| `GET /patients` | 16 | 6 | **5** | **5** |
+| `POST /patients/search` | not measured | 6 | **5** | **5** |
+| `GET /tga-approvals` | 29 | 9 | **7** | **6** |
+| `GET /prescriptions` | 21 | 17 | **4** | **3** |
+| `GET /appointments` (one week) | 21 | 4 | **4** | **3** |
+| `GET /users/staff` | 24 | 6 | **3** | **3** |
+| `GET /roles` | not measured | 11 | **3** | **3** |
+| `GET /practitioners` | 22 | 5 | **3** | **3** |
+
+"Core only" on a seeded clinic shows what the per-row lookups cost once there is data (Today 32,
+scripts 17): the empty-clinic counts hid them. A read above three round trips is an audited read
+(the audit event costs two: the chain lock with the head read, then the insert) or a read whose
+second step depends on the first (names for the page's ids).
+
+At ~216 ms per round trip, Today goes from about 7.6 s of database waiting (35 round trips) to about
+1.5 s (7); at a co-located ~1 ms it would be single-digit milliseconds either way.
+
 Recovery from a dropped connection is proven by `tests/core/test_pool_and_pipeline.py`, which kills
 pooled connections with `pg_terminate_backend` and requires the next request to succeed (it fails
 with `OperationalError` when the checkout check is removed). Tenant isolation over a shared pooled
