@@ -40,6 +40,7 @@ import {
   formatTime,
   patientRef,
 } from "@/lib/format"
+import { CareTeamCard } from "./CareTeamCard"
 import { NotesTab } from "./NotesTab"
 import { PatientFormDialog } from "./PatientFormDialog"
 import { PATIENT_TAB_KEYS, PATIENT_TABS, type PatientTab } from "./tabs"
@@ -228,6 +229,7 @@ function OverviewTab({ patientId }: { patientId: string }) {
             </ul>
           )}
         </Card>
+        <CareTeamCard patientId={patientId} />
       </div>
     </div>
   )

@@ -1,9 +1,14 @@
-import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query"
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useQuery,
+} from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
 import { Plus, Search } from "lucide-react"
 import { useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { patientName, patientPagesQuery, useSearchTerm } from "@/data/patients"
+import { myPermissionsQuery } from "@/data/permissions"
 import {
   Card,
   EmptyState,
@@ -26,6 +31,12 @@ export function PatientsPage() {
     placeholderData: keepPreviousData,
   })
   const [adding, setAdding] = useState(false)
+  // A doctor's or nurse's list holds only the patients whose care team they are on (T1-34): say so,
+  // rather than let an empty list read as an empty practice.
+  const { data: permissions } = useQuery(myPermissionsQuery)
+  const careBound =
+    permissions?.known === true &&
+    permissions.relationshipBound.includes("patient:read")
 
   const rows = useMemo(
     () => patients.data?.pages.flatMap((page) => page.data) ?? [],
@@ -40,7 +51,11 @@ export function PatientsPage() {
     <>
       <PageHeader
         title="Patients"
-        subtitle="Everyone your practice cares for. Open a record for consult notes, TGA approvals, scripts and history."
+        subtitle={
+          careBound
+            ? "The patients whose care team you are on. Open a record for consult notes, TGA approvals, scripts and history."
+            : "Everyone your practice cares for. Open a record for consult notes, TGA approvals, scripts and history."
+        }
         actions={
           <Button onClick={() => setAdding(true)}>
             <Plus /> Add patient
@@ -93,15 +108,21 @@ export function PatientsPage() {
         ) : rows.length === 0 ? (
           <EmptyState
             title={
-              searching ? "No patients match that search." : "No patients yet."
+              searching
+                ? "No patients match that search."
+                : careBound
+                  ? "You are not on any patient's care team yet."
+                  : "No patients yet."
             }
             body={
               searching
                 ? "Search by the start of a name, a date of birth (14/03/1980) or a PT- reference."
-                : "Add your first patient to start booking and prescribing."
+                : careBound
+                  ? "Ask your practice manager to add you to a patient's care team."
+                  : "Add your first patient to start booking and prescribing."
             }
             action={
-              searching ? null : (
+              searching || careBound ? null : (
                 <Button size="sm" onClick={() => setAdding(true)}>
                   <Plus /> Add patient
                 </Button>

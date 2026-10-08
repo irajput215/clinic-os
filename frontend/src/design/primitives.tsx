@@ -2,7 +2,12 @@ import { Link, type LinkProps } from "@tanstack/react-router"
 import { Lock, TriangleAlert } from "lucide-react"
 import { type ReactNode, useEffect, useId, useRef } from "react"
 import { Button } from "@/components/ui/button"
-import { apiRequestId, describeError, isForbidden } from "@/lib/http"
+import {
+  apiRequestId,
+  describeError,
+  isCareRelationshipDenied,
+  isForbidden,
+} from "@/lib/http"
 import { cn } from "@/lib/utils"
 
 /** Serif page title, muted one-line subtitle, actions on the right, hairline below. */
@@ -234,6 +239,27 @@ export function NotForYourRole() {
   )
 }
 
+/**
+ * The treating-relationship refusal (T1-34): this clinician is not on the patient's care team. Says
+ * what to do next, and nothing about the record itself.
+ */
+export function NoCareRelationship() {
+  return (
+    <div
+      data-testid="no-care-relationship"
+      className="flex items-start gap-3 rounded-inner border border-line bg-oat px-4 py-3.5 text-sm text-stone"
+    >
+      <Lock className="mt-0.5 size-4 shrink-0" />
+      <p>
+        <span className="font-semibold text-ink">
+          You have no care relationship with this patient.
+        </span>{" "}
+        Ask your practice manager to add you to their care team.
+      </p>
+    </div>
+  )
+}
+
 /** A failed read: `403` explains the role boundary, anything else offers a retry. */
 export function ErrorState({
   error,
@@ -242,6 +268,7 @@ export function ErrorState({
   error: unknown
   onRetry?: () => void
 }) {
+  if (isCareRelationshipDenied(error)) return <NoCareRelationship />
   if (isForbidden(error)) return <NotForYourRole />
   return (
     <div className="flex items-start justify-between gap-3 rounded-inner border border-danger/25 bg-danger-tint px-4 py-3.5 text-sm text-danger-deep">
