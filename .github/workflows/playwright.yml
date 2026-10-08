@@ -116,6 +116,16 @@ jobs:
         path: frontend/blob-report
         include-hidden-files: true
         retention-days: 1
+    # The layout spec's full-page screenshot of every screen at every width (tests/layout.spec.ts),
+    # kept for passing runs too, so a reviewer can look at a change on a phone without running it.
+    - name: Upload layout screenshots
+      if: ${{ always() }}
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: layout-screenshots-${{ matrix.shardIndex }}
+        path: frontend/test-results/layout
+        if-no-files-found: ignore
+        retention-days: 14
 
   merge-playwright-reports:
     needs:
