@@ -12,6 +12,7 @@ from app.core.errors import install_exception_handlers
 from app.core.logging import configure_logging
 from app.core.security_headers import SecurityHeadersMiddleware
 from app.core.server_timing import ServerTimingMiddleware
+from app.core.static_cache import StaticCacheMiddleware
 
 FRONTEND_DIR = Path(__file__).parent / "frontend"
 
@@ -35,6 +36,9 @@ app = FastAPI(
 )
 
 install_exception_handlers(app)
+
+# Innermost: caching and precompressed variants for the built app (`app/core/static_cache.py`).
+app.add_middleware(StaticCacheMiddleware, directory=FRONTEND_DIR, api_prefix="/api")
 
 app.add_middleware(
     CORSMiddleware,
