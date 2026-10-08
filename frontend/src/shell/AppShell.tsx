@@ -8,7 +8,7 @@ import {
 } from "@tanstack/react-router"
 import { ArrowLeft, ArrowRight, Menu, X } from "lucide-react"
 import { useEffect, useState } from "react"
-import { approvalsQuery } from "@/data/approvals"
+import { approvalCountsQuery } from "@/data/approvals"
 import { useCanAdminister } from "@/data/permissions"
 import { resetPreview } from "@/data/preview/store"
 import { isActionable, scriptsQuery } from "@/data/scripts"
@@ -22,10 +22,10 @@ import { type CountKey, NAV } from "./nav"
 
 function useNavCounts(): Record<CountKey, number | undefined> {
   const scripts = useQuery({ ...scriptsQuery, retry: false })
-  const approvals = useQuery({ ...approvalsQuery, retry: false })
+  const approvals = useQuery({ ...approvalCountsQuery, retry: false })
   return {
     scripts: scripts.data?.filter((s) => isActionable(s.state)).length,
-    approvals: approvals.data?.filter((a) => a.state === "PENDING").length,
+    approvals: approvals.data?.by_state.PENDING,
   }
 }
 

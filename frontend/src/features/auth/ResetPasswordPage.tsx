@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form"
 import { Button } from "@/components/ui/button"
 import { resetPassword } from "@/data/account"
 import { Field } from "@/design/primitives"
+import { focusFirstError } from "@/lib/form"
 import {
   apiErrorMessage,
   describeError,
@@ -74,6 +75,7 @@ function ResetPasswordForm({ token }: { token: string }) {
   const [done, setDone] = useState(false)
   const titleRef = useRef<HTMLHeadingElement>(null)
   const form = useForm<Values>({
+    shouldFocusError: false,
     resolver: zodResolver(schema),
     defaultValues: { new_password: "", confirm_password: "" },
   })
@@ -95,7 +97,7 @@ function ResetPasswordForm({ token }: { token: string }) {
       const message = validationMessages(error).new_password
       if (message) form.setError("new_password", { message })
     }
-  })
+  }, focusFirstError)
 
   if (done)
     return (

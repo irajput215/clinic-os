@@ -26,6 +26,7 @@ import {
   type Script,
 } from "@/data/types"
 import { ErrorState, Field, Mono } from "@/design/primitives"
+import { focusFirstError } from "@/lib/form"
 import { clinicToday, formatDate, lastCoveredDay } from "@/lib/format"
 import { describeError, httpStatus } from "@/lib/http"
 import { currentUserQuery, signIn } from "@/lib/session"
@@ -155,6 +156,7 @@ function StageScriptFields({
     date_of_service: clinicToday(),
   }
   const form = useForm<FormIn, unknown, FormOut>({
+    shouldFocusError: false,
     resolver: zodResolver(schema),
     defaultValues: defaults,
   })
@@ -189,7 +191,7 @@ function StageScriptFields({
 
   return (
     <form
-      onSubmit={form.handleSubmit((v) => stage.mutate(v))}
+      onSubmit={form.handleSubmit((v) => stage.mutate(v), focusFirstError)}
       noValidate
       className="grid gap-4"
     >

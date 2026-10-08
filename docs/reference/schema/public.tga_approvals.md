@@ -72,6 +72,7 @@
 
 | Name | Definition |
 | ---- | ---------- |
+| ix_tga_approvals_tenant_created | CREATE INDEX ix_tga_approvals_tenant_created ON public.tga_approvals USING btree (tenant_id, created_at, id) |
 | ix_tga_approvals_tenant_patient_created | CREATE INDEX ix_tga_approvals_tenant_patient_created ON public.tga_approvals USING btree (tenant_id, patient_id, created_at, id) |
 | ix_tga_approvals_tenant_patient_state | CREATE INDEX ix_tga_approvals_tenant_patient_state ON public.tga_approvals USING btree (tenant_id, patient_id, state) |
 | ix_tga_approvals_tenant_state_valid_to | CREATE INDEX ix_tga_approvals_tenant_state_valid_to ON public.tga_approvals USING btree (tenant_id, state, valid_to) |

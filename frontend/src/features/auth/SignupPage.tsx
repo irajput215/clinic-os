@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { registerOrganisation } from "@/data/account"
 import { resetPreview } from "@/data/preview/store"
 import { Field } from "@/design/primitives"
+import { focusFirstError } from "@/lib/form"
 import { describeError, httpStatus, validationMessages } from "@/lib/http"
 import { signIn } from "@/lib/session"
 import { z } from "@/lib/zod"
@@ -81,6 +82,7 @@ export function SignupPage() {
   const [registered, setRegistered] = useState(false)
   const titleRef = useRef<HTMLHeadingElement>(null)
   const form = useForm<Values>({
+    shouldFocusError: false,
     resolver: zodResolver(schema),
     defaultValues: {
       clinic_name: "",
@@ -115,7 +117,7 @@ export function SignupPage() {
     } catch {
       setRegistered(true)
     }
-  })
+  }, focusFirstError)
 
   const refuse = (error: unknown) => {
     const status = httpStatus(error)

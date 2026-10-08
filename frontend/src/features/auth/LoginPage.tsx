@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form"
 import { Button } from "@/components/ui/button"
 import { resetPreview } from "@/data/preview/store"
 import { Field } from "@/design/primitives"
+import { focusFirstError } from "@/lib/form"
 import { describeError, httpStatus } from "@/lib/http"
 import { signIn } from "@/lib/session"
 import { cn } from "@/lib/utils"
@@ -30,6 +31,7 @@ export function LoginPage({ redirectTo }: { redirectTo: string }) {
   const queryClient = useQueryClient()
   const [failure, setFailure] = useState<string | null>(null)
   const form = useForm<Values>({
+    shouldFocusError: false,
     resolver: zodResolver(schema),
     defaultValues: { username: "", password: "" },
   })
@@ -53,7 +55,7 @@ export function LoginPage({ redirectTo }: { redirectTo: string }) {
       form.setValue("password", "")
       form.setFocus("password")
     }
-  })
+  }, focusFirstError)
 
   return (
     <AuthLayout>

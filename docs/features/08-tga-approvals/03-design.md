@@ -83,6 +83,7 @@ Once an approval reaches `active` status:
 | Method and path | Permission | Notes |
 | --- | --- | --- |
 | `POST /api/v1/tga-approvals` | `tga_approval:create` | tenant from session; body has no tenant field |
+| `GET /api/v1/tga-approvals` | `tga_approval:read` | practice-wide register: `state` / `expiring_within_days` selectors, cursor-paginated, practice totals (agreed 2026-10-07, contract in `docs2/sdlc/05-approvals/api.md`) |
 | `GET /api/v1/patients/{patient_id}/tga-approvals` | `tga_approval:read` | list, cursor-paginated |
 | `GET /api/v1/tga-approvals/{id}` | `tga_approval:read` | `404` on cross-tenant |
 | `POST /api/v1/tga-approvals/{id}/verify` | `tga_approval:verify` | step-up; verifier differs from creator |

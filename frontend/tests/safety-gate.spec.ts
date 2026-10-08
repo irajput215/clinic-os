@@ -38,8 +38,8 @@ test("a script with no covering approval cannot be signed", async ({
   ).toBeDisabled()
 })
 
-// The approvals are the real API's (`tgaApprovals: "api"`), so they are read on the patient's own
-// tab: the practice-wide register needs GET /tga-approvals, which does not exist yet.
+// The approvals are the real API's (`tgaApprovals: "api"`); this one is recorded on the patient's
+// own tab (the register is covered in approvals.spec.ts).
 test("the person who records an approval cannot verify it", async ({
   signedIn: page,
 }) => {
@@ -112,7 +112,7 @@ test("the letter's end date is sent unchanged and is itself not covered", async 
     if (r.method() === "POST" && r.url().endsWith("/api/v1/tga-approvals"))
       sent.push(r.postDataJSON())
   })
-  // Recorded from the register, whose Record approval works while its list is unavailable.
+  // Recorded from the register.
   await page.goto("/approvals")
   await page.getByRole("button", { name: "Record approval" }).click()
   const dialog = page.getByRole("dialog")

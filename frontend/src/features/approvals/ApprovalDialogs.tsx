@@ -25,6 +25,7 @@ import {
 import { patientName, patientsQuery } from "@/data/patients"
 import type { TgaApproval } from "@/data/types"
 import { Field, Mono } from "@/design/primitives"
+import { focusFirstError } from "@/lib/form"
 import { clinicToday, formatDate, lastCoveredDay } from "@/lib/format"
 import { describeError } from "@/lib/http"
 import { z } from "@/lib/zod"
@@ -120,6 +121,7 @@ function RecordApprovalForm({
     valid_to: "",
   }
   const form = useForm<Values>({
+    shouldFocusError: false,
     resolver: zodResolver(schema),
     defaultValues: defaults,
   })
@@ -138,7 +140,7 @@ function RecordApprovalForm({
 
   return (
     <form
-      onSubmit={form.handleSubmit((v) => create.mutate(v))}
+      onSubmit={form.handleSubmit((v) => create.mutate(v), focusFirstError)}
       noValidate
       className="grid gap-4"
     >

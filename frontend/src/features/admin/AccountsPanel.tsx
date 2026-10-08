@@ -66,7 +66,7 @@ export function AccountsPanel({ me }: { me: UserPublic }) {
             }
           />
         ) : (
-          <div className="overflow-x-auto">
+          <div className="relative overflow-x-auto">
             <table className="data-table" data-testid="accounts-table">
               <thead>
                 <tr>

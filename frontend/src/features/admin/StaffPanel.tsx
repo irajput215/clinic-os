@@ -64,7 +64,7 @@ export function StaffPanel({
         ) : staff.data.data.length === 0 ? (
           <EmptyState title="No staff on this page." />
         ) : (
-          <div className="overflow-x-auto">
+          <div className="relative overflow-x-auto">
             <table className="data-table" data-testid="staff-table">
               <thead>
                 <tr>

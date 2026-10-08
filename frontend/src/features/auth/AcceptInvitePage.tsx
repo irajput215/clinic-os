@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { acceptInvitation } from "@/data/account"
 import { resetPreview } from "@/data/preview/store"
 import { Field } from "@/design/primitives"
+import { focusFirstError } from "@/lib/form"
 import {
   describeError,
   httpStatus,
@@ -77,6 +78,7 @@ function AcceptInviteForm({ token }: { token: string }) {
   const [accepted, setAccepted] = useState(false)
   const titleRef = useRef<HTMLHeadingElement>(null)
   const form = useForm<Values>({
+    shouldFocusError: false,
     resolver: zodResolver(schema),
     defaultValues: { new_password: "", confirm_password: "" },
   })
@@ -108,7 +110,7 @@ function AcceptInviteForm({ token }: { token: string }) {
       form.reset()
       setAccepted(true)
     }
-  })
+  }, focusFirstError)
 
   if (accepted)
     return (

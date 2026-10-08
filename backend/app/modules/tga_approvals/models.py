@@ -258,6 +258,15 @@ class TgaApproval(SQLModel, table=True):
             "created_at",
             "id",
         ),
+        # The practice-wide register's page order: the same `(created_at, id)` keyset, without the
+        # patient. The per-patient index above cannot serve it (`patient_id` sits between the
+        # tenant and the sort key), so without this the register would sort the whole tenant.
+        sa.Index(
+            "ix_tga_approvals_tenant_created",
+            "tenant_id",
+            "created_at",
+            "id",
+        ),
     )
 
     id: uuid.UUID = Field(

@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form"
 import { Button } from "@/components/ui/button"
 import { requestPasswordRecovery } from "@/data/account"
 import { Field } from "@/design/primitives"
+import { focusFirstError } from "@/lib/form"
 import { describeError } from "@/lib/http"
 import { z } from "@/lib/zod"
 import {
@@ -35,6 +36,7 @@ export function RecoverPasswordPage() {
   const [sentTo, setSentTo] = useState<string | null>(null)
   const titleRef = useRef<HTMLHeadingElement>(null)
   const form = useForm<Values>({
+    shouldFocusError: false,
     resolver: zodResolver(schema),
     defaultValues: { email: "" },
   })
@@ -53,7 +55,7 @@ export function RecoverPasswordPage() {
     } catch (error) {
       setFailure({ message: describeError(error), error })
     }
-  })
+  }, focusFirstError)
 
   if (sentTo)
     return (
