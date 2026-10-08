@@ -117,7 +117,16 @@ class ReadBatch:
         return result
 
     def rows[TP: tuple[Any, ...]](self, statement: Select[TP]) -> Pending[list[TP]]:
-        """Queue a select of several columns; its rows come back as tuples, decoded by type."""
+        """Queue a select of several columns; its rows come back as tuples, decoded by type.
+
+        Columns only: a mapped class among them would come back as its columns, not as an instance,
+        so it is refused (`scalars` reads one mapped class).
+        """
+        if any(
+            isinstance(inspect(description["expr"], raiseerr=False), Mapper)
+            for description in statement.column_descriptions
+        ):
+            raise TypeError("rows() reads columns; read a mapped class with scalars()")
         return Pending(self._queue(statement, _row_decoder(statement)))
 
     def scalars[T](self, statement: SelectOfScalar[T]) -> Pending[list[T]]:

@@ -170,6 +170,12 @@ def test_a_value_read_before_its_batch_was_sent_raises() -> None:
         _ = result.value
 
 
+def test_a_mapped_class_among_several_columns_is_refused() -> None:
+    """It would come back as loose columns where the type says an instance: refused up front."""
+    with pytest.raises(TypeError):
+        ReadBatch().rows(select(Clinic, Clinic.name))
+
+
 def test_a_batch_is_sent_once() -> None:
     with tenant_transaction(tenant_id=uuid.uuid4()) as session:
         batch = ReadBatch()
