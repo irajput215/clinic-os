@@ -248,6 +248,10 @@ It is idempotent and:
   expects a newer headless-shell revision, points that revision at the installed build (local only;
   never run `playwright install` there).
 
+`./scripts/schema-diagram.sh` runs `tbls` from `ghcr.io`, which some cloud proxies block. Build the
+same pinned version once with `GOBIN=/tmp/tbls go install github.com/k1LoW/tbls@v1.96.1` and run
+`TBLS_BIN=/tmp/tbls/tbls ./scripts/schema-diagram.sh --check` (or without `--check` to regenerate).
+
 If Docker Hub answers `429 Too Many Requests`, configure a registry mirror before starting Docker:
 `echo '{"registry-mirrors":["https://mirror.gcr.io"]}' | sudo tee /etc/docker/daemon.json`.
 
