@@ -17,6 +17,7 @@ errors with `detail.code`. A `tenant_id` in a body or query string is ignored an
 | `POST` | `/api/v1/appointments` | `patient:update` | `{patient_id, practitioner_id, type, starts_at}` (strict; `starts_at` must carry an offset). The server computes `ends_at` from the type. `201 AppointmentRead`. `404 PATIENT_NOT_FOUND` / `404 PRACTITIONER_NOT_FOUND` (absent, another tenant's, or not bookable), `422 TYPE_NOT_OFFERED`, **`409 APPOINTMENT_OVERLAP`** from `EXCLUDE USING gist (tenant_id WITH =, practitioner_id WITH =, during WITH &&) WHERE (status NOT IN ('CANCELLED','NO_SHOW'))`, where `during = tstzrange(starts_at, ends_at, '[)')` is derived by trigger. The message names the practitioner and the clashing time, never the other patient. |
 | `POST` | `/api/v1/appointments/{id}/status` | `patient:update` | `{status}`. `409 ILLEGAL_STATE_TRANSITION` outside R4 (the service refuses first; a trigger enforces the same table). `404 APPOINTMENT_NOT_FOUND`. Audited `appointment.state_change` `{from_state, to_state}`. |
 | `GET` | `/api/v1/patients/{id}/appointments` | `patient:read` | **Added** for the patient record's Appointments tab and Overview card: one patient's bookings, newest first (max 200). `404 PATIENT_NOT_FOUND`. |
+| `GET` | `/api/v1/public/{clinic_slug}` | none | **Added 2026-10-08.** The clinic's PUBLIC display name for the page heading: `{display_name}` only. Same uniform `404 CLINIC_NOT_FOUND`; rate-limited with the slots. Contract: [`01-auth-and-shell/api.md`](../01-auth-and-shell/api.md), "Clinic display name". |
 | `GET` | `/api/v1/public/{clinic_slug}/slots?type=` | none | Rate-limited 60/min per address. Tenant resolved from the slug **server-side**; an unknown, malformed or non-`ACTIVE` clinic is one uniform `404 CLINIC_NOT_FOUND`. `PublicSlot[]` `{practitioner_id, practitioner_name, starts_at, ends_at}` from tomorrow to 14 days out. `practitioner_name` never falls back to an email. |
 | `POST` | `/api/v1/public/{clinic_slug}/bookings` | none | `application/json` only (`415` otherwise; CSRF-safe by construction). Rate-limited 10/min per address and 5/hour per email (keyed HMAC, never the address in clear). Body: `{type, practitioner_id, starts_at, given_name, family_name, date_of_birth, email, phone (AU mobile), consent: true}`, strict. `201 {reference}` (`BK-XXXXXX`), identical whether the patient was new or matched. `422 SLOT_NOT_OFFERED` (not a slot the clinic offers), `422 BOOKING_AGE_NOT_MET` (under 18 in Sydney), **`409 SLOT_TAKEN`**. |
 
@@ -41,9 +42,10 @@ errors with `detail.code`. A `tenant_id` in a body or query string is ignored an
   practitioner and the time (`Dr X is already booked from 09:00 to 09:15.`), not the other patient.
 - **R6.** A public booking is `source = PUBLIC_BOOKING` and appears on the calendar marked "Public
   booking page"; it links to the real patient record it created or matched.
-- **Clinic identity on the public page** is derived from the slug (the only public identity a clinic
-  has: `tenants.legal_name` is CONFIDENTIAL in `01-tenancy-and-clinics/03-design.md`). The slug stays
-  routing only, never an authorisation input: it selects which clinic's free slots are read.
+- **Clinic identity on the public page** is the clinic's PUBLIC `display_name`, set by the Practice
+  Owner (since 2026-10-08; until then it was derived from the slug). `tenants.legal_name` is
+  CONFIDENTIAL (`01-tenancy-and-clinics/03-design.md`) and is never shown. The slug stays routing only,
+  never an authorisation input: it selects which clinic's name and free slots are read.
 - **`docs/features/05-patients/01-requirements.md`** lists "appointments, booking and intake" as out of
   scope for the patients MVP; this feature owns them in their own module and touches `patients` only
   through its service facade.

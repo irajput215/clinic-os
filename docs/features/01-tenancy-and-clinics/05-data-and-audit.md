@@ -34,7 +34,8 @@ HIGHLY_SENSITIVE and SECRET **never** reach a log or an analytics pipeline.
 |---|---|---|---|---|---|
 | `id` | `tenants` | INTERNAL | yes | aggregate only | identifier only |
 | `slug` | `tenants` | INTERNAL | yes | aggregate only | routing only; never an authorisation input |
-| `legal_name` | `tenants` | CONFIDENTIAL | with tenant context | aggregate only | the practice entity |
+| `legal_name` | `tenants` | CONFIDENTIAL | with tenant context | aggregate only | the practice entity; never shown publicly |
+| `display_name` | `tenants` | PUBLIC | yes | yes | the clinic's public name (sidebar, booking page, emails); set by the Practice Owner. Added 2026-10-08 |
 | `status` | `tenants` | INTERNAL | yes | aggregate only | enforced at resolution on every request |
 | `data_region` | `tenants` | INTERNAL | yes | aggregate only | `ap-southeast-2` only in this release |
 | `retention_profile` | `tenants` | CONFIDENTIAL | with tenant context | **never** | named retention schedule |
@@ -57,7 +58,7 @@ requirement, is **REQUIRES LEGAL/REGULATORY VALIDATION** (owner Commercial Lead 
 | Event | Trigger | Key fields (no clinical payload) | Result values |
 |---|---|---|---|
 | `tenant.viewed` | a tenant identity or metadata read | actor, tenant, `resource_type = TENANT`, request ID | `SUCCESS` |
-| `tenant.config_changed` | a security setting change with step-up | actor, tenant, `changed_fields` (names only), step-up flag | `SUCCESS`, `DENIED` |
+| `tenant.config_changed` | a security setting change with step-up; **and** (since 2026-10-08) a non-security tenant setting change - the display name - with `step_up: false` | actor, tenant, `changed_fields` (names only), step-up flag | `SUCCESS`, `DENIED` |
 | `clinic.created` | a clinic created inside a tenant | actor, tenant, clinic ID | `SUCCESS`, `DENIED` |
 | `clinic.updated` | a clinic renamed or edited | actor, tenant, clinic ID, `changed_fields` (names only) | `SUCCESS`, `DENIED` |
 | `TENANT_CROSS_ACCESS_ATTEMPT` | a client-supplied `tenant_id` is dropped, or a cross-tenant resource is addressed | actor, resolved tenant, attempted action, `reason`, `source_ip`, request ID | `DENIED` |

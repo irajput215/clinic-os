@@ -20,6 +20,7 @@ backstop below the application filter. (`05-tenant-isolation.md` §1–§2; `21-
 | `id` | uuid | no | PK, `gen_random_uuid()` | INTERNAL |
 | `slug` | text | no | unique, lower-case; routing only, **never an authorisation input** | INTERNAL |
 | `legal_name` | text | no | the practice entity | CONFIDENTIAL |
+| `display_name` | text | no | the clinic's public name; 1-120 printable characters, trimmed (`ck_tenants_display_name`); set by the Practice Owner. Added 2026-10-08 (`docs2/sdlc/01-auth-and-shell/api.md`, "Clinic display name") | PUBLIC |
 | `status` | text | no | `CHECK IN ('ACTIVE','SUSPENDED','CLOSING','CLOSED')` | INTERNAL |
 | `data_region` | text | no | `ap-southeast-2` only in this release | INTERNAL |
 | `retention_profile` | text | no | references a named retention schedule | CONFIDENTIAL |
@@ -70,6 +71,8 @@ The application connects as `clinos_app`: non-owner, no `BYPASSRLS`; roles are c
 -- tenants is global: column-level grants only, read-only to the application
 REVOKE ALL ON tenants FROM clinos_app;
 GRANT SELECT (id, slug, status, data_region) ON tenants TO clinos_app;  -- retention_profile withheld
+-- 2026-10-08: the PUBLIC display name, readable and the only column the application may change
+GRANT SELECT (display_name), UPDATE (display_name, updated_at) ON tenants TO clinos_app;
 
 -- clinics is tenant-scoped: no DELETE where retention may apply
 GRANT SELECT, INSERT, UPDATE ON clinics TO clinos_app;
@@ -119,6 +122,8 @@ a concurrent pooled test (`05 §3`; test S1).
 |---|---|---|
 | `GET /api/v1/tenants/current` | `tenant:read` (OPEN-2) | resolved tenant only; no tenant in the path |
 | `PATCH /api/v1/tenants/current` | `tenant:configure` | step-up 5 min; security setting change versioned |
+| `GET /api/v1/tenants/current/profile` | none (any member; PUBLIC data) | the display name; added 2026-10-08 |
+| `PATCH /api/v1/tenants/current/profile` | `tenant:configure` | the display name; not a security setting, so no step-up; audited `tenant.config_changed`; added 2026-10-08 |
 | `GET /api/v1/tenants/current/clinics` | `clinic:read` (OPEN-2) | cursor-paginated; bounded `limit` |
 | `POST /api/v1/clinics` | `clinic:manage` (OPEN-2) | tenant from session; body `tenant_id` rejected |
 | `PATCH /api/v1/clinics/{id}` | `clinic:manage` (OPEN-2) | `404` on cross-tenant; collision `422`, not `500` |
