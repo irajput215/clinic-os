@@ -326,7 +326,23 @@ def record(session: Session, event: AuditEvent) -> AuditLogEntry:
     catalogue does not name, and lets a database error propagate untouched: the caller's transaction
     is the one that must fail (R4).
     """
-    _validate(event)
+    [entry] = record_many(session, [event])
+    return entry
+
+
+def record_many(session: Session, events: Sequence[AuditEvent]) -> list[AuditLogEntry]:
+    """Insert several events on the caller's transaction, chained in order, in two round trips.
+
+    For a request that reads several kinds of record at once (the Today page audits each section it
+    read): one chain lock with its head, then every row in one insert. Each event is validated before
+    anything is written, so one refused event refuses them all, and the caller's transaction fails
+    (R4). The timestamps strictly increase in the given order, so the chain's order (timestamp, then
+    id) is the order the events were given in.
+    """
+    for event in events:
+        _validate(event)
+    if not events:
+        return []
 
     tenant_id = tenant_of(session)
 
@@ -357,24 +373,33 @@ def record(session: Session, event: AuditEvent) -> AuditLogEntry:
     )
     prev_hash = GENESIS_HASH if not head else str(head[0][0])
 
-    entry = _entry(
-        event,
-        event_id=uuid.uuid4(),
-        timestamp=datetime.now(UTC),
-        prev_hash=prev_hash,
-        tenant_id=tenant_id,
-        actor_id=actor_id,
-        actor_role=actor_role,
-        request_id=request_id,
-        correlation_id=correlation_id,
-    )
-    entry.hash = compute_hash(entry)
+    entries: list[AuditLogEntry] = []
+    previous: datetime | None = None
+    for event in events:
+        timestamp = datetime.now(UTC)
+        if previous is not None and timestamp <= previous:
+            timestamp = previous + timedelta(microseconds=1)
+        previous = timestamp
+        entry = _entry(
+            event,
+            event_id=uuid.uuid4(),
+            timestamp=timestamp,
+            prev_hash=prev_hash,
+            tenant_id=tenant_id,
+            actor_id=actor_id,
+            actor_role=actor_role,
+            request_id=request_id,
+            correlation_id=correlation_id,
+        )
+        entry.hash = compute_hash(entry)
+        prev_hash = entry.hash
+        entries.append(entry)
 
-    session.add(entry)
-    # Flush rather than commit: the row reaches the database inside the caller's transaction, so a
+    session.add_all(entries)
+    # Flush rather than commit: the rows reach the database inside the caller's transaction, so a
     # constraint failure surfaces at the audit write rather than at the caller's commit.
     session.flush()
-    return entry
+    return entries
 
 
 def chain(session: Session, *, tenant_id: uuid.UUID) -> Iterator[AuditLogEntry]:

@@ -207,6 +207,22 @@ class TimedConnection(psycopg.Connection[Any]):
         if timings is not None:
             timings.db_round_trips += 1
 
+    @contextmanager
+    def _pipeline_nolock(self) -> Iterator[psycopg.Pipeline]:
+        """`executemany`'s own pipeline: one flight too, counted like `pipeline` above.
+
+        PRIVATE psycopg API, deliberately: `Cursor.executemany` enters pipeline mode through this
+        method rather than through `pipeline`, so without it a multi-row insert (an ORM flush of
+        several rows of one table, `audit.record_many`) would cost a round trip the count never
+        saw. `tests/observability/test_server_timing.py` pins it, so a psycopg upgrade that renames
+        it fails a test instead of silently under-counting.
+        """
+        timings = _current.get()
+        with super()._pipeline_nolock() as pipeline:
+            yield pipeline
+        if timings is not None:
+            timings.db_round_trips += 1
+
 
 def instrument_engine(engine: Engine) -> None:
     """Open the engine's connections as :class:`TimedConnection` and count pool reuse."""

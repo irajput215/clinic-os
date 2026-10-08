@@ -79,6 +79,10 @@ ACTION_CATALOGUE: Final[tuple[tuple[str, tuple[str, ...]], ...]] = (
             "patient.create",
             "patient.update",
             "patient.export",
+            # Registered with T1-34 (decision D-007, 2026-10-08): the interim upkeep of a patient's
+            # care team. The resource is the patient; the payload names the relationship.
+            "care_relationship.create",
+            "care_relationship.end",
         ),
     ),
     (
@@ -89,6 +93,10 @@ ACTION_CATALOGUE: Final[tuple[tuple[str, tuple[str, ...]], ...]] = (
         "PRESCRIPTION",
         (
             "prescription.create",
+            # Registered with T1-34 (2026-10-08): `11-prescribing/02-user-stories.md` asks for
+            # "`prescription.read`-class access recorded per patient, not per row", and
+            # `10-prescription-safety-gate/03-design.md` puts the treating relationship on the read.
+            "prescription.read",
             "prescription.modify",
             "prescription.sign",
             "prescription.dispatch",
@@ -116,7 +124,12 @@ ACTION_CATALOGUE: Final[tuple[tuple[str, tuple[str, ...]], ...]] = (
     # Registered with the appointments module (2026-10-07, owner-approved, recorded in
     # `docs/features/04-audit-log/05-data-and-audit.md`): a booking, and each status change it goes
     # through (`docs2/sdlc/04-calendar-and-booking/api.md`, "Audited").
-    ("APPOINTMENT", ("appointment.create", "appointment.state_change")),
+    # `appointment.read` registered with T1-34 (2026-10-08): `docs2/sdlc/04-calendar-and-booking/
+    # api.md` deferred the audit of booking reads "with `patient.read` (T1-34)".
+    (
+        "APPOINTMENT",
+        ("appointment.create", "appointment.state_change", "appointment.read"),
+    ),
 )
 
 # Derived, never a second source of truth.
@@ -181,6 +194,13 @@ PAYLOAD_KEYS: Final[frozenset[str]] = frozenset(
     }
 )
 
+# The keys a read of patient-linked rows may carry (T1-34): the patient for a patient-level read, the
+# relationship and purpose that authorised it, and for a practice-wide read the kinds of filter used
+# and how many rows came back.
+_READ_KEYS: Final[frozenset[str]] = frozenset(
+    {"patient_id", "care_relationship_id", "purpose", "query_filters", "result_count"}
+)
+
 # The keys each action may carry. An action absent from this mapping may carry **no** payload at all:
 # the allow-list is deny-by-default, so a new action starts with nothing and earns each key.
 #
@@ -240,7 +260,19 @@ PAYLOAD_ALLOW_LIST: Final[MappingProxyType[str, frozenset[str]]] = MappingProxyT
         # on 2026-10-07 (owner decision, M2 phase 2A). A patient-level read carries `patient_id`
         # and `result_count`; the practice-wide register carries `query_filters` (state codes and
         # a day count, never a value from a record) and `result_count`.
-        "tga_approval.read": frozenset({"patient_id", "query_filters", "result_count"}),
+        # T1-34 adds the relationship and the purpose to a patient-level read.
+        "tga_approval.read": _READ_KEYS,
+        # T1-34 / D-007: a patient's care team. The relationship, the practitioner it names and, on
+        # a create, where it came from (`STAFF_RECORDED`). Never a name.
+        "care_relationship.create": frozenset(
+            {"care_relationship_id", "target_user_id", "source"}
+        ),
+        "care_relationship.end": frozenset({"care_relationship_id", "target_user_id"}),
+        # T1-34: a read of bookings or scripts. A patient-level read names the patient, the
+        # relationship and the purpose; a practice-wide read (the calendar, the queue, the Today
+        # page) names the kinds of filter and how many rows it returned.
+        "appointment.read": _READ_KEYS,
+        "prescription.read": _READ_KEYS,
         # `02-authentication/05-data-and-audit.md` `STEP_UP_SUCCEEDED`: `operation`, `resource_id`
         # (the envelope's) and `mfa_method`; the failure carries the attempted operation.
         "auth.step_up": frozenset({"operation", "mfa_method"}),

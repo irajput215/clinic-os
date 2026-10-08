@@ -143,6 +143,22 @@ def test_round_trips_count_the_implicit_begin_the_statement_and_the_end() -> Non
     )  # the connection was checked out before the measurement opened
 
 
+def test_a_multi_row_executemany_is_one_counted_round_trip() -> None:
+    """`executemany` enters its own pipeline; it is one flight, and it is counted (T1-34 found it
+    uncounted: a multi-row audit insert cost a trip the pinned budgets never saw)."""
+    with engine.connect() as connection:
+        connection.execute(text("SELECT 1")).one()
+        cursor = connection.connection.driver_connection.cursor()  # type: ignore[union-attr]
+        timings, token = start_request()
+        try:
+            cursor.executemany("SELECT %s::int", [(1,), (2,), (3,)])
+        finally:
+            end_request(token)
+        connection.rollback()
+
+    assert timings.db_round_trips == 1
+
+
 def test_a_commit_with_no_open_transaction_costs_nothing() -> None:
     with engine.connect() as connection:
         timings, token = start_request()
