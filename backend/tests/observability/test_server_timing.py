@@ -90,9 +90,8 @@ def test_the_readiness_probe_reports_its_database_time(client: TestClient) -> No
     header = response.headers[SERVER_TIMING_HEADER]
     assert _HEADER.match(header), header
     metrics = _metrics(header)
-    assert (
-        int(metrics["db-rt"]) >= 2
-    )  # at least the probe statement and the end of its transaction
+    # The probe is one statement in autocommit: no BEGIN and no COMMIT to wait for.
+    assert int(metrics["db-rt"]) == 1
     assert float(metrics["app"]) >= float(metrics["db"])
 
 
@@ -112,7 +111,7 @@ def test_the_request_line_carries_durations_counts_and_the_instance(
 
     line = json_sink.only("http.request")
     assert isinstance(line["db_ms"], float)
-    assert line["db_round_trips"] >= 2
+    assert line["db_round_trips"] == 1  # the probe's one autocommit statement
     assert line["db_connections_opened"] + line["db_connections_reused"] >= 1
     assert isinstance(line["db_connect_ms"], float)
     assert re.fullmatch(r"[0-9a-f]{8}-\d+", line["instance_id"])
