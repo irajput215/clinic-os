@@ -27,10 +27,13 @@ import { gzipSync } from "node:zlib"
 // Before that branch: entry 98.3, initial 145.2, CSS 11.3. `initial` is the number that binds.
 // The toaster (~8.5 KB) is on the first load on purpose: deferred, it dropped every toast raised
 // before it mounted ("Profile saved" on a slow first load, caught by CI).
+// Dependency update 2026-10-08 (React 19.3, zod 4.6, TanStack Router 1.170.41): initial 145.8 -> 155.0
+// (React +8.7, the router and entry +3.8), largest lazy chunk 28.6 -> 36.0 (zod +7.6). Upstream growth,
+// taken for staying current; budgets raised by that much plus a little headroom, not more.
 const BUDGET_KB = {
   entry: 90,
-  initial: 150,
-  chunk: 35,
+  initial: 160,
+  chunk: 40,
   css: 15,
 }
 

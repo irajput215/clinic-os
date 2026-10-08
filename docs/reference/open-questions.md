@@ -66,6 +66,14 @@ Naming the legal and privacy adviser who answers §2 is a **dependency, not a de
 questions stay open and marked until someone with authority answers them. Owner: **Practice Owner**.
 Source: `clinic-os-secure-by-design/90-owner-brief.md` §1.
 
+### 1.4 Operational decisions raised by delivery
+
+Not gate-blocking, but each one is the owner's to make and nothing changes until it is made.
+
+| ID | Decision | Interim position (fail-safe) | Owner | Raised |
+|---|---|---|---|---|
+| **O-1** | FastAPI's native OpenTelemetry (`fastapi[standard]` 0.143 and later) can export request spans, metrics and logs over OTLP when the environment sets `FASTAPI_OTEL_AUTO_CONFIGURE=true` and an endpoint. Spans carry the request path (record ids) and the query string. Enabling it is a new data flow to the telemetry collector (INV-5, L3) | **Off.** `app/main.py` passes `NATIVE_TELEMETRY_OFF` (every signal off, environment auto-configuration refused); `tests/security/test_no_native_telemetry.py` holds it off | CTO + Privacy Officer | 2026-10-08, dependency update |
+
 ---
 
 ## 2. Legal and regulatory validation register

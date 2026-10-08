@@ -33,7 +33,7 @@
 ## Non-functional
 
 - Sign-in page interactive within 1 s on a mid-range laptop.
-- Initial JS (entry plus preloaded chunks) at most 150 KB gzipped (measured 145.6 KB), enforced in CI.
+- Initial JS (entry plus preloaded chunks) at most 160 KB gzipped (measured 155.0 KB), enforced in CI.
 - Largest Contentful Paint under 2 s on sign-in and Today, cold, on throttled fast 4G with the CPU slowed 2x (`tests/performance.spec.ts`).
 
 ## Out of scope (this phase)

@@ -1,11 +1,13 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Final
 
 import sentry_sdk
 from anyio import to_thread
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
+from fastapi.telemetry import TelemetryConfig
 from starlette.middleware.cors import CORSMiddleware
 
 from app.api.main import api_router
@@ -42,9 +44,22 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     yield
 
 
+# FastAPI's native OpenTelemetry (fastapi[standard] >= 0.143) is off, explicitly. Its spans carry the
+# request path and query string, and with `FASTAPI_OTEL_AUTO_CONFIGURE=true` plus an OTLP endpoint in
+# the environment (which a hosting platform can set) they would leave the process: a new data flow
+# for identifiers, which INV-5 and the build contract put behind a decision. Deny by default; the
+# open decision is recorded in docs/reference/open-questions.md.
+NATIVE_TELEMETRY_OFF: Final[TelemetryConfig] = {
+    "tracing": False,
+    "metrics": False,
+    "logs": False,
+    "auto_configure": False,
+}
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     lifespan=lifespan,
+    telemetry=NATIVE_TELEMETRY_OFF,
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     generate_unique_id_function=custom_generate_unique_id,
 )
