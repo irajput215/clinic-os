@@ -99,7 +99,7 @@ export function NotesTab({ patientId }: { patientId: string }) {
     <div className="space-y-3.5">
       <Card title="New consult note">
         <SoapEditor value={draft} onChange={setDraft} />
-        <div className="mt-3.5 flex items-center justify-between gap-3">
+        <div className="mt-3.5 flex items-center justify-between gap-3 max-sm:flex-col max-sm:items-stretch">
           <p className="text-xs text-stone">
             A saved note is a draft until you sign it. A signed note is
             permanent; corrections are added as amendments with a reason.

@@ -18,6 +18,7 @@ import {
   ErrorState,
   Mono,
   SkeletonRows,
+  TabBar,
 } from "@/design/primitives"
 import { RecordApprovalDialog } from "@/features/approvals/ApprovalDialogs"
 import { ApprovalsTable } from "@/features/approvals/ApprovalsTable"
@@ -39,7 +40,6 @@ import {
   formatTime,
   patientRef,
 } from "@/lib/format"
-import { cn } from "@/lib/utils"
 import { NotesTab } from "./NotesTab"
 import { PatientFormDialog } from "./PatientFormDialog"
 import { PATIENT_TAB_KEYS, PATIENT_TABS, type PatientTab } from "./tabs"
@@ -66,7 +66,7 @@ export function PatientRecordPage({
     <>
       <Link
         to="/patients"
-        className="mb-3 inline-flex items-center gap-1 text-[13px] font-medium text-stone hover:text-ink"
+        className="mb-3 inline-flex items-center gap-1 text-[13px] font-medium text-stone hover:text-ink max-lg:-mt-3 max-lg:mb-0 max-lg:min-h-11"
       >
         <ChevronLeft className="size-3.5" /> Patients
       </Link>
@@ -101,31 +101,17 @@ export function PatientRecordPage({
         </Button>
       </header>
 
-      <div
-        role="tablist"
-        aria-label="Patient record"
-        className="mb-5 flex gap-1 overflow-x-auto border-line border-b"
-      >
-        {PATIENT_TAB_KEYS.map((key) => (
-          <button
-            key={key}
-            type="button"
-            role="tab"
-            aria-selected={tab === key}
-            onClick={() =>
-              navigate({ to: ".", search: { tab: key }, replace: true })
-            }
-            className={cn(
-              "-mb-px shrink-0 border-b-2 px-3 py-2.5 text-[13.5px] font-medium transition-colors",
-              tab === key
-                ? "border-clay text-clay-deep"
-                : "border-transparent text-stone hover:text-ink",
-            )}
-          >
-            {PATIENT_TABS[key]}
-          </button>
-        ))}
-      </div>
+      <TabBar
+        label="Patient record"
+        tabs={PATIENT_TAB_KEYS.map((key) => ({
+          key,
+          label: PATIENT_TABS[key],
+        }))}
+        value={tab}
+        onSelect={(key) =>
+          navigate({ to: ".", search: { tab: key }, replace: true })
+        }
+      />
 
       {tab === "overview" ? <OverviewTab patientId={patientId} /> : null}
       {tab === "notes" ? <NotesTab patientId={patientId} /> : null}
@@ -191,6 +177,9 @@ function OverviewTab({ patientId }: { patientId: string }) {
         <Card title="Active approvals">
           {approvals.isError ? (
             <ErrorState error={approvals.error} />
+          ) : approvals.isPending ? (
+            // Never "no active approval" before the server has answered.
+            <SkeletonRows rows={1} />
           ) : active.length === 0 ? (
             <p className="text-sm text-stone">
               No active TGA approval. Scripts will be blocked.

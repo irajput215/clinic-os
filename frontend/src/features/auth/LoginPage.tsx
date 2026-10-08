@@ -91,10 +91,13 @@ export function LoginPage({ redirectTo }: { redirectTo: string }) {
                 {...form.register("password")}
               />
             </Field>
-            <div className="mt-1.5 flex justify-end">
+            <div className="mt-1.5 flex justify-end max-lg:mt-0">
               <Link
                 to="/recover-password"
-                className={cn(authLinkClass, "text-[12.5px]")}
+                className={cn(
+                  authLinkClass,
+                  "text-[12.5px] max-lg:inline-flex max-lg:min-h-11 max-lg:items-center",
+                )}
               >
                 Forgot password?
               </Link>

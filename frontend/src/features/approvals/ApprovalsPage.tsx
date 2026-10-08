@@ -75,7 +75,7 @@ export function ApprovalsPage({ filter }: { filter: RegisterFilter }) {
               search={{ filter: key }}
               aria-current={filter === key ? "page" : undefined}
               className={cn(
-                "rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-colors",
+                "rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-colors max-lg:inline-flex max-lg:min-h-11 max-lg:items-center",
                 filter === key
                   ? "border-clay bg-clay-tint text-clay-deep"
                   : "border-line bg-paper text-stone hover:text-ink",

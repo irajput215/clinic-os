@@ -105,7 +105,7 @@ export function TodayPage() {
           .join(" · ")}
       />
 
-      <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3.5 md:grid-cols-4">
         {appointments ? (
           <StatCard
             to="/calendar"

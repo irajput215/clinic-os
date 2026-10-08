@@ -17,12 +17,13 @@ const buttonVariants = cva(
         ghost: "text-stone hover:bg-fill hover:text-ink",
         link: "h-auto border-0 px-0 font-medium text-clay hover:underline underline-offset-4",
       },
+      // Below 1024 px (touch-sized screens) every size is at least a 44 px target.
       size: {
-        default: "h-9 px-4 text-[13.5px]",
-        sm: "h-[29px] px-[11px] text-[12.5px]",
-        lg: "h-[42px] px-5 text-[14px]",
-        icon: "size-9",
-        "icon-sm": "size-[30px]",
+        default: "h-9 px-4 text-[13.5px] max-lg:h-11",
+        sm: "h-[29px] px-[11px] text-[12.5px] max-lg:h-11 max-lg:px-3.5",
+        lg: "h-11 px-5 text-[14px]",
+        icon: "size-9 max-lg:size-11",
+        "icon-sm": "size-[30px] max-lg:size-11",
       },
     },
     defaultVariants: {

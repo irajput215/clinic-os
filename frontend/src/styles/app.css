@@ -161,8 +161,10 @@
     @apply mb-1.5 block text-xs font-semibold tracking-[0.06em] text-stone uppercase;
   }
 
+  /* 44 px tall: a touch target, and the same height as a large button beside it. On a touch-sized
+     screen the text is 16 px, below which iOS zooms the page when the field takes focus. */
   .field-input {
-    @apply w-full rounded-btn border border-line bg-paper px-3 py-2.5 text-[14px] text-ink transition-[border-color,box-shadow] outline-none placeholder:text-stone-faint;
+    @apply min-h-11 w-full rounded-btn border border-line bg-paper px-3 py-2.5 text-[14px] text-ink transition-[border-color,box-shadow] outline-none placeholder:text-stone-faint max-lg:text-[16px];
   }
   .field-input:focus {
     border-color: var(--color-clay);

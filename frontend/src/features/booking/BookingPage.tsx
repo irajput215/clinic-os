@@ -150,9 +150,12 @@ export function BookingPage({ clinicSlug }: { clinicSlug: string }) {
                     {i < index ? <Check className="size-3.5" /> : i + 1}
                   </span>
                   <span
+                    // On a phone only the current step is named, so the row fits the card.
                     className={cn(
                       "whitespace-nowrap",
-                      i === index ? "text-ink" : "text-stone-faint",
+                      i === index
+                        ? "text-ink"
+                        : "text-stone-faint max-sm:sr-only",
                     )}
                   >
                     {label}
@@ -325,7 +328,7 @@ function DetailsStep({
               <label
                 key={v}
                 className={cn(
-                  "flex cursor-pointer items-center gap-2 rounded-btn border px-4 py-2 text-sm capitalize",
+                  "flex min-h-11 cursor-pointer items-center gap-2 rounded-btn border px-5 py-2 text-sm capitalize",
                   tried === v
                     ? "border-clay bg-clay-tint text-clay-deep"
                     : "border-line bg-paper",
@@ -426,7 +429,7 @@ function DetailsStep({
             {...form.register("email")}
           />
         </Field>
-        <label className="flex items-start gap-2.5 text-[13px] text-stone sm:col-span-2">
+        <label className="flex min-h-11 items-start gap-2.5 py-1 text-[13px] text-stone sm:col-span-2">
           <input
             type="checkbox"
             className="mt-0.5 size-4 accent-[var(--color-clay)]"
@@ -603,7 +606,7 @@ function TimeStep({
                   aria-pressed={on}
                   title={s.practitioner_name}
                   className={cn(
-                    "rounded-btn border px-2 py-2 text-center transition-colors",
+                    "min-h-11 rounded-btn border px-2 py-2 text-center transition-colors",
                     on
                       ? "border-clay bg-clay text-white"
                       : "border-line bg-paper hover:border-clay/50",
