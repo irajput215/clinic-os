@@ -49,6 +49,7 @@ from app.modules.prescriptions import gate
 from app.modules.prescriptions.models import (
     LEGAL_TRANSITIONS,
     PRESCRIPTION_STATES,
+    SUPERSEDED_BY_ADDENDUM,
     DispatchAttempt,
     Prescription,
     PrescriptionEvent,
@@ -57,10 +58,14 @@ from app.modules.prescriptions.schemas import (
     DispatchRead,
     PrescriberRead,
     PrescribersPublic,
+    PrescriptionAddendum,
     PrescriptionCreate,
+    PrescriptionEventRead,
+    PrescriptionHistory,
     PrescriptionQueueSummary,
     PrescriptionRead,
     PrescriptionsPublic,
+    PrescriptionUpdate,
 )
 from app.modules.prescriptions.transport import configured_transport
 from app.modules.tga_approvals.schemas import TgaMatchResponse
@@ -70,6 +75,10 @@ from app.modules.users_roles.policy import Actor, Decision
 
 # The closed catalogue's actions (`app/modules/audit/actions.py`).
 CREATE: Final[str] = "prescription.create"
+# A draft edit, and the new version an addendum creates (FEAT-11 R3, R5; `05-data-and-audit.md`).
+MODIFY: Final[str] = "prescription.modify"
+# A cancellation (`05-data-and-audit.md`: `PRESCRIPTION_CANCELLED` is doc 07's `prescription.reject`).
+REJECT: Final[str] = "prescription.reject"
 # Registered with T1-34: a read of scripts, once per page (per patient on a patient's page), never
 # once per row (`11-prescribing/02-user-stories.md`).
 READ: Final[str] = "prescription.read"
@@ -90,6 +99,22 @@ INVALID_STATE_TRANSITION: Final[str] = "INVALID_STATE_TRANSITION"
 IDEMPOTENCY_KEY_REQUIRED: Final[str] = "IDEMPOTENCY_KEY_REQUIRED"
 # FEAT-10's block reasons for the non-gate refusals at dispatch (step 9).
 ALREADY_DISPATCHED: Final[str] = "ALREADY_DISPATCHED"
+# Editing or cancelling is for the script's own people: who drafted it, or its prescriber of record
+# (FEAT-11 US-2; decision D-008).
+NOT_DRAFTER_OR_PRESCRIBER: Final[str] = "NOT_DRAFTER_OR_PRESCRIBER"
+# An original already corrected by an addendum (one addendum per original; correct the addendum).
+ALREADY_SUPERSEDED: Final[str] = "ALREADY_SUPERSEDED"
+# The event `reason` a new addendum version starts with.
+ADDENDUM: Final[str] = "ADDENDUM"
+# Where each write may start from (FEAT-11 state machine; decision D-008). Editing is a draft's;
+# cancelling is anything not yet handed to the outbox (`QUEUED`, in flight, is never cancelled here,
+# and a dispatched script is reversed, not cancelled); an addendum corrects a signed script that has
+# not been sent.
+EDITABLE_STATES: Final[frozenset[str]] = frozenset({"DRAFT"})
+CANCELLABLE_STATES: Final[frozenset[str]] = frozenset(
+    {"DRAFT", "SIGNED", "BLOCKED", "FAILED"}
+)
+AMENDABLE_STATES: Final[frozenset[str]] = frozenset({"SIGNED", "BLOCKED", "FAILED"})
 STATE_INVALID: Final[str] = "STATE_INVALID"
 
 # States in which a prescription still needs a human action, so the queue shows the live gate.
@@ -342,6 +367,8 @@ def _read_row(
         approval_id=row.approval_id,
         created_at=row.created_at,
         signed_at=row.signed_at,
+        cancel_reason_code=row.cancel_reason_code,
+        supersedes_id=row.supersedes_id,
         # Only an actionable prescription carries the gate (`ACTIONABLE_STATES`).
         gate=gate_answer,
         dispatch=None
@@ -951,3 +978,440 @@ def dispatch(
             },
         )
         return DispatchResult(prescription=_read_one(session, row), replayed=False)
+
+
+# --------------------------------------------------------------------------------------------
+# One prescription: read, history, edit, cancel, addendum (FEAT-11; docs2 07; decision D-008)
+# --------------------------------------------------------------------------------------------
+#
+# Every route below loads the row **with the actor's care relationship to its patient** in one
+# statement (`care_relationships.service.relationship_id`, correlated on the row's own `patient_id`),
+# under the request's tenant context and RLS. The order is the design's: absent or another tenant's
+# is `404`; one of this tenant's whose patient a relationship-bound grant cannot reach is
+# `403 AUTHZ_CARE_RELATIONSHIP_DENIED`; then the resource rules (who may act) and the state machine
+# (`409 INVALID_STATE_TRANSITION`). Every refusal is audited with its reason on the same transaction.
+
+
+def _load(
+    session: Session, *, actor: Actor, prescription_id: uuid.UUID, lock: bool = False
+) -> tuple[Prescription, care.PatientAccess] | None:
+    statement = select(
+        Prescription, care.actor_relationship_id(actor, col(Prescription.patient_id))
+    ).where(
+        Prescription.id == prescription_id, Prescription.tenant_id == actor.tenant_id
+    )
+    if lock:
+        statement = statement.with_for_update(of=Prescription).execution_options(
+            populate_existing=True
+        )
+    found = session.exec(statement).first()
+    if found is None:
+        return None
+    row, relationship = found
+    return row, care.patient_access(
+        actor,
+        PATIENT_ACCESS_PERMISSION,
+        patient_id=row.patient_id,
+        care_relationship_id=relationship,
+    )
+
+
+def _transaction(actor: Actor) -> Any:  # noqa: ANN401 - a context manager
+    return tenant_transaction(
+        tenant_id=actor.tenant_id, actor_id=actor.user_id, actor_role=actor.actor_role
+    )
+
+
+def _not_found(session: Session, *, action: str, prescription_id: uuid.UUID) -> Refusal:
+    _record(
+        session,
+        action=action,
+        result="DENIED",
+        resource_id=prescription_id,
+        reason=CROSS_TENANT,
+    )
+    return Refusal(NOT_FOUND, status.HTTP_404_NOT_FOUND, "Prescription not found")
+
+
+def _refuse(
+    session: Session,
+    *,
+    action: str,
+    row: Prescription,
+    code: str,
+    status_code: int,
+    message: str,
+) -> Refusal:
+    _record(
+        session,
+        action=action,
+        result="DENIED",
+        resource_id=row.id,
+        reason=code,
+        payload={"patient_id": str(row.patient_id)},
+    )
+    return Refusal(code, status_code, message)
+
+
+def _access_refusal(
+    session: Session, *, action: str, row: Prescription, access: care.PatientAccess
+) -> Refusal | None:
+    if access.allowed:
+        return None
+    decision = access.decision
+    return _refuse(
+        session,
+        action=action,
+        row=row,
+        code=decision.code.value,
+        status_code=decision.status_code,
+        message=decision.message,
+    )
+
+
+def _wrong_state(session: Session, *, action: str, row: Prescription) -> Refusal:
+    return _refuse(
+        session,
+        action=action,
+        row=row,
+        code=INVALID_STATE_TRANSITION,
+        status_code=status.HTTP_409_CONFLICT,
+        message=f"A {row.state.lower()} prescription cannot be changed this way",
+    )
+
+
+def _own(
+    session: Session, *, action: str, row: Prescription, actor: Actor
+) -> Refusal | None:
+    """Only who drafted the script, or its prescriber of record, may edit or cancel it (US-2)."""
+    if actor.user_id in (row.drafted_by, row.prescriber_id):
+        return None
+    return _refuse(
+        session,
+        action=action,
+        row=row,
+        code=NOT_DRAFTER_OR_PRESCRIBER,
+        status_code=status.HTTP_403_FORBIDDEN,
+        message="Only the clinician who drafted this script, or its prescriber, can change it",
+    )
+
+
+def read_one(*, actor: Actor, prescription_id: uuid.UUID) -> PrescriptionRead | Refusal:
+    """One prescription, audited `prescription.read` with the relationship and purpose (US-7)."""
+    with _transaction(actor) as session:
+        found = _load(session, actor=actor, prescription_id=prescription_id)
+        if found is None:
+            return _not_found(session, action=READ, prescription_id=prescription_id)
+        row, access = found
+        if (
+            refused := _access_refusal(session, action=READ, row=row, access=access)
+        ) is not None:
+            return refused
+        read = _reads(session, tenant_id=actor.tenant_id, rows=[row])[0]
+        _record(
+            session,
+            action=READ,
+            result="SUCCESS",
+            resource_id=row.id,
+            payload={
+                "patient_id": str(row.patient_id),
+                "result_count": 1,
+                **access.audit_payload(),
+            },
+        )
+        return read
+
+
+def history(
+    *, actor: Actor, prescription_id: uuid.UUID
+) -> PrescriptionHistory | Refusal:
+    """The ordered transitions of one prescription (US-10), with who made each; audited as a read."""
+    with _transaction(actor) as session:
+        found = _load(session, actor=actor, prescription_id=prescription_id)
+        if found is None:
+            return _not_found(session, action=READ, prescription_id=prescription_id)
+        row, access = found
+        if (
+            refused := _access_refusal(session, action=READ, row=row, access=access)
+        ) is not None:
+            return refused
+        batch = ReadBatch()
+        events = batch.scalars(
+            select(PrescriptionEvent)
+            .where(
+                col(PrescriptionEvent.tenant_id) == actor.tenant_id,
+                col(PrescriptionEvent.prescription_id) == row.id,
+            )
+            .order_by(col(PrescriptionEvent.occurred_at), col(PrescriptionEvent.id))
+        )
+        successor = batch.scalars(
+            select(col(Prescription.id)).where(
+                col(Prescription.tenant_id) == actor.tenant_id,
+                col(Prescription.supersedes_id) == row.id,
+            )
+        )
+        batch.send(session)
+        names_batch = ReadBatch()
+        names = users_roles.queue_display_names(
+            names_batch,
+            tenant_id=actor.tenant_id,
+            user_ids=[e.actor_id for e in events.value if e.actor_id is not None],
+        )
+        names_batch.send(session)
+        data = [
+            PrescriptionEventRead(
+                from_state=event.from_state,
+                to_state=event.to_state,
+                reason=event.reason,
+                actor_id=event.actor_id,
+                actor_name=None
+                if event.actor_id is None
+                else names.value.get(event.actor_id),
+                occurred_at=event.occurred_at,
+            )
+            for event in events.value
+        ]
+        _record(
+            session,
+            action=READ,
+            result="SUCCESS",
+            resource_id=row.id,
+            payload={
+                "patient_id": str(row.patient_id),
+                "query_filters": ["history"],
+                "result_count": len(data),
+                **access.audit_payload(),
+            },
+        )
+        return PrescriptionHistory(
+            prescription_id=row.id,
+            supersedes_id=row.supersedes_id,
+            superseded_by_id=next(iter(successor.value), None),
+            data=data,
+        )
+
+
+def modify(
+    *, actor: Actor, prescription_id: uuid.UUID, body: PrescriptionUpdate
+) -> PrescriptionRead | Refusal:
+    """Correct a `DRAFT` (FEAT-11 R3, US-2). The event names the changed fields, never a value."""
+    changes = body.changes()
+    prescribers = (
+        users_roles.holders_of(
+            tenant_id=actor.tenant_id, permission=PRESCRIPTION_PERMISSIONS["sign"]
+        )
+        if "prescriber_id" in changes
+        else {}
+    )
+    with _transaction(actor) as session:
+        found = _load(session, actor=actor, prescription_id=prescription_id, lock=True)
+        if found is None:
+            return _not_found(session, action=MODIFY, prescription_id=prescription_id)
+        row, access = found
+        if (
+            refused := _access_refusal(session, action=MODIFY, row=row, access=access)
+        ) is not None:
+            return refused
+        if (refused := _own(session, action=MODIFY, row=row, actor=actor)) is not None:
+            return refused
+        if row.state not in EDITABLE_STATES:
+            return _wrong_state(session, action=MODIFY, row=row)
+        if "prescriber_id" in changes and changes["prescriber_id"] not in prescribers:
+            return _refuse(
+                session,
+                action=MODIFY,
+                row=row,
+                code=PRESCRIBER_NOT_AUTHORIZED,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                message="Choose a prescriber in this organisation who may sign prescriptions",
+            )
+        for name, value in changes.items():
+            setattr(row, name, value)
+        session.add(row)
+        session.flush()
+        _record(
+            session,
+            action=MODIFY,
+            result="SUCCESS",
+            resource_id=row.id,
+            payload={
+                "patient_id": str(row.patient_id),
+                "changed_fields": sorted(changes),
+            },
+        )
+        return _read_one(session, row)
+
+
+def cancel(
+    *, actor: Actor, prescription_id: uuid.UUID, reason_code: str
+) -> PrescriptionRead | Refusal:
+    """Cancel before dispatch with a reason **code** (FEAT-11 R11, US-8; decision D-008).
+
+    `DRAFT`, `SIGNED`, `BLOCKED` or `FAILED` -> `CANCELLED`; anything queued, sent or already terminal
+    is `409`. The code goes on the row, on the history row and in the audit envelope's `reason`.
+    """
+    with _transaction(actor) as session:
+        found = _load(session, actor=actor, prescription_id=prescription_id, lock=True)
+        if found is None:
+            return _not_found(session, action=REJECT, prescription_id=prescription_id)
+        row, access = found
+        if (
+            refused := _access_refusal(session, action=REJECT, row=row, access=access)
+        ) is not None:
+            return refused
+        if (refused := _own(session, action=REJECT, row=row, actor=actor)) is not None:
+            return refused
+        if row.state not in CANCELLABLE_STATES:
+            return _wrong_state(session, action=REJECT, row=row)
+        _cancel(session, row, actor_id=actor.user_id, reason_code=reason_code)
+        return _read_one(session, row)
+
+
+def _cancel(
+    session: Session, row: Prescription, *, actor_id: uuid.UUID, reason_code: str
+) -> None:
+    previous = row.state
+    # The code is set with the state, in one UPDATE: the row is `CANCELLED` exactly when it has one.
+    row.cancel_reason_code = reason_code
+    _transition(
+        session, row, to_state="CANCELLED", actor_id=actor_id, reason=reason_code
+    )
+    _record(
+        session,
+        action=REJECT,
+        result="SUCCESS",
+        resource_id=row.id,
+        reason=reason_code,
+        payload={"patient_id": str(row.patient_id), "from_state": previous},
+    )
+
+
+@dataclass(frozen=True)
+class AddendumResult:
+    """The new version, and whether this answer replays an earlier request with the same key."""
+
+    prescription: PrescriptionRead
+    replayed: bool
+
+
+_ADDENDUM_COPIED: Final[tuple[str, ...]] = (
+    "patient_id",
+    "prescriber_id",
+    "medicine_name",
+    "tga_category",
+    "dosage_form",
+    "dose_instruction",
+    "quantity",
+    "repeats",
+    "triage_outcome",
+    "conventional_therapy",
+    "date_of_service",
+)
+
+
+def addendum(
+    *,
+    actor: Actor,
+    prescription_id: uuid.UUID,
+    body: PrescriptionAddendum,
+    client_key: str,
+) -> AddendumResult | Refusal:
+    """Correct a signed script by a new version, never an edit (FEAT-11 R5, US-5; decision D-008).
+
+    Only the original's prescriber of record may write it. In one transaction: the original (still
+    `SIGNED`, `BLOCKED` or `FAILED`, so never sent) moves to `CANCELLED` with
+    `SUPERSEDED_BY_ADDENDUM` - its payload and signature untouched - so exactly one live version
+    exists; the new version is a `DRAFT` copying the original's payload with the corrections, naming
+    the original in `supersedes_id`, to be signed through the gate like any script. The
+    `Idempotency-Key` is hashed with the tenant and the original: the same key again answers the same
+    addendum (`replayed`), another key `409 ALREADY_SUPERSEDED`.
+    """
+    key = idempotency_key(
+        tenant_id=actor.tenant_id,
+        prescription_id=prescription_id,
+        client_key=client_key,
+    )
+    with _transaction(actor) as session:
+        found = _load(session, actor=actor, prescription_id=prescription_id, lock=True)
+        if found is None:
+            return _not_found(session, action=MODIFY, prescription_id=prescription_id)
+        original, access = found
+        if (
+            refused := _access_refusal(
+                session, action=MODIFY, row=original, access=access
+            )
+        ) is not None:
+            return refused
+        if original.prescriber_id != actor.user_id:
+            return _refuse(
+                session,
+                action=MODIFY,
+                row=original,
+                code=NOT_PRESCRIBER_OF_RECORD,
+                status_code=status.HTTP_403_FORBIDDEN,
+                message="Only the prescriber of record can amend a signed script",
+            )
+        existing = session.exec(
+            select(Prescription).where(
+                Prescription.tenant_id == actor.tenant_id,
+                Prescription.supersedes_id == original.id,
+            )
+        ).first()
+        if existing is not None:
+            if existing.addendum_key == key:
+                return AddendumResult(_read_one(session, existing), replayed=True)
+            return _refuse(
+                session,
+                action=MODIFY,
+                row=original,
+                code=ALREADY_SUPERSEDED,
+                status_code=status.HTTP_409_CONFLICT,
+                message="This script already has an addendum; correct the addendum instead",
+            )
+        if original.state not in AMENDABLE_STATES:
+            return _wrong_state(session, action=MODIFY, row=original)
+        changes = body.changes()
+        version = Prescription.model_validate(
+            {
+                **{
+                    name: changes.get(name, getattr(original, name))
+                    for name in _ADDENDUM_COPIED
+                },
+                "tenant_id": actor.tenant_id,
+                "drafted_by": actor.user_id,
+                "state": "DRAFT",
+                "supersedes_id": original.id,
+                "addendum_key": key,
+            }
+        )
+        _cancel(
+            session,
+            original,
+            actor_id=actor.user_id,
+            reason_code=SUPERSEDED_BY_ADDENDUM,
+        )
+        session.add(version)
+        session.flush()
+        session.add(
+            PrescriptionEvent(
+                tenant_id=actor.tenant_id,
+                prescription_id=version.id,
+                from_state=None,
+                to_state="DRAFT",
+                reason=ADDENDUM,
+                actor_id=actor.user_id,
+            )
+        )
+        _record(
+            session,
+            action=MODIFY,
+            result="SUCCESS",
+            resource_id=version.id,
+            reason=ADDENDUM,
+            payload={
+                "patient_id": str(version.patient_id),
+                "changed_fields": sorted(changes),
+                "supersedes_id": str(original.id),
+            },
+        )
+        return AddendumResult(_read_one(session, version), replayed=False)

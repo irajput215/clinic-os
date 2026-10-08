@@ -19,9 +19,9 @@ carries `type`/`loc`/`msg` only (`app.core.errors`).
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Literal, Self
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
 from app.modules.tga_approvals.models import CATEGORY_PATTERN
 from app.modules.tga_approvals.schemas import TgaMatchResponse
@@ -68,6 +68,77 @@ class PrescriptionCreate(BaseModel):
     triage_outcome: _TEXT_300
     conventional_therapy: _TEXT_300
     date_of_service: date
+
+
+class _PayloadChange(BaseModel):
+    """The clinical fields a draft edit or an addendum may change; every one optional.
+
+    A field the client sends must carry a value: an explicit `null` is a `422` (each column is NOT
+    NULL), and a body that changes nothing is a `422` too. `state`, `tenant_id`, `patient_id`,
+    `approval_id` and the signature are not fields here, so a body carrying one is refused as unknown.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    medicine_name: _TEXT_200 | None = None
+    tga_category: _GRAIN_TOKEN | None = None
+    dosage_form: _GRAIN_TOKEN | None = None
+    dose_instruction: _TEXT_500 | None = None
+    quantity: (
+        Annotated[Decimal, Field(gt=0, max_digits=10, decimal_places=2)] | None
+    ) = None
+    repeats: Annotated[int, Field(ge=0, le=12)] | None = None
+    triage_outcome: _TEXT_300 | None = None
+    conventional_therapy: _TEXT_300 | None = None
+    date_of_service: date | None = None
+
+    @model_validator(mode="after")
+    def _changes_something(self) -> Self:
+        if not self.model_fields_set:
+            raise ValueError("send at least one field to change")
+        nulls = sorted(
+            name for name in self.model_fields_set if getattr(self, name) is None
+        )
+        if nulls:
+            raise ValueError(f"these fields cannot be cleared: {', '.join(nulls)}")
+        return self
+
+    def changes(self) -> dict[str, object]:
+        """The fields the client sent, with their values (for the row, never for a log line)."""
+        return {name: getattr(self, name) for name in sorted(self.model_fields_set)}
+
+
+class PrescriptionUpdate(_PayloadChange):
+    """`PATCH /api/v1/prescriptions/{id}`: correct a `DRAFT` (FEAT-11 R3, US-2).
+
+    The reviewing doctor may be changed while the script is a draft; the server validates the new one
+    exactly as on staging.
+    """
+
+    prescriber_id: uuid.UUID | None = None
+
+
+class PrescriptionAddendum(_PayloadChange):
+    """`POST /api/v1/prescriptions/{id}/addendum`: the correction to a signed script (FEAT-11 R5).
+
+    The new version keeps the original's patient and prescriber of record; it starts as a `DRAFT` and
+    is signed like any other. The intent key is the `Idempotency-Key` header.
+    """
+
+
+#: The reasons a person may give for cancelling (decision D-008, interim; the vocabulary is OPEN with
+#: the Clinical Safety Officer). `SUPERSEDED_BY_ADDENDUM` is the server's own and is not offered.
+CancelReason = Literal[
+    "ENTERED_IN_ERROR", "CLINICALLY_NOT_REQUIRED", "PATIENT_DECLINED", "DUPLICATE"
+]
+
+
+class PrescriptionCancel(BaseModel):
+    """`POST /api/v1/prescriptions/{id}/cancel`: a reason **code**, never free text (FEAT-11 R11)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason_code: CancelReason
 
 
 class PrescriptionSign(BaseModel):
@@ -128,6 +199,10 @@ class PrescriptionRead(BaseModel):
     approval_id: uuid.UUID | None
     created_at: datetime
     signed_at: datetime | None
+    #: Set when the script was cancelled: the reason code (decision D-008).
+    cancel_reason_code: str | None = None
+    #: An addendum names the signed original it corrects (FEAT-11 R5).
+    supersedes_id: uuid.UUID | None = None
     #: The gate re-evaluated **now**, against the approvals as they are now, for a prescription that
     #: still needs an action (docs2 07 R2). `None` for a terminal or in-flight one.
     gate: TgaMatchResponse | None
@@ -167,3 +242,24 @@ class PrescriberRead(BaseModel):
 
 class PrescribersPublic(BaseModel):
     data: list[PrescriberRead]
+
+
+class PrescriptionEventRead(BaseModel):
+    """One transition of a prescription, oldest first: who moved it, when, and the reason code."""
+
+    from_state: str | None
+    to_state: str
+    reason: str | None
+    actor_id: uuid.UUID | None
+    actor_name: str | None
+    occurred_at: datetime
+
+
+class PrescriptionHistory(BaseModel):
+    """`GET /api/v1/prescriptions/{id}/history` (FEAT-11 US-10): the ordered transition list, and
+    the versions either side of an addendum."""
+
+    prescription_id: uuid.UUID
+    supersedes_id: uuid.UUID | None
+    superseded_by_id: uuid.UUID | None
+    data: list[PrescriptionEventRead]
