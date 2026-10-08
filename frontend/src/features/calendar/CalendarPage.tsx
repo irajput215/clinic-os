@@ -102,14 +102,14 @@ export function CalendarPage({
             type="button"
             aria-label="Previous"
             onClick={() => go(addDays(date, -step))}
-            className="grid size-9 place-items-center text-stone hover:text-ink"
+            className="grid size-9 place-items-center text-stone hover:text-ink max-lg:size-11"
           >
             <ChevronLeft className="size-4" />
           </button>
           <button
             type="button"
             onClick={() => go(today)}
-            className="h-9 border-line border-x px-3 text-[13px] font-semibold hover:bg-oat"
+            className="h-9 border-line border-x px-3 text-[13px] font-semibold hover:bg-oat max-lg:h-11 max-lg:px-4"
           >
             Today
           </button>
@@ -117,12 +117,12 @@ export function CalendarPage({
             type="button"
             aria-label="Next"
             onClick={() => go(addDays(date, step))}
-            className="grid size-9 place-items-center text-stone hover:text-ink"
+            className="grid size-9 place-items-center text-stone hover:text-ink max-lg:size-11"
           >
             <ChevronRight className="size-4" />
           </button>
         </div>
-        <div className="font-serif text-lg font-medium">
+        <div className="font-serif text-lg font-medium max-sm:order-last max-sm:w-full">
           {view === "day"
             ? formatDate(date)
             : `${formatDate(dates[0])} – ${formatDate(dates[4])}`}
@@ -130,6 +130,7 @@ export function CalendarPage({
         <div
           className="ml-auto flex rounded-full border border-line bg-paper p-0.5"
           role="tablist"
+          aria-label="Calendar view"
         >
           {(["day", "week"] as const).map((v) => (
             <button
@@ -139,7 +140,7 @@ export function CalendarPage({
               aria-selected={view === v}
               onClick={() => navigate({ search: { date, view: v } })}
               className={cn(
-                "rounded-full px-3.5 py-1 text-xs font-semibold capitalize transition-colors",
+                "rounded-full px-3.5 py-1 text-xs font-semibold capitalize transition-colors max-lg:min-h-11 max-lg:px-5",
                 view === v ? "bg-clay text-white" : "text-stone hover:text-ink",
               )}
             >
@@ -158,16 +159,34 @@ export function CalendarPage({
         </div>
       ) : null}
 
-      {view === "day" ? (
-        <DayGrid
-          date={date}
-          practitioners={practitioners}
-          appointments={appointments}
-          onSlot={(practitionerId, time) =>
-            setPrefill({ practitionerId, date, time })
-          }
-          onSelect={setSelected}
-        />
+      {view === "day" && practitioners.length === 0 ? (
+        <div className="rounded-card border border-line bg-paper shadow-card">
+          <EmptyState
+            title="No one to book with yet."
+            body="Practitioners are staff holding the Doctor, Authorised Prescriber or Nurse role. Give someone one of those roles in Administration to open their column."
+          />
+        </div>
+      ) : view === "day" ? (
+        <>
+          {/* A touch-sized screen gets the day as a list per practitioner: a 15-minute slot grid
+              cannot give every slot a 44 px target, and booking starts from "New appointment". */}
+          <DayAgenda
+            practitioners={practitioners}
+            appointments={appointments}
+            onSelect={setSelected}
+          />
+          <div className="max-lg:hidden">
+            <DayGrid
+              date={date}
+              practitioners={practitioners}
+              appointments={appointments}
+              onSlot={(practitionerId, time) =>
+                setPrefill({ practitionerId, date, time })
+              }
+              onSelect={setSelected}
+            />
+          </div>
+        </>
       ) : (
         <div className="grid gap-3 md:grid-cols-5">
           {dates.map((d) => {
@@ -185,7 +204,7 @@ export function CalendarPage({
                 <button
                   type="button"
                   onClick={() => navigate({ search: { date: d, view: "day" } })}
-                  className="mb-2 flex w-full items-baseline gap-2 text-left"
+                  className="mb-2 flex w-full items-baseline gap-2 text-left max-lg:min-h-11 max-lg:items-center"
                 >
                   <span className="text-2xs font-semibold tracking-[0.08em] text-stone-faint uppercase">
                     {weekdayShort.format(new Date(`${d}T12:00:00Z`))}
@@ -200,7 +219,7 @@ export function CalendarPage({
                   </span>
                 </button>
                 {items.length === 0 ? (
-                  <p className="py-4 text-center text-xs text-stone-faint">
+                  <p className="py-4 text-center text-xs text-stone-faint max-md:pt-0 max-md:pb-1 max-md:text-left">
                     No bookings
                   </p>
                 ) : (
@@ -211,7 +230,7 @@ export function CalendarPage({
                           type="button"
                           onClick={() => setSelected(a)}
                           className={cn(
-                            "w-full rounded-chip border-l-[3px] px-2 py-1.5 text-left text-xs hover:brightness-[0.97]",
+                            "w-full rounded-chip border-l-[3px] px-2 py-1.5 text-left text-xs hover:brightness-[0.97] max-lg:min-h-11",
                             TONE_BLOCK[a.status],
                           )}
                         >
@@ -281,22 +300,12 @@ function DayGrid({
       ? clinicMinutesOfDay(new Date().toISOString())
       : null
 
-  if (practitioners.length === 0)
-    return (
-      <div className="rounded-card border border-line bg-paper shadow-card">
-        <EmptyState
-          title="No one to book with yet."
-          body="Practitioners are staff holding the Doctor, Authorised Prescriber or Nurse role. Give someone one of those roles in Administration to open their column."
-        />
-      </div>
-    )
-
   return (
     <div className="overflow-x-auto rounded-card border border-line bg-paper shadow-card">
       <div
-        className="grid min-w-[760px]"
+        className="grid"
         style={{
-          gridTemplateColumns: `56px repeat(${practitioners.length}, minmax(140px, 1fr))`,
+          gridTemplateColumns: `56px repeat(${practitioners.length}, minmax(160px, 1fr))`,
         }}
       >
         <div className="sticky left-0 z-10 border-line border-b bg-paper" />
@@ -400,6 +409,72 @@ function DayGrid({
           Click an empty slot to book
         </span>
       </div>
+    </div>
+  )
+}
+
+/** The day as one list per practitioner, for touch-sized screens (below 1024 px). */
+function DayAgenda({
+  practitioners,
+  appointments,
+  onSelect,
+}: {
+  practitioners: Array<{ id: string; name: string; title: string }>
+  appointments: Appointment[]
+  onSelect: (a: Appointment) => void
+}) {
+  return (
+    <div className="space-y-3.5 lg:hidden">
+      {practitioners.map((p) => {
+        const mine = appointments
+          .filter((a) => a.practitioner_id === p.id)
+          .sort((a, b) => a.starts_at.localeCompare(b.starts_at))
+        return (
+          <section
+            key={p.id}
+            aria-label={p.name}
+            className="rounded-card border border-line bg-paper p-3 shadow-card"
+          >
+            <div className="mb-2 px-1">
+              <div className="truncate text-[13.5px] font-semibold">
+                {p.name}
+              </div>
+              <div className="truncate text-xs text-stone">{p.title}</div>
+            </div>
+            {mine.length === 0 ? (
+              <p className="px-1 py-3 text-xs text-stone-faint">No bookings</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {mine.map((a) => (
+                  <li key={a.id}>
+                    <button
+                      type="button"
+                      onClick={() => onSelect(a)}
+                      className={cn(
+                        "flex min-h-11 w-full items-center gap-3 rounded-chip border-l-[3px] px-3 py-2 text-left text-sm hover:brightness-[0.97]",
+                        TONE_BLOCK[a.status],
+                      )}
+                    >
+                      <span className="shrink-0 font-mono text-[12.5px] text-stone">
+                        {formatTime(a.starts_at)}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-semibold">
+                          {a.patient_name}
+                        </span>
+                        <span className="block truncate text-xs text-stone">
+                          {APPOINTMENT_TYPES[a.type].label}
+                        </span>
+                      </span>
+                      <AppointmentStatusPill status={a.status} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )
+      })}
     </div>
   )
 }

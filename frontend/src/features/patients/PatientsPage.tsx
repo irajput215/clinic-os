@@ -61,7 +61,7 @@ export function PatientsPage() {
             autoComplete="off"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            className="h-[38px] w-full rounded-full border border-line bg-paper pr-3 pl-[34px] text-[14px] outline-none placeholder:text-stone-faint focus:border-clay"
+            className="h-[38px] w-full rounded-full border border-line bg-paper pr-3 pl-[34px] text-[14px] outline-none placeholder:text-stone-faint focus:border-clay max-lg:h-11 max-lg:text-[16px]"
           />
         </div>
         <span

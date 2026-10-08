@@ -27,7 +27,7 @@ export function ScriptCard({
   return (
     <article
       className={cn(
-        "flex flex-col gap-3 rounded-inner border border-line border-l-[3px] bg-paper px-5 py-4 shadow-card sm:flex-row sm:items-center",
+        "flex flex-col gap-3 rounded-inner border border-line border-l-[3px] bg-paper px-5 py-4 shadow-card max-sm:px-4 sm:flex-row sm:items-center",
         blocked || s.state === "BLOCKED" || s.state === "FAILED"
           ? "border-l-danger"
           : "border-l-warn",
@@ -89,7 +89,7 @@ export function ScriptCard({
             to="/patients/$patientId"
             params={{ patientId: s.patient_id }}
             search={{ tab: "scripts" }}
-            className="px-2 text-[13px] font-medium text-stone hover:text-ink"
+            className="px-2 text-[13px] font-medium text-stone hover:text-ink max-lg:inline-flex max-lg:min-h-11 max-lg:items-center"
           >
             Open record
           </Link>

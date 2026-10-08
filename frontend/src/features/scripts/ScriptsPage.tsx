@@ -67,7 +67,7 @@ export function ScriptsPage() {
         action={
           <label
             htmlFor="just-mine"
-            className="flex cursor-pointer items-center gap-2 text-[13px] text-stone"
+            className="flex cursor-pointer items-center gap-2 text-[13px] text-stone max-lg:-my-3 max-lg:min-h-11"
           >
             <Checkbox
               id="just-mine"

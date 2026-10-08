@@ -1,6 +1,6 @@
 import { Link, type LinkProps } from "@tanstack/react-router"
 import { Lock, TriangleAlert } from "lucide-react"
-import { type ReactNode, useId } from "react"
+import { type ReactNode, useEffect, useId, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { apiRequestId, describeError, isForbidden } from "@/lib/http"
 import { cn } from "@/lib/utils"
@@ -77,7 +77,7 @@ export function CardLink(props: LinkProps & { children: ReactNode }) {
   return (
     <Link
       {...props}
-      className="text-sm font-medium text-clay underline-offset-4 hover:text-clay-hover hover:underline"
+      className="text-sm font-medium text-clay underline-offset-4 hover:text-clay-hover hover:underline max-lg:-my-3 max-lg:inline-flex max-lg:min-h-11 max-lg:items-center"
     />
   )
 }
@@ -328,8 +328,23 @@ export function TabBar<T extends string>({
   value: T
   onSelect: (key: T) => void
 }) {
+  // On a narrow screen the row scrolls sideways; keep the selected tab in view (a deep link to the
+  // last tab would otherwise open with its tab off-screen). Only the row scrolls, never the page.
+  const listRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const list = listRef.current
+    const tab = list?.querySelector<HTMLElement>('[aria-selected="true"]')
+    if (!list || !tab || value === undefined) return
+    const row = list.getBoundingClientRect()
+    const box = tab.getBoundingClientRect()
+    if (box.left < row.left) list.scrollLeft -= row.left - box.left + 16
+    else if (box.right > row.right)
+      list.scrollLeft += box.right - row.right + 16
+  }, [value])
+
   return (
     <div
+      ref={listRef}
       role="tablist"
       aria-label={label}
       className="mb-5 flex gap-1 overflow-x-auto border-line border-b"
@@ -342,7 +357,7 @@ export function TabBar<T extends string>({
           aria-selected={value === tab.key}
           onClick={() => onSelect(tab.key)}
           className={cn(
-            "-mb-px shrink-0 border-b-2 px-3 py-2.5 text-[13.5px] font-medium transition-colors",
+            "-mb-px shrink-0 border-b-2 px-3 py-2.5 text-[13.5px] font-medium transition-colors max-lg:min-h-11",
             value === tab.key
               ? "border-clay text-clay-deep"
               : "border-transparent text-stone hover:text-ink",
