@@ -343,19 +343,8 @@ def list_patient_clinical_records(
         action=service.RECORD_READ_ACTION,
         patient_id=patient_id,
     )
-    if (
-        patients_service.get_patient(tenant_id=actor.tenant_id, patient_id=patient_id)
-        is None
-    ):
-        service.record_denial(
-            tenant_id=actor.tenant_id,
-            context=context,
-            action=service.RECORD_READ_ACTION,
-            reason=service.AUTHZ_DENIED_CROSS_TENANT,
-            patient_id=patient_id,
-        )
-        raise _not_found("Patient not found")
     try:
+        # A patient that is not the caller's own is `NOT_FOUND`, audited inside `list_timeline`.
         outcome = service.list_timeline(
             tenant_id=actor.tenant_id,
             context=context,
