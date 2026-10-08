@@ -1355,9 +1355,9 @@ def evaluate_match(
 
     `lock=True` reads every approval row of the patient `FOR UPDATE`
     (`docs/features/10-prescription-safety-gate/01-requirements.md` R16, T-10.13): a revocation,
-    supersede or expiry that is updating one of those rows either commits **before** this read — and
+    supersede or expiry that is updating one of those rows either commits **before** this read - and
     the read waits for it and then sees the new state, because PostgreSQL re-evaluates a locked row
-    after the blocking transaction commits — or it waits until the caller's transaction ends. There is
+    after the blocking transaction commits - or it waits until the caller's transaction ends. There is
     no third interleaving in which the caller decides on a row state that a concurrent revocation has
     already replaced. The lock is held until the caller's transaction ends, so the decision and the
     state change it authorises commit together. `FOR UPDATE` rather than the `FOR SHARE` the gate
