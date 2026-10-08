@@ -212,6 +212,9 @@ PUBLIC_BOOKING_EMAIL_WINDOW_SECONDS = 3600
 prescription_write_rate_limit = rate_limit(
     scope="prescription-write", limit=30, window_seconds=60
 )
+# The scheduler's booking-email job (`POST /api/v1/internal/booking-notifications/run`, D-007):
+# a schedule calls it every 15 minutes; 20/min per address bounds a token-guessing run and a loop.
+internal_job_rate_limit = rate_limit(scope="internal-job", limit=20, window_seconds=60)
 # Step-up: every attempt verifies a password, so it is limited like login (per session, 20/min) and
 # a guessing run against a stolen session is bounded and audited (`auth.step_up_failed`).
 step_up_rate_limit = rate_limit(scope="step-up", limit=20, window_seconds=60)

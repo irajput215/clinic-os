@@ -6,6 +6,9 @@ from fastapi import APIRouter
 import app.db_models  # noqa: F401
 from app.api.routes import health, login, users, utils
 from app.modules.appointments.router import (
+    internal_router as appointments_internal_router,
+)
+from app.modules.appointments.router import (
     patient_router as appointments_patient_router,
 )
 from app.modules.appointments.router import (
@@ -13,6 +16,9 @@ from app.modules.appointments.router import (
 )
 from app.modules.appointments.router import public_router as public_booking_router
 from app.modules.appointments.router import router as appointments_router
+from app.modules.appointments.router import (
+    settings_router as appointment_settings_router,
+)
 from app.modules.audit.router import router as audit_router
 from app.modules.care_relationships.router import router as care_relationships_router
 from app.modules.clinical_records.router import router as clinical_records_router
@@ -66,6 +72,9 @@ api_router.include_router(practitioners_router)
 api_router.include_router(appointments_router)
 api_router.include_router(appointments_patient_router)
 api_router.include_router(public_booking_router)
+# Milestone 4: the clinic hours and slot length, and the booking-email job a scheduler calls (D-007).
+api_router.include_router(appointment_settings_router)
+api_router.include_router(appointments_internal_router)
 api_router.include_router(auth_router)
 # Phase 2D: the script queue, the safety gate on sign and dispatch, and the outbox.
 api_router.include_router(prescriptions_router)

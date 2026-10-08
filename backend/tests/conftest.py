@@ -1,5 +1,8 @@
 import secrets
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
+from dataclasses import dataclass, field
+from typing import Any
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -47,6 +50,34 @@ _refuse_to_run_against_a_remote_database()
 _HS256_MIN_KEY_BYTES = 32
 if len(settings.SECRET_KEY.encode()) < _HS256_MIN_KEY_BYTES:
     settings.SECRET_KEY = secrets.token_urlsafe(48)
+
+
+@dataclass
+class MailSink:
+    """Every booking email the app handed to SMTP, in order; `accept` is the server's answer."""
+
+    sent: list[dict[str, Any]] = field(default_factory=list)
+    accept: bool = True
+
+    def to(self, address: str) -> list[dict[str, Any]]:
+        return [message for message in self.sent if message["email_to"] == address]
+
+
+@pytest.fixture(autouse=True)
+def mail_sink() -> Iterator[MailSink]:
+    """No test sends real mail: the patient-facing sender (`app.utils.deliver_email`) is a sink.
+
+    `.env.example` configures SMTP (Mailpit) for the e2e suite, so `settings.emails_enabled` is true
+    in a test run and every booking queues its emails; this keeps them in memory.
+    """
+    sink = MailSink()
+
+    def deliver(**message: Any) -> bool:
+        sink.sent.append(message)
+        return sink.accept
+
+    with patch("app.utils.deliver_email", side_effect=deliver):
+        yield sink
 
 
 @pytest.fixture(autouse=True)

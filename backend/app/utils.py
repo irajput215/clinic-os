@@ -29,20 +29,11 @@ def render_email_template(*, template_name: str, context: dict[str, Any]) -> str
     return html_content
 
 
-def send_email(
-    *,
-    email_to: str,
-    subject: str = "",
-    html_content: str = "",
-) -> None:
-    assert settings.emails_enabled, "no provided configuration for email variables"
-    assert settings.EMAILS_FROM_EMAIL  # For type checker
-    message = emails.message.Message(
-        subject=subject,
-        html=html_content,
-        mail_from=(settings.EMAILS_FROM_NAME, settings.EMAILS_FROM_EMAIL),
-    )
-    smtp_options = {"host": settings.SMTP_HOST, "port": settings.SMTP_PORT}
+def _smtp_options() -> dict[str, Any]:
+    smtp_options: dict[str, Any] = {
+        "host": settings.SMTP_HOST,
+        "port": settings.SMTP_PORT,
+    }
     if settings.SMTP_TLS:
         smtp_options["tls"] = True
     elif settings.SMTP_SSL:
@@ -51,8 +42,44 @@ def send_email(
         smtp_options["user"] = settings.SMTP_USER
     if settings.SMTP_PASSWORD:
         smtp_options["password"] = settings.SMTP_PASSWORD
-    response = message.send(to=email_to, smtp=smtp_options)
+    return smtp_options
+
+
+def _message(*, subject: str, html_content: str) -> emails.message.Message:
+    assert settings.EMAILS_FROM_EMAIL  # For type checker
+    return emails.message.Message(
+        subject=subject,
+        html=html_content,
+        mail_from=(settings.EMAILS_FROM_NAME, settings.EMAILS_FROM_EMAIL),
+    )
+
+
+def send_email(
+    *,
+    email_to: str,
+    subject: str = "",
+    html_content: str = "",
+) -> None:
+    assert settings.emails_enabled, "no provided configuration for email variables"
+    message = _message(subject=subject, html_content=html_content)
+    response = message.send(to=email_to, smtp=_smtp_options())
     logger.info(f"send email result: {response}")
+
+
+def deliver_email(*, email_to: str, subject: str, html_content: str) -> bool:
+    """Send one email and say whether the server accepted it. Logs nothing.
+
+    For mail that goes to a patient (`app.modules.appointments.notifications`): the caller records
+    the outcome as a code, so neither the address nor the server's reply text (which can quote the
+    address back) ever reaches a log line. A connection failure is `False`, never an exception.
+    """
+    assert settings.emails_enabled, "no provided configuration for email variables"
+    message = _message(subject=subject, html_content=html_content)
+    try:
+        response = message.send(to=email_to, smtp=_smtp_options())
+    except Exception:  # noqa: BLE001 - any failure to hand over is "not accepted"
+        return False
+    return bool(response.success)
 
 
 def generate_test_email(email_to: str) -> EmailData:

@@ -137,18 +137,26 @@ def test_rls_isolates_appointments_and_fails_closed(
     assert _as_app(str(clinic.tenant_id), count, {"id": appointment_id}) == 1
     assert _as_app(str(other.tenant_id), count, {"id": appointment_id}) == 0
     assert _as_app("", count, {"id": appointment_id}) == 0
-    assert _as_app("", "SELECT count(*) FROM appointment_settings", {}) == 0
+    for table in (
+        "appointment_settings",
+        "appointment_hours",
+        "appointment_notifications",
+    ):
+        assert _as_app("", f"SELECT count(*) FROM {table}", {}) == 0  # noqa: S608
 
 
-def test_the_app_role_cannot_delete_a_booking_or_edit_the_settings(
+def test_the_app_role_cannot_delete_a_booking_or_a_setting_or_an_email(
     clinic: Clinic,
 ) -> None:
+    """No `DELETE` on any appointments table. Until 2026-10-08 the settings were read-only to the
+    application; the Practice Owner now writes them (`PUT /appointment-settings`), so the control
+    this asserts is the no-delete rule (closing a day is an `UPDATE`)."""
     appointment_id = _insert(clinic)
     for statement in (
         "DELETE FROM appointments WHERE id = :id RETURNING 1",
-        "INSERT INTO appointment_settings (tenant_id, opens_at, closes_at, working_days,"
-        " created_at, updated_at) VALUES (:tenant, '08:00', '18:00', '{1}', now(), now())"
-        " RETURNING 1",
+        "DELETE FROM appointment_settings WHERE tenant_id = :tenant RETURNING 1",
+        "DELETE FROM appointment_hours WHERE tenant_id = :tenant RETURNING 1",
+        "DELETE FROM appointment_notifications WHERE tenant_id = :tenant RETURNING 1",
     ):
         with pytest.raises(DBAPIError) as refused:
             _as_app(
@@ -156,4 +164,21 @@ def test_the_app_role_cannot_delete_a_booking_or_edit_the_settings(
                 statement,
                 {"id": appointment_id, "tenant": clinic.tenant_id},
             )
+        assert getattr(refused.value.orig, "sqlstate", "") == "42501"
+
+
+def test_the_app_role_cannot_write_another_tenants_settings(
+    api: AppointmentsApi, clinic: Clinic
+) -> None:
+    """Forced RLS `WITH CHECK`: under tenant A's context, a settings row for tenant B is refused."""
+    other = api.clinic()
+    for statement in (
+        "INSERT INTO appointment_settings (tenant_id, slot_minutes, created_at, updated_at)"
+        " VALUES (:tenant, 15, now(), now()) RETURNING 1",
+        "INSERT INTO appointment_notifications (tenant_id, appointment_id, kind, status,"
+        " due_at, attempts, created_at, updated_at) VALUES (:tenant, gen_random_uuid(),"
+        " 'REMINDER', 'PENDING', now(), 0, now(), now()) RETURNING 1",
+    ):
+        with pytest.raises(DBAPIError) as refused:
+            _as_app(str(clinic.tenant_id), statement, {"tenant": other.tenant_id})
         assert getattr(refused.value.orig, "sqlstate", "") == "42501"

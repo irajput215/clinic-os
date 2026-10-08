@@ -137,6 +137,18 @@ class AppointmentsApi:
             f"{API}/appointments", params=query, headers=actor.headers
         )
 
+    # -- clinic hours -----------------------------------------------------------------------------
+
+    def put_settings(
+        self, actor: ActorSession, body: dict[str, Any], **params: Any
+    ) -> Response:
+        return self.client.put(
+            f"{API}/appointment-settings",
+            json=body,
+            params=params,
+            headers=actor.headers,
+        )
+
     # -- public routes --------------------------------------------------------------------------
 
     def slots(self, slug: str, type: str = "NURSE_TRIAGE") -> Response:
@@ -186,7 +198,13 @@ class AppointmentsApi:
     def cleanup(self) -> None:
         with engine.begin() as conn:
             for tenant_id in self._tenant_ids:
-                for table in ("appointments", "appointment_settings"):
+                # The outbox references the bookings and the hours the settings (RESTRICT, CASCADE).
+                for table in (
+                    "appointment_notifications",
+                    "appointments",
+                    "appointment_hours",
+                    "appointment_settings",
+                ):
                     conn.execute(
                         text(f"DELETE FROM {table} WHERE tenant_id = :t"),  # noqa: S608
                         {"t": tenant_id},
@@ -210,6 +228,23 @@ def api(client: TestClient, db: Session) -> Iterator[AppointmentsApi]:
 @pytest.fixture
 def clinic(api: AppointmentsApi) -> Clinic:
     return api.clinic()
+
+
+def week(
+    open_days: dict[int, tuple[str, str]], slot_minutes: int = 15
+) -> dict[str, Any]:
+    """A `PUT /appointment-settings` body: the given weekdays open, every other day closed."""
+    return {
+        "slot_minutes": slot_minutes,
+        "hours": [
+            {
+                "weekday": weekday,
+                "opens_at": open_days[weekday][0] if weekday in open_days else None,
+                "closes_at": open_days[weekday][1] if weekday in open_days else None,
+            }
+            for weekday in range(1, 8)
+        ],
+    }
 
 
 def code(response: Response) -> str | None:
