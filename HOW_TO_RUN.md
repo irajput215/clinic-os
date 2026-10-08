@@ -226,3 +226,68 @@ your own use, is gitignored and must never be committed. Details: [deployment.md
   then restart the backend if it started before the first build.
 - **`ValidationError` for `SECRET_KEY`, `PROJECT_NAME` or `DATABASE_URL` on start** - `.env` is missing:
   repeat step 2.
+
+## 11. Claude Code cloud (and other fresh cloud containers)
+
+A cloud session starts from a fresh clone with nothing running. One command does what CI does:
+
+```bash
+bash scripts/cloud-setup.sh
+```
+
+It is idempotent and:
+
+- copies `.env.example` to `.env` if there is none, and replaces each `REPLACE_ME` it still finds
+  with a strong generated value (never printed); an existing value is never overwritten;
+- starts `dockerd` if Docker is installed but not running, pulls the PostgreSQL and Mailpit images
+  (retrying, since registries rate-limit) and starts them;
+- runs `uv sync` and `scripts/prestart.sh` (migrations and the first superuser);
+- runs `bun install`, falling back to `npm install` for the install only if bun's fetch fails behind
+  the proxy;
+- when the image ships one Chromium under `PLAYWRIGHT_BROWSERS_PATH` and the pinned Playwright
+  expects a newer headless-shell revision, points that revision at the installed build (local only;
+  never run `playwright install` there).
+
+If Docker Hub answers `429 Too Many Requests`, configure a registry mirror before starting Docker:
+`echo '{"registry-mirrors":["https://mirror.gcr.io"]}' | sudo tee /etc/docker/daemon.json`.
+
+**Parallel work.** Give every concurrent worker its own database in the compose PostgreSQL and its
+own backend port (`CREATE DATABASE app_e2e_<name>`, `--port 81xx`), and drop them afterwards:
+`pytest` deletes every user on teardown and the login rate limit is per backend process.
+
+**Production is not reachable from the container** in every environment, and its secrets never are.
+Measure production from GitHub Actions instead: the **Measure Production** workflow runs after each
+deploy and on demand (`docs/reference/performance.md`).
+
+### GitHub from a cloud session: REST only
+
+The cloud proxy blocks GitHub's GraphQL endpoint, so `gh pr ...` and `gh issue ...` fail. Use the
+REST API through `gh api`:
+
+```bash
+REPO=irajput215/clinic-os
+
+# Open a pull request (body from a file)
+gh api repos/$REPO/pulls -f title="..." -f head=<branch> -f base=main -F body=@pr.md --jq .html_url
+
+# Checks on a commit
+gh api repos/$REPO/commits/<sha>/check-runs --jq '.check_runs[]|[.name,.status,.conclusion]|@tsv'
+
+# Workflow runs on a branch, and the jobs of one run
+gh api "repos/$REPO/actions/runs?branch=<branch>" --jq '.workflow_runs[]|[.id,.name,.conclusion]|@tsv'
+gh api repos/$REPO/actions/runs/<run-id>/jobs --jq '.jobs[]|[.id,.name,.conclusion]|@tsv'
+
+# Merge a pull request once every check is green
+gh api -X PUT repos/$REPO/pulls/<number>/merge -f merge_method=merge
+
+# After the merge: the Deploy run for main
+gh api "repos/$REPO/actions/workflows/deploy.yml/runs?branch=main&per_page=1" \
+  --jq '.workflow_runs[0]|[.head_sha,.status,.conclusion]|@tsv'
+
+# Start Measure Production by hand
+gh api -X POST repos/$REPO/actions/workflows/measure-production.yml/dispatches -f ref=main
+```
+
+`gh run view <id> --log-failed` needs the job-log host, which some proxies also block; read job logs
+through the GitHub connector instead when it does. Repository secrets cannot be listed or set from
+the container: that is the owner's job in the repository settings.
