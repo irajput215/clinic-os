@@ -123,9 +123,9 @@ gzip):
 
 | | Budget | Measured | Before this branch |
 |---|---|---|---|
-| Initial JS (entry + every `modulepreload`): what any first load fetches before rendering | 150 KB | 145.6 KB | 145.2 KB |
-| Entry chunk (`index-*.js`) | 90 KB | 44.5 KB (React is its own chunk) | 98.3 KB |
-| Largest lazy chunk (zod with react-hook-form) | 35 KB | 28.6 KB | 28.6 KB |
+| Initial JS (entry + every `modulepreload`): what any first load fetches before rendering | 160 KB | 155.0 KB (React 19.3, zod 4.6 and the router grew upstream) | 145.2 KB |
+| Entry chunk (`index-*.js`) | 90 KB | 47.3 KB (React is its own chunk) | 98.3 KB |
+| Largest lazy chunk (zod with react-hook-form) | 40 KB | 36.0 KB (zod 4.6) | 28.6 KB |
 | CSS | 15 KB | 10.8 KB | 11.3 KB |
 
 **Largest Contentful Paint** under 2 s on sign-in and Today, cold, measured against the
