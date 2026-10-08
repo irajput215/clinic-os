@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Loader2 } from "lucide-react"
 import { useState } from "react"
 import { useForm } from "react-hook-form"
@@ -22,9 +22,9 @@ import {
   REVOKE_REASONS,
   TGA_CATEGORIES,
 } from "@/data/approvals"
-import { patientName, patientsQuery } from "@/data/patients"
 import type { TgaApproval } from "@/data/types"
 import { Field, Mono } from "@/design/primitives"
+import { PatientPicker } from "@/features/shared/PatientPicker"
 import { focusFirstError } from "@/lib/form"
 import { clinicToday, formatDate, lastCoveredDay } from "@/lib/format"
 import { describeError } from "@/lib/http"
@@ -109,7 +109,6 @@ function RecordApprovalForm({
   onClose: () => void
 }) {
   const queryClient = useQueryClient()
-  const patients = useQuery({ ...patientsQuery, enabled: !patientId })
   const today = clinicToday()
   const defaults: Values = {
     patient_id: patientId ?? "",
@@ -153,26 +152,14 @@ function RecordApprovalForm({
       </DialogHeader>
 
       {!patientId ? (
-        <Field
-          label="Patient"
-          htmlFor="ap-patient"
+        <PatientPicker
+          id="ap-patient"
+          value={form.watch("patient_id")}
+          onChange={(id) =>
+            form.setValue("patient_id", id, { shouldValidate: true })
+          }
           error={errors.patient_id?.message}
-        >
-          <select
-            id="ap-patient"
-            className="field-input"
-            {...form.register("patient_id")}
-          >
-            <option value="">
-              {patients.isPending ? "Loading patients…" : "Choose a patient"}
-            </option>
-            {patients.data?.data.map((p) => (
-              <option key={p.id} value={p.id}>
-                {patientName(p)}
-              </option>
-            ))}
-          </select>
-        </Field>
+        />
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2">

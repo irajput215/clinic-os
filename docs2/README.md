@@ -7,8 +7,9 @@ builds it and serves it at `/`, beside the API under `/api`
 
 `docs/` remains the normative contract for the platform. It covers requirements, invariants, gates
 and the backend modules. `docs2/` covers only what the new app adds on top of it: the UI, how the UI
-uses the API, and the API contracts the UI needs but that no backend module serves yet. When the two
-disagree, `docs/` wins and the disagreement is a defect to raise.
+uses the API, and the API contract each screen reads. Every screen reads the API; the in-browser
+preview store is gone ([ADR-F006](adr/ADR-F006-preview-store-retired.md)). When the two disagree,
+`docs/` wins and the disagreement is a defect to raise.
 
 ## Start here
 
@@ -16,7 +17,6 @@ disagree, `docs/` wins and the disagreement is a defect to raise.
 |---|---|
 | [architecture.md](architecture.md) | How the app is built, how it talks to the backend, the speed and security measures |
 | [design-system.md](design-system.md) | Tokens, type, components, and how they map to the reference design |
-| [capabilities.md](capabilities.md) | Which screens read the real API and which run on the preview store, and how to switch |
 | [sdlc/](sdlc/) | One folder per feature: requirements, design, API contract, test plan, Definition of Done |
 | [adr/](adr/) | Decisions specific to this app |
 
@@ -49,7 +49,9 @@ with a `clinic_name` (open registration is on in development). The public bookin
 
 ## Feature map
 
-| # | Feature | Screens | Data source today |
+Every feature reads the API. Each feature's `dod.md` records what is built and what is still open.
+
+| # | Feature | Screens | Data source |
 |---|---|---|---|
 | 01 | [Auth and app shell](sdlc/01-auth-and-shell/) | Sign in, sidebar, top bar, patient quick-find | API |
 | 01 | [Auth and app shell](sdlc/01-auth-and-shell/) | Organisation signup, password recovery and reset | API |
@@ -61,4 +63,4 @@ with a `clinic_name` (open registration is on in development). The public bookin
 | 05 | [TGA approvals](sdlc/05-approvals/) | Approvals register, patient approvals tab | API: patient tab (#46) and register (`GET /tga-approvals`, M2 phase 2A) |
 | 06 | [Patient activity](sdlc/06-patient-activity/) | Patient record → Activity | API (audit log, #42) |
 | 07 | [Script queue](sdlc/07-script-queue/) | Script queue, review and sign, patient scripts tab | API (contract agreed 2026-10-07; dispatch queues, no pharmacy transport) |
-| 08 | [Today](sdlc/08-today/) | Today's clinic dashboard | Preview (contract proposed) |
+| 08 | [Today](sdlc/08-today/) | Today's clinic dashboard | API (`GET /dashboard/today`, M2 phase 2E) |

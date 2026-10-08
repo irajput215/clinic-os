@@ -6,7 +6,6 @@ import { useEffect, useRef, useState } from "react"
 import { useForm } from "react-hook-form"
 import { Button } from "@/components/ui/button"
 import { registerOrganisation } from "@/data/account"
-import { resetPreview } from "@/data/preview/store"
 import { Field } from "@/design/primitives"
 import { focusFirstError } from "@/lib/form"
 import { describeError, httpStatus, validationMessages } from "@/lib/http"
@@ -112,7 +111,6 @@ export function SignupPage() {
     try {
       await signIn(body.email, body.password)
       queryClient.clear()
-      resetPreview()
       await router.navigate({ to: "/" })
     } catch {
       setRegistered(true)

@@ -20,7 +20,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { changePassword, deactivateMe, updateMe } from "@/data/account"
-import { resetPreview } from "@/data/preview/store"
 import {
   Card,
   Field,
@@ -323,7 +322,6 @@ function AccountTab({ me }: { me: UserPublic }) {
     mutationFn: deactivateMe,
     onSuccess: () => {
       signOut()
-      resetPreview()
       queryClient.clear()
       toast.success("Your account has been deactivated")
       navigate({ to: "/login" })

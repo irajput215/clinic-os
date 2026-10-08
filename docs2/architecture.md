@@ -7,22 +7,23 @@ frontend/src
 ├── main.tsx              API client config, query client, router, 401 handling
 ├── routes/               TanStack file routes: thin; validate search params, prefetch, render a feature
 ├── features/<feature>/   screens and dialogs, one folder per SDLC feature
-├── data/                 repositories: the only code that knows where data comes from
-│   ├── capabilities.ts   per-feature switch: `api` or `preview`
-│   ├── types.ts          MIRROR types (copied from backend branches) and PROPOSED contracts
-│   ├── api.ts            typed call for routes not yet in the generated client
-│   └── preview/          the in-browser stand-in backend (seed, gate mirror, store)
-├── design/               primitives: PageHeader, Card, StatCard, Pill, Mono, Field, banners, states
+├── data/                 repositories: the only code that calls the API
+│   └── types.ts          MIRROR vocabularies the generated client types only as `string`
+├── design/               primitives: PageHeader, Card, StatCard, Pill, Mono, Field, states
 ├── shell/                AppShell, sidebar nav, top bar, global search, brand mark
 ├── components/ui/        shadcn/Radix primitives, restyled through tokens
 ├── client/               generated from backend OpenAPI (do not edit; `bun run generate-client`)
 └── lib/                  http errors, session, formatting (Australia/Sydney), search-param parsers
 ```
 
-Screens never call `fetch`/axios. They call a repository (`data/*.ts`) through TanStack Query. A
-repository has an `api` implementation and/or a `preview` one behind the same interface, chosen by
-[`capabilities.ts`](../frontend/src/data/capabilities.ts). When a backend module merges, one
-line changes and the screens do not. See [capabilities.md](capabilities.md).
+Screens never call `fetch`/axios. They call a repository (`data/*.ts`) through TanStack Query, and
+every repository calls the generated client. There is no second data source: the in-browser preview
+store that stood in for unbuilt backends is deleted
+([ADR-F006](adr/ADR-F006-preview-store-retired.md), superseding ADR-F004).
+
+Where the generated client types a field more loosely than the backend enforces (a state or reason
+code typed `string`), the repository narrows it with a **MIRROR** type in
+[`data/types.ts`](../frontend/src/data/types.ts), each commented with the backend file it copies.
 
 ## Build and deployment
 
@@ -64,18 +65,19 @@ The UI hides, disables and explains. It never decides. In particular:
 
 - **Tenant** is never sent. Every body is built from form fields that don't include it, and the
   API's `extra="forbid"` schemas would refuse it anyway.
-- **The safety gate** result shown on a script will be the server's answer once `prescriptions` is
-  `api` (the gate runs inside the signing transaction). While scripts are preview it comes from a
-  stand-in that mirrors the server's rules over the preview's sample approvals
-  ([`data/preview/gate.ts`](../frontend/src/data/preview/gate.ts)), never over the
-  patient's real approvals, so one screen can't say "covered" while signing says "blocked".
-  Either way, the UI disables signing when the answer is a refusal, and the server must refuse again
-  at sign and at dispatch (proposed contract in [sdlc/07](sdlc/07-script-queue/api.md)).
-- **Four-eyes**, double-booking, state transitions: the preview enforces them the way the backend
-  does, so the UI is built around the refusals. In API mode the server enforces them.
-- **Step-up for signing.** Signing re-enters the password and re-authenticates against
-  `POST /login/access-token` before the sign call. This is an interim measure until D-003 (identity,
-  MFA) lands; see [ADR-F002](adr/ADR-F002-token-storage.md).
+- **The safety gate** result shown on a script (the queue, the review dialog, the Today page) is the
+  server's answer, evaluated now for display only. The UI disables signing when the answer is a
+  refusal, and the server decides again inside the signing and dispatch transactions, with the
+  approval rows locked ([sdlc/07](sdlc/07-script-queue/api.md)).
+- **Four-eyes**, double-booking, state transitions: the server enforces them, and the UI shows its
+  refusals (`detail.code`, worded in `lib/http.ts`).
+- **Role boundaries.** A `403` shows "not available to your role". The Today page's sections are
+  gated by the server: a section the role cannot read is withheld from the response, and its card
+  shows the same lock ([sdlc/08](sdlc/08-today/api.md)).
+- **Step-up for signing and dispatch.** The password is re-entered and checked by the server
+  (`POST /api/v1/auth/step-up`), which returns a single-use grant bound to the user, the operation and
+  the script. This is an interim measure until D-003 (identity, MFA) lands; see
+  [ADR-F002](adr/ADR-F002-token-storage.md).
 
 ## Security measures in the app
 
@@ -89,7 +91,7 @@ The UI hides, disables and explains. It never decides. In particular:
 | PHI in URLs | No identifiers or names in query strings. Patient search sends the term in a `POST /patients/search` body and keeps it in component state, never the route | `shell/GlobalSearch.tsx`, `features/patients/PatientsPage.tsx` |
 | PHI in error UI | Errors render the API's sentence or a fixed one, never request data | `lib/http.ts` |
 | Referrer leakage | `<meta name="referrer" content="no-referrer">` | `index.html` |
-| Session scope | Sign-out clears the token, the query cache and the preview store | `shell/AppShell.tsx` |
+| Session scope | Sign-out clears the token and the query cache | `shell/AppShell.tsx` |
 | Input | Every form validates with zod before submit. The server re-validates | `features/**` |
 
 ## Speed measures
@@ -101,7 +103,7 @@ The UI hides, disables and explains. It never decides. In particular:
 | Hover/intent preloading and loader prefetching | Navigation renders from cache |
 | Per-query `staleTime`, `retry` only for network/5xx (`retryTransient`) | No refetch storms, no 7-second retries on a `403` |
 | Self-hosted fonts (`@fontsource`), `unicode-range` subsets | No third-party font request; only the Latin subset downloads |
-| One-round-trip Today page (proposed `GET /dashboard/today`) | One request instead of four |
+| One-round-trip Today page (`GET /dashboard/today`, every section read on one server transaction) | One request instead of four |
 
 **Budget:** initial JS at most 200 KB gzipped. Measured at build: entry 115 KB plus shared 36 KB, so
 about 151 KB. Every route chunk is under 7 KB gzipped.

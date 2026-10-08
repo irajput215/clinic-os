@@ -17,7 +17,7 @@ Signing a prescription needs step-up authentication. No step-up endpoint exists.
    never shared with another tab or a later visit. That is strictly narrower exposure than
    `localStorage` for the same XSS threat. Every access is wrapped so blocked storage degrades to
    "session ends on reload" instead of an error.
-2. Sign-out clears the token, the query cache and the preview store.
+2. Sign-out clears the token and the query cache (and, until [ADR-F006](ADR-F006-preview-store-retired.md) retired it, the preview store).
 3. **Interim step-up:** the Review and sign dialog requires the password, re-authenticates against
    `POST /login/access-token`, and only then signs. A wrong password is refused by the server; the
    login endpoint is rate limited.

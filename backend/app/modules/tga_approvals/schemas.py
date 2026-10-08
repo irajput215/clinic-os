@@ -261,6 +261,24 @@ class TgaApprovalRegister(BaseModel):
     counts: TgaApprovalRegisterCounts
 
 
+class TgaApprovalDigest(BaseModel):
+    """The approvals needing action, at a glance (the Today page, `docs2/sdlc/08-today`).
+
+    The register's "Needs action" set, split in two: approvals waiting for their four-eyes check,
+    and `ACTIVE` approvals whose last covered day falls within `expiring_within_days` of today
+    (Australia/Sydney), already-lapsed ones the expiry job has not reached included. The two counts
+    are the practice's totals; the two lists are bounded.
+    """
+
+    pending_verification: int
+    expiring: int
+    expiring_within_days: int
+    #: Oldest first: the longest wait is the first to clear.
+    pending: list[TgaApprovalRegisterRow]
+    #: Soonest last covered day first.
+    expiring_soon: list[TgaApprovalRegisterRow]
+
+
 class TgaMatchResponse(BaseModel):
     """The gate's answer (T2-27).
 

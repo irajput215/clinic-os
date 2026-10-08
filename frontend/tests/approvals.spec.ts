@@ -80,7 +80,12 @@ test("the practice-wide register lists, filters and counts the practice's approv
   // Record from the register: it lands pending, so it needs action.
   await page.getByRole("button", { name: "Record approval" }).click()
   const record = page.getByRole("dialog")
-  await record.getByLabel("Patient").selectOption({ label: "Willem Barker" })
+  // The picker asks the server's search, so every patient is reachable, not only the first page.
+  await record.getByLabel("Patient", { exact: true }).fill("Barker")
+  await record
+    .getByRole("radiogroup", { name: "Matching patients" })
+    .getByRole("radio", { name: /Willem Barker/ })
+    .check()
   await record.getByLabel("TGA category").selectOption("CATEGORY_1")
   await record.getByLabel("Dosage form").selectOption("ORAL_LIQUID")
   await record.getByLabel("TGA reference").fill("SAS-B 2026-660123")

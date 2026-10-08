@@ -34,6 +34,7 @@ from sqlmodel import Session, col, select
 
 from app.core.db import tenant_transaction
 from app.modules.appointments.models import (
+    APPOINTMENT_STATUSES,
     APPOINTMENT_TYPES,
     DEFAULT_CLOSES_AT,
     DEFAULT_OPENS_AT,
@@ -46,6 +47,8 @@ from app.modules.appointments.models import (
 from app.modules.appointments.schemas import (
     AppointmentCreate,
     AppointmentRead,
+    DayAppointment,
+    DaySchedule,
     PractitionerRead,
     PublicBookingRequest,
     PublicSlot,
@@ -226,6 +229,60 @@ def list_for_patient(
             .limit(MAX_PATIENT_HISTORY)
         ).all()
         return _reads(session, tenant_id=tenant_id, rows=rows)
+
+
+# A clinic day's schedule is bounded by its practitioners' hours; the ceiling only stops a runaway.
+MAX_DAY_SCHEDULE: Final[int] = 500
+
+# The clinic day `[00:00, 24:00)` in Sydney as two instants, so the day of a DST change is 23 or 25
+# hours long, exactly as the clinic lives it.
+_DAY_BOUNDS_SQL = text(
+    "SELECT CAST(:day AS date)::timestamp AT TIME ZONE :zone,"
+    " (CAST(:day AS date) + 1)::timestamp AT TIME ZONE :zone"
+)
+
+
+def day_schedule(session: Session, *, tenant_id: uuid.UUID, day: date) -> DaySchedule:
+    """Every booking starting on the clinic day `day`, earliest first, on the caller's transaction.
+
+    For the Today page (`dashboard` module), which reads every section on one transaction so the
+    sections are one snapshot. Cancelled and no-show bookings are listed too: the day's record is
+    what happened, and `by_status` lets the screen count what is still to come.
+    """
+    starts, ends = (
+        session.connection()
+        .execute(_DAY_BOUNDS_SQL, {"day": day, "zone": TIMEZONE})
+        .one()
+    )
+    rows = session.exec(
+        select(Appointment)
+        .where(
+            Appointment.tenant_id == tenant_id,
+            col(Appointment.starts_at) >= starts,
+            col(Appointment.starts_at) < ends,
+        )
+        .order_by(col(Appointment.starts_at), col(Appointment.id))
+        .limit(MAX_DAY_SCHEDULE)
+    ).all()
+    reads = _reads(session, tenant_id=tenant_id, rows=rows)
+    names = users_roles.display_names(
+        tenant_id=tenant_id, user_ids=[read.practitioner_id for read in reads]
+    )
+    by_status = dict.fromkeys(APPOINTMENT_STATUSES, 0)
+    for read in reads:
+        by_status[read.status] += 1
+    return DaySchedule.model_validate(
+        {
+            "by_status": by_status,
+            "data": [
+                DayAppointment(
+                    **read.model_dump(),
+                    practitioner_name=names.get(read.practitioner_id),
+                )
+                for read in reads
+            ],
+        }
+    )
 
 
 # -- writes ----------------------------------------------------------------------------------------
@@ -576,7 +633,11 @@ def public_slots(*, tenant_id: uuid.UUID, appointment_type: str) -> list[PublicS
         ]
 
 
-def _clinic_today(session: Session) -> date:
+def clinic_today(session: Session) -> date:
+    """Today's date in the clinic (R7), from the database clock on the caller's transaction.
+
+    `now()` is the transaction's start time, so every read on one transaction agrees on "today".
+    """
     value = session.connection().execute(
         text("SELECT (now() AT TIME ZONE :zone)::date"), {"zone": TIMEZONE}
     )
@@ -610,7 +671,7 @@ def public_book(
     with tenant_transaction(
         tenant_id=tenant_id, actor_role="PUBLIC_BOOKING", source_ip=source_ip
     ) as session:
-        if _age_on(body.date_of_birth, _clinic_today(session)) < MINIMUM_BOOKING_AGE:
+        if _age_on(body.date_of_birth, clinic_today(session)) < MINIMUM_BOOKING_AGE:
             raise AppointmentRefused(
                 422, BOOKING_AGE_NOT_MET, "You need to be 18 or over to book online."
             )

@@ -1,13 +1,13 @@
 /**
- * Domain types for the features whose backend modules are not in the generated client yet.
+ * Domain types the generated client states more loosely than the backend enforces.
  *
  * Two kinds live here, and the comment on each says which:
- * - MIRROR: copied field-for-field from a backend module that exists on a branch
- *   (backend/app/modules/<module>/schemas.py). When that module merges, the generated client's type
- *   replaces the mirror and the compiler points at every difference.
- * - PROPOSED: no backend module exists. The shape is this app's proposed contract, written up in
- *   docs2/sdlc/<feature>/api.md for the backend owner to accept or amend.
+ * - MIRROR: a vocabulary or shape copied from a backend module
+ *   (backend/app/modules/<module>/{models,schemas,service}.py), where the generated type is only
+ *   `string`. The backend file is named beside it, so a change there has one place to land here.
  * - GENERATED: an alias of the generated client's type, kept so screens import one name.
+ *
+ * Every feature reads the API (ADR-F006): no type here is a proposal waiting for a backend.
  */
 import type {
   AppointmentRead,
@@ -180,67 +180,4 @@ export const APPOINTMENT_TRANSITIONS: Record<
   COMPLETED: [],
   CANCELLED: [],
   NO_SHOW: [],
-}
-
-// PREVIEW ONLY, kept for the Today page (src/data/dashboard.ts) until GET /dashboard/today lands.
-// The script queue itself reads the real API (`Prescription` in src/data/scripts.ts); `Product`,
-// `Script` and `ScriptState` below exist only for Today's preview sample and are deleted with it.
-export interface Product {
-  id: string
-  name: string
-  tga_category: string
-  dosage_form: string
-  pack: string
-  schedule: "S4" | "S8"
-}
-
-// PREVIEW ONLY (Today page sample, see above).
-export const SCRIPT_STATES = [
-  "AWAITING_REVIEW",
-  "SIGNED",
-  "SENT",
-  "BLOCKED",
-  "REQUIRES_RECONCILIATION",
-  "CANCELLED",
-] as const
-export type ScriptState = (typeof SCRIPT_STATES)[number]
-
-export interface Script {
-  id: string
-  patient_id: string
-  patient_name: string
-  product_id: string
-  product_name: string
-  tga_category: string
-  dosage_form: string
-  quantity: string
-  repeats: number
-  directions: string
-  triage_outcome: string | null
-  conventional_therapy: string | null
-  state: ScriptState
-  drafted_by: string
-  drafted_by_name: string
-  prescriber_id: string
-  prescriber_name: string
-  date_of_service: string
-  created_at: string
-  signed_at: string | null
-  sent_at: string | null
-  escript_token: string | null
-  pharmacy: string | null
-  /** The latest gate decision, when one was made. */
-  gate: TgaMatchResponse | null
-}
-
-// PROPOSED: dashboard module, one round trip for the Today page.
-export interface TodaySummary {
-  date: string
-  appointments: Appointment[]
-  scripts_awaiting: Script[]
-  scripts_blocked: number
-  approvals_expiring: Array<
-    TgaApproval & { patient_name: string; days_left: number }
-  >
-  attention: Array<{ id: string; title: string; body: string; href: string }>
 }

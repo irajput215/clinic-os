@@ -10,7 +10,6 @@ import { ArrowLeft, ArrowRight, Menu, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import { approvalCountsQuery } from "@/data/approvals"
 import { useCanAdminister } from "@/data/permissions"
-import { resetPreview } from "@/data/preview/store"
 import { isActionable, scriptsQuery } from "@/data/scripts"
 import { useClinicSlug } from "@/data/tenant"
 import { formatLongDay } from "@/lib/format"
@@ -39,7 +38,6 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
   const handleSignOut = () => {
     signOut()
-    resetPreview()
     queryClient.clear()
     navigate({ to: "/login" })
   }

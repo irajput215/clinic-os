@@ -53,10 +53,10 @@ have a 1 px `line` border and `shadow-card` (`0 1px 2px` at 8% ink). Dialogs and
 | Component | Notes |
 |---|---|
 | `PageHeader` | Serif title, one-line muted subtitle, actions right, hairline under |
-| `Card` / `CardLink` | Title row with a clay "Open calendar →" style link |
+| `Card` / `CardLink` | Title row with a clay "Open calendar →" style link. A titled card is a named region (`aria-labelledby` its title) |
 | `StatCard` | KPI tile. When linked, it lifts 1 px and its shadow deepens on hover |
 | `Pill`, `Mono` | See above |
-| `PreviewBanner` | Dashed warn banner on every screen that shows preview data |
+| `NotForYourRole` | The role boundary: shown for a `403` (inside `ErrorState`) and for a Today section the server withheld |
 | `EmptyState`, `ErrorState`, `SkeletonRows`, `PagePending`, `PageError` | One look for loading, empty, `403` and failure, everywhere |
 | `Field` | Uppercase label, input, then error (`role="alert"`) or hint |
 | `.data-table` (CSS) | Uppercase header band on `oat`, 11 px row padding, hover on clickable rows |

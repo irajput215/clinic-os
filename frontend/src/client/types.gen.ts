@@ -430,6 +430,79 @@ export type ClinicalRecordsPublic = {
 };
 
 /**
+ * DayAppointment
+ *
+ * One booking on a day's schedule, with the practitioner's display name (Today, R2).
+ */
+export type DayAppointment = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Patient Id
+     */
+    patient_id: string;
+    /**
+     * Patient Name
+     */
+    patient_name: string;
+    /**
+     * Practitioner Id
+     */
+    practitioner_id: string;
+    /**
+     * Type
+     */
+    type: 'NURSE_TRIAGE' | 'INITIAL_CONSULT' | 'FOLLOW_UP';
+    /**
+     * Status
+     */
+    status: 'BOOKED' | 'CONFIRMED' | 'ARRIVED' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
+    /**
+     * Starts At
+     */
+    starts_at: string;
+    /**
+     * Ends At
+     */
+    ends_at: string;
+    /**
+     * Source
+     */
+    source: 'STAFF' | 'PUBLIC_BOOKING';
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Practitioner Name
+     */
+    practitioner_name: string | null;
+};
+
+/**
+ * DaySchedule
+ *
+ * One clinic day's bookings, earliest first, and how many are in each status.
+ *
+ * `by_status` carries every status, zero included, so a client never has to know the vocabulary
+ * to draw a count.
+ */
+export type DaySchedule = {
+    /**
+     * By Status
+     */
+    by_status: {
+        [key: string]: number;
+    };
+    /**
+     * Data
+     */
+    data: Array<DayAppointment>;
+};
+
+/**
  * DispatchRead
  *
  * The latest outbox row for a prescription - what the clinic may be told about delivery.
@@ -954,6 +1027,39 @@ export type PrescriptionDispatch = {
      * Step Up Token
      */
     step_up_token: string;
+};
+
+/**
+ * PrescriptionQueueSummary
+ *
+ * The script queue at a glance (the Today page, `docs2/sdlc/08-today`).
+ *
+ * `by_state` carries every state, zero included. `QUEUED` while `transport_configured` is `false`
+ * means accepted by ClinicOS and **not sent** to any pharmacy.
+ */
+export type PrescriptionQueueSummary = {
+    /**
+     * By State
+     */
+    by_state: {
+        [key: string]: number;
+    };
+    /**
+     * Transport Configured
+     */
+    transport_configured: boolean;
+    /**
+     * Actionable
+     */
+    actionable: Array<PrescriptionRead>;
+    /**
+     * Gate Refused
+     */
+    gate_refused: number;
+    /**
+     * Gate Checked
+     */
+    gate_checked: number;
 };
 
 /**
@@ -1598,6 +1704,39 @@ export type TgaApprovalDetail = {
 };
 
 /**
+ * TgaApprovalDigest
+ *
+ * The approvals needing action, at a glance (the Today page, `docs2/sdlc/08-today`).
+ *
+ * The register's "Needs action" set, split in two: approvals waiting for their four-eyes check,
+ * and `ACTIVE` approvals whose last covered day falls within `expiring_within_days` of today
+ * (Australia/Sydney), already-lapsed ones the expiry job has not reached included. The two counts
+ * are the practice's totals; the two lists are bounded.
+ */
+export type TgaApprovalDigest = {
+    /**
+     * Pending Verification
+     */
+    pending_verification: number;
+    /**
+     * Expiring
+     */
+    expiring: number;
+    /**
+     * Expiring Within Days
+     */
+    expiring_within_days: number;
+    /**
+     * Pending
+     */
+    pending: Array<TgaApprovalRegisterRow>;
+    /**
+     * Expiring Soon
+     */
+    expiring_soon: Array<TgaApprovalRegisterRow>;
+};
+
+/**
  * TgaApprovalRead
  *
  * One approval. No `validity_interval` column, no internals, no document store key.
@@ -1972,6 +2111,29 @@ export type TgaMatchResponse = {
      * Evaluated Timezone
      */
     evaluated_timezone: string;
+};
+
+/**
+ * TodaySummary
+ *
+ * `GET /api/v1/dashboard/today`: the clinic's day in one read.
+ */
+export type TodaySummary = {
+    /**
+     * Date
+     */
+    date: string;
+    /**
+     * Timezone
+     */
+    timezone: string;
+    appointments: DaySchedule | null;
+    scripts: PrescriptionQueueSummary | null;
+    approvals: TgaApprovalDigest | null;
+    /**
+     * Withheld
+     */
+    withheld: Array<'appointments' | 'scripts' | 'approvals'>;
 };
 
 /**
@@ -4154,3 +4316,19 @@ export type prescriptionsDispatchPrescriptionResponses = {
 };
 
 export type prescriptionsDispatchPrescriptionResponse = prescriptionsDispatchPrescriptionResponses[keyof prescriptionsDispatchPrescriptionResponses];
+
+export type dashboardReadTodayData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/dashboard/today';
+};
+
+export type dashboardReadTodayResponses = {
+    /**
+     * Successful Response
+     */
+    200: TodaySummary;
+};
+
+export type dashboardReadTodayResponse = dashboardReadTodayResponses[keyof dashboardReadTodayResponses];
