@@ -16,7 +16,7 @@ from typing import NamedTuple
 
 import pytest
 from fastapi.testclient import TestClient
-from httpx import Response
+from httpx2 import Response
 from sqlalchemy import text
 from sqlmodel import Session
 
