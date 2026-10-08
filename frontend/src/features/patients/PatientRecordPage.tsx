@@ -27,6 +27,7 @@ import {
   ReviewSignDialog,
   StageScriptDialog,
 } from "@/features/scripts/ScriptDialogs"
+import { ScriptHistoryDialog } from "@/features/scripts/ScriptManage"
 import { useScriptActions } from "@/features/scripts/useScriptAction"
 import {
   AppointmentStatusPill,
@@ -283,10 +284,12 @@ function ScriptsTab({ patientId }: { patientId: string }) {
   const { actionFor, canStage } = useScriptActions()
   const [staging, setStaging] = useState(false)
   const [reviewingId, setReviewingId] = useState<string | null>(null)
+  const [historyId, setHistoryId] = useState<string | null>(null)
   const mine = scripts.data ?? []
   const open = mine.filter((s) => isActionable(s.state))
   const done = mine.filter((s) => !isActionable(s.state))
   const reviewing = mine.find((s) => s.id === reviewingId) ?? null
+  const showingHistory = mine.find((s) => s.id === historyId) ?? null
   return (
     <>
       <Card
@@ -337,6 +340,15 @@ function ScriptsTab({ patientId }: { patientId: string }) {
                         </Mono>
                       ) : null}
                       <PrescriptionStatePill state={s.state} />
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="max-lg:min-h-11"
+                        onClick={() => setHistoryId(s.id)}
+                        aria-label={`History of ${s.medicine_name}`}
+                      >
+                        History
+                      </Button>
                     </span>
                   </li>
                 ))}
@@ -354,6 +366,10 @@ function ScriptsTab({ patientId }: { patientId: string }) {
         script={reviewing}
         action={reviewing ? actionFor(reviewing) : null}
         onOpenChange={(o) => !o && setReviewingId(null)}
+      />
+      <ScriptHistoryDialog
+        script={showingHistory}
+        onOpenChange={(o) => !o && setHistoryId(null)}
       />
     </>
   )

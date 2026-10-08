@@ -480,6 +480,35 @@ test("the prescribing screens fit every width", async ({
     ],
     review,
   )
+
+  // The corrections the same dialog offers (decision D-008): the draft edit and the history.
+  await review.getByRole("button", { name: "Edit draft" }).click()
+  const edit = page.getByRole("dialog", { name: "Edit draft" })
+  await checkEveryWidth(
+    page,
+    testInfo,
+    "scripts-edit-dialog",
+    [
+      edit.getByRole("heading", { name: "Edit draft" }),
+      edit.getByLabel("Directions"),
+      edit.getByRole("button", { name: "Save draft" }),
+    ],
+    edit,
+  )
+  await edit.getByRole("button", { name: "Back" }).click()
+  await review.getByRole("button", { name: "History" }).click()
+  const history = page.getByRole("dialog", { name: "Script history" })
+  await checkEveryWidth(
+    page,
+    testInfo,
+    "scripts-history-dialog",
+    [
+      history.getByRole("heading", { name: "Script history" }),
+      history.getByTestId("script-history"),
+      history.getByRole("button", { name: "Back" }),
+    ],
+    history,
+  )
 })
 
 test("administration and settings fit every width", async ({

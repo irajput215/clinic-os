@@ -1053,6 +1053,65 @@ export type PrescribersPublic = {
 };
 
 /**
+ * PrescriptionAddendum
+ *
+ * `POST /api/v1/prescriptions/{id}/addendum`: the correction to a signed script (FEAT-11 R5).
+ *
+ * The new version keeps the original's patient and prescriber of record; it starts as a `DRAFT` and
+ * is signed like any other. The intent key is the `Idempotency-Key` header.
+ */
+export type PrescriptionAddendum = {
+    /**
+     * Medicine Name
+     */
+    medicine_name?: string | null;
+    /**
+     * Tga Category
+     */
+    tga_category?: string | null;
+    /**
+     * Dosage Form
+     */
+    dosage_form?: string | null;
+    /**
+     * Dose Instruction
+     */
+    dose_instruction?: string | null;
+    /**
+     * Quantity
+     */
+    quantity?: number | string | null;
+    /**
+     * Repeats
+     */
+    repeats?: number | null;
+    /**
+     * Triage Outcome
+     */
+    triage_outcome?: string | null;
+    /**
+     * Conventional Therapy
+     */
+    conventional_therapy?: string | null;
+    /**
+     * Date Of Service
+     */
+    date_of_service?: string | null;
+};
+
+/**
+ * PrescriptionCancel
+ *
+ * `POST /api/v1/prescriptions/{id}/cancel`: a reason **code**, never free text (FEAT-11 R11).
+ */
+export type PrescriptionCancel = {
+    /**
+     * Reason Code
+     */
+    reason_code: 'ENTERED_IN_ERROR' | 'CLINICALLY_NOT_REQUIRED' | 'PATIENT_DECLINED' | 'DUPLICATE';
+};
+
+/**
  * PrescriptionCreate
  *
  * `POST /api/v1/prescriptions`: stage a draft (FEAT-11 R1; docs2 07 R1).
@@ -1114,6 +1173,63 @@ export type PrescriptionDispatch = {
      * Step Up Token
      */
     step_up_token: string;
+};
+
+/**
+ * PrescriptionEventRead
+ *
+ * One transition of a prescription, oldest first: who moved it, when, and the reason code.
+ */
+export type PrescriptionEventRead = {
+    /**
+     * From State
+     */
+    from_state: string | null;
+    /**
+     * To State
+     */
+    to_state: string;
+    /**
+     * Reason
+     */
+    reason: string | null;
+    /**
+     * Actor Id
+     */
+    actor_id: string | null;
+    /**
+     * Actor Name
+     */
+    actor_name: string | null;
+    /**
+     * Occurred At
+     */
+    occurred_at: string;
+};
+
+/**
+ * PrescriptionHistory
+ *
+ * `GET /api/v1/prescriptions/{id}/history` (FEAT-11 US-10): the ordered transition list, and
+ * the versions either side of an addendum.
+ */
+export type PrescriptionHistory = {
+    /**
+     * Prescription Id
+     */
+    prescription_id: string;
+    /**
+     * Supersedes Id
+     */
+    supersedes_id: string | null;
+    /**
+     * Superseded By Id
+     */
+    superseded_by_id: string | null;
+    /**
+     * Data
+     */
+    data: Array<PrescriptionEventRead>;
 };
 
 /**
@@ -1235,6 +1351,14 @@ export type PrescriptionRead = {
      * Signed At
      */
     signed_at: string | null;
+    /**
+     * Cancel Reason Code
+     */
+    cancel_reason_code?: string | null;
+    /**
+     * Supersedes Id
+     */
+    supersedes_id?: string | null;
     gate: TgaMatchResponse | null;
     dispatch: DispatchRead | null;
 };
@@ -1249,6 +1373,57 @@ export type PrescriptionSign = {
      * Step Up Token
      */
     step_up_token: string;
+};
+
+/**
+ * PrescriptionUpdate
+ *
+ * `PATCH /api/v1/prescriptions/{id}`: correct a `DRAFT` (FEAT-11 R3, US-2).
+ *
+ * The reviewing doctor may be changed while the script is a draft; the server validates the new one
+ * exactly as on staging.
+ */
+export type PrescriptionUpdate = {
+    /**
+     * Medicine Name
+     */
+    medicine_name?: string | null;
+    /**
+     * Tga Category
+     */
+    tga_category?: string | null;
+    /**
+     * Dosage Form
+     */
+    dosage_form?: string | null;
+    /**
+     * Dose Instruction
+     */
+    dose_instruction?: string | null;
+    /**
+     * Quantity
+     */
+    quantity?: number | string | null;
+    /**
+     * Repeats
+     */
+    repeats?: number | null;
+    /**
+     * Triage Outcome
+     */
+    triage_outcome?: string | null;
+    /**
+     * Conventional Therapy
+     */
+    conventional_therapy?: string | null;
+    /**
+     * Date Of Service
+     */
+    date_of_service?: string | null;
+    /**
+     * Prescriber Id
+     */
+    prescriber_id?: string | null;
 };
 
 /**
@@ -4555,6 +4730,166 @@ export type prescriptionsDispatchPrescriptionResponses = {
 };
 
 export type prescriptionsDispatchPrescriptionResponse = prescriptionsDispatchPrescriptionResponses[keyof prescriptionsDispatchPrescriptionResponses];
+
+export type prescriptionsReadPrescriptionData = {
+    body?: never;
+    path: {
+        /**
+         * Prescription Id
+         */
+        prescription_id: string;
+    };
+    query?: never;
+    url: '/api/v1/prescriptions/{prescription_id}';
+};
+
+export type prescriptionsReadPrescriptionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type prescriptionsReadPrescriptionError = prescriptionsReadPrescriptionErrors[keyof prescriptionsReadPrescriptionErrors];
+
+export type prescriptionsReadPrescriptionResponses = {
+    /**
+     * Successful Response
+     */
+    200: PrescriptionRead;
+};
+
+export type prescriptionsReadPrescriptionResponse = prescriptionsReadPrescriptionResponses[keyof prescriptionsReadPrescriptionResponses];
+
+export type prescriptionsUpdatePrescriptionData = {
+    body: PrescriptionUpdate;
+    path: {
+        /**
+         * Prescription Id
+         */
+        prescription_id: string;
+    };
+    query?: never;
+    url: '/api/v1/prescriptions/{prescription_id}';
+};
+
+export type prescriptionsUpdatePrescriptionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type prescriptionsUpdatePrescriptionError = prescriptionsUpdatePrescriptionErrors[keyof prescriptionsUpdatePrescriptionErrors];
+
+export type prescriptionsUpdatePrescriptionResponses = {
+    /**
+     * Successful Response
+     */
+    200: PrescriptionRead;
+};
+
+export type prescriptionsUpdatePrescriptionResponse = prescriptionsUpdatePrescriptionResponses[keyof prescriptionsUpdatePrescriptionResponses];
+
+export type prescriptionsReadPrescriptionHistoryData = {
+    body?: never;
+    path: {
+        /**
+         * Prescription Id
+         */
+        prescription_id: string;
+    };
+    query?: never;
+    url: '/api/v1/prescriptions/{prescription_id}/history';
+};
+
+export type prescriptionsReadPrescriptionHistoryErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type prescriptionsReadPrescriptionHistoryError = prescriptionsReadPrescriptionHistoryErrors[keyof prescriptionsReadPrescriptionHistoryErrors];
+
+export type prescriptionsReadPrescriptionHistoryResponses = {
+    /**
+     * Successful Response
+     */
+    200: PrescriptionHistory;
+};
+
+export type prescriptionsReadPrescriptionHistoryResponse = prescriptionsReadPrescriptionHistoryResponses[keyof prescriptionsReadPrescriptionHistoryResponses];
+
+export type prescriptionsCancelPrescriptionData = {
+    body: PrescriptionCancel;
+    path: {
+        /**
+         * Prescription Id
+         */
+        prescription_id: string;
+    };
+    query?: never;
+    url: '/api/v1/prescriptions/{prescription_id}/cancel';
+};
+
+export type prescriptionsCancelPrescriptionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type prescriptionsCancelPrescriptionError = prescriptionsCancelPrescriptionErrors[keyof prescriptionsCancelPrescriptionErrors];
+
+export type prescriptionsCancelPrescriptionResponses = {
+    /**
+     * Successful Response
+     */
+    200: PrescriptionRead;
+};
+
+export type prescriptionsCancelPrescriptionResponse = prescriptionsCancelPrescriptionResponses[keyof prescriptionsCancelPrescriptionResponses];
+
+export type prescriptionsAmendPrescriptionData = {
+    body: PrescriptionAddendum;
+    headers?: {
+        /**
+         * Idempotency-Key
+         */
+        'Idempotency-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Prescription Id
+         */
+        prescription_id: string;
+    };
+    query?: never;
+    url: '/api/v1/prescriptions/{prescription_id}/addendum';
+};
+
+export type prescriptionsAmendPrescriptionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type prescriptionsAmendPrescriptionError = prescriptionsAmendPrescriptionErrors[keyof prescriptionsAmendPrescriptionErrors];
+
+export type prescriptionsAmendPrescriptionResponses = {
+    /**
+     * A replay of an earlier `Idempotency-Key`: the same addendum, unchanged.
+     */
+    200: PrescriptionRead;
+    /**
+     * Successful Response
+     */
+    201: PrescriptionRead;
+};
+
+export type prescriptionsAmendPrescriptionResponse = prescriptionsAmendPrescriptionResponses[keyof prescriptionsAmendPrescriptionResponses];
 
 export type dashboardReadTodayData = {
     body?: never;
