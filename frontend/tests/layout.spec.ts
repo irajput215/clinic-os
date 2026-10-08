@@ -267,6 +267,18 @@ async function checkEveryWidth(
     for (const locator of ready) await expect(locator, at).toBeVisible()
     // Laid out with its data, not its loading skeletons.
     await expect(page.locator("[aria-busy=true]"), at).toHaveCount(0)
+    // Measured at rest: a dialog opens with a short zoom, and a 44 px button measured mid-way
+    // reads 43 px (CI and local runs both caught it on the invite dialog at 360 px).
+    await page.evaluate(() =>
+      Promise.all(
+        document
+          .getAnimations()
+          // A looping animation never finishes; only the finite ones (the dialog's zoom) matter.
+          .filter((a) => a.effect?.getComputedTiming().endTime !== Infinity)
+          // A cancelled animation (a resize restarts a transition) rejects; it is over either way.
+          .map((a) => a.finished.catch(() => undefined)),
+      ),
+    )
     const { scrollWidth, innerWidth } = await page.evaluate(() => ({
       scrollWidth: document.documentElement.scrollWidth,
       innerWidth: window.innerWidth,
