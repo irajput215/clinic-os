@@ -65,9 +65,30 @@ have a 1 px `line` border and `shadow-card` (`0 1px 2px` at 8% ink). Dialogs and
 
 - **Desktop:** a 232 px sidebar and fluid content up to 1240 px. The top bar is sticky with a light
   backdrop blur.
-- **Below 1024 px:** the sidebar becomes a drawer opened from the menu button.
-- **Below 640 px:** secondary table columns hide (`max-sm:hidden` / `max-md:hidden`) instead of
-  scrolling the page.
+- **Below 1024 px:** the sidebar becomes a drawer opened from the menu button. It is a modal
+  dialog: focus stays inside it, Escape or a tap outside closes it, focus returns to the menu
+  button, and it closes on navigation or when the screen widens past 1024 px. The top bar's
+  back/forward buttons are desktop-only.
+- **Touch targets:** below 1024 px every control is at least 44 px: buttons of every size,
+  inputs (`.field-input` is 44 px everywhere), tabs, nav items, filter pills, card links and dialog
+  close buttons. Inputs use 16 px text there, so iOS does not zoom on focus. Links inside running
+  text are exempt.
+- **Tables:** below 640 px secondary columns hide (`max-sm:hidden` / `max-md:hidden`) instead of
+  scrolling the page. A table whose row actions would otherwise sit off-screen uses priority
+  columns: the approvals table keeps its first column and its actions below 1024 px and stacks
+  the rest inside the first cell. The permission matrix is the one table that scrolls sideways,
+  inside its card, with the permission column sticky.
+- **Calendar:** below 1024 px the day view is a list per practitioner; the 15-minute slot grid
+  is desktop-only and booking starts from "New appointment".
+- **Dialogs:** fit the viewport (`100dvh - 2rem`). The header and footer are sticky and the body
+  scrolls between them, so the title and the primary action are always on screen.
+- **Below 640 px:** the top bar shows the menu button and the patient search; the page heading
+  names the screen.
+
+`tests/layout.spec.ts` checks every screen at 360, 390, 768, 1024, 1280 and 1440 px: no sideways
+page scroll, heading and primary action visible, 44 px targets below 1024 px, dialogs inside the
+viewport, and the drawer's focus handling. Its screenshots are a CI artifact
+(`layout-screenshots-<shard>`).
 
 ## Screens
 
