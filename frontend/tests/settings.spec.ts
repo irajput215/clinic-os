@@ -17,19 +17,19 @@ test("a person updates their own name, and the app shows it", async ({
     page.getByRole("heading", { name: "Settings", level: 1 }),
   ).toBeVisible()
 
+  // A name this run has not used, so a retry still changes it (Save is disabled for no change).
+  const name = `Dr Ana Petrović-Hale ${Date.now().toString(36)}`
   const save = page.getByRole("button", { name: "Save profile" })
   await expect(save).toBeDisabled()
-  await page.getByLabel("Full name").fill("Dr Ana Petrović-Hale")
+  await page.getByLabel("Full name").fill(name)
   await save.click()
   await expect(page.getByText("Profile saved")).toBeVisible()
   await expect(save).toBeDisabled()
 
   // The sidebar reads the same account, so it agrees without a reload, and after one.
-  await expect(page.getByTitle("Your settings")).toContainText(
-    "Dr Ana Petrović-Hale",
-  )
+  await expect(page.getByTitle("Your settings")).toContainText(name)
   await page.reload()
-  await expect(page.getByLabel("Full name")).toHaveValue("Dr Ana Petrović-Hale")
+  await expect(page.getByLabel("Full name")).toHaveValue(name)
 })
 
 test("a person changes their password, then signs in with the new one", async ({

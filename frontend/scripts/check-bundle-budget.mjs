@@ -22,12 +22,14 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { gzipSync } from "node:zlib"
 
-// Measured 2026-10-08 (m3/frontend-speed): entry 35.8 (React is its own cached chunk), initial
-// 137.1, largest lazy chunk 28.6 (zod with react-hook-form, loaded with the first form), CSS 10.8.
+// Measured 2026-10-08 (m3/frontend-speed): entry 44.5 (React is its own cached chunk), initial
+// 145.6, largest lazy chunk 28.6 (zod with react-hook-form, loaded with the first form), CSS 10.8.
 // Before that branch: entry 98.3, initial 145.2, CSS 11.3. `initial` is the number that binds.
+// The toaster (~8.5 KB) is on the first load on purpose: deferred, it dropped every toast raised
+// before it mounted ("Profile saved" on a slow first load, caught by CI).
 const BUDGET_KB = {
   entry: 90,
-  initial: 142,
+  initial: 150,
   chunk: 35,
   css: 15,
 }

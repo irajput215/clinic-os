@@ -102,7 +102,7 @@ Every row was checked against the code on 2026-10-08 (branch `m3/frontend-speed`
 |---|---|---|
 | Route-level code splitting (`autoCodeSplitting`); a route file holds only its loader and search validation | Each screen's code, dialogs, zod and react-hook-form load with the screen that needs them | `vite.config.ts`, `routes/` |
 | React in its own chunk | A deploy that changes only app code leaves React's ~55 KB cached | `vite.config.ts` (`codeSplitting.groups`) |
-| Toast library fetched when the browser is idle after the first paint | Not on the first load's critical path | `main.tsx` (`DeferredToaster`) |
+| Toast library mounted with the app | A toast raised on a slow first load is never lost (sonner's toaster drops toasts raised before it mounts, so it is not deferred) | `main.tsx` |
 | No schema library in route search validation | zod loads with forms, not on every page | `lib/search.ts` |
 | Intent preloading (`defaultPreload: "intent"`) and loader prefetching | A hovered or focused link has its code and data before the click | `main.tsx`, `routes/` |
 | No first-load waterfall: the `_app` loader starts `/users/me`, the permission set and the two sidebar counts together with the screen's own loader | One round trip before the shell and the page can render. Only the clinic slug waits (for the permission set, so it is never asked when the server is certain to refuse) | `routes/_app.tsx`, proved by `tests/first-load.spec.ts` |
@@ -123,8 +123,8 @@ gzip):
 
 | | Budget | Measured | Before this branch |
 |---|---|---|---|
-| Initial JS (entry + every `modulepreload`): what any first load fetches before rendering | 142 KB | 137.1 KB | 145.2 KB |
-| Entry chunk (`index-*.js`) | 90 KB | 35.8 KB (React is its own chunk) | 98.3 KB |
+| Initial JS (entry + every `modulepreload`): what any first load fetches before rendering | 150 KB | 145.6 KB | 145.2 KB |
+| Entry chunk (`index-*.js`) | 90 KB | 44.5 KB (React is its own chunk) | 98.3 KB |
 | Largest lazy chunk (zod with react-hook-form) | 35 KB | 28.6 KB | 28.6 KB |
 | CSS | 15 KB | 10.8 KB | 11.3 KB |
 
