@@ -16,6 +16,7 @@ from uuid import UUID
 import psycopg
 from sqlalchemy import Select, TextClause, event, exc
 from sqlalchemy.pool import ConnectionPoolEntry, PoolProxiedConnection
+from sqlalchemy.sql.compiler import SQLCompiler
 from sqlmodel import Session, create_engine, select
 
 from app import crud
@@ -139,9 +140,22 @@ def driver_sql(clause: TextClause) -> str:
 
 
 def driver_statement(statement: Select[Any]) -> tuple[str, dict[str, Any]]:
-    """A SQLAlchemy `select` as psycopg reads it, with its bound parameters, for `run_pipelined`."""
+    """A SQLAlchemy `select` as psycopg reads it, with its bound parameters, for `run_pipelined`.
+
+    The parameters are what SQLAlchemy itself would send: an `IN` list is expanded into one
+    parameter per value, and each value goes through its type's bind processing.
+    """
     compiled = statement.compile(dialect=engine.dialect)
-    return str(compiled), dict(compiled.params)
+    if not isinstance(
+        compiled, SQLCompiler
+    ):  # pragma: no cover - a select compiles to SQL
+        raise TypeError("only a SQL statement can be pipelined")
+    state = compiled.construct_expanded_state()
+    parameters = {
+        name: state.processors[name](value) if name in state.processors else value
+        for name, value in state.parameters.items()
+    }
+    return state.statement, parameters
 
 
 def account_context_statement(
@@ -229,6 +243,22 @@ def run_pipelined(
     Statements are driver SQL with bound parameters (`driver_sql`); no value is ever interpolated.
     A failing statement raises here and leaves the transaction failed, exactly as a plain execute.
     """
+    return [
+        rows for _, rows in run_pipelined_described(session, statements, commit=commit)
+    ]
+
+
+def run_pipelined_described(
+    session: Session,
+    statements: Sequence[tuple[str, Mapping[str, Any]]],
+    *,
+    commit: bool = False,
+) -> list[tuple[list[int], list[tuple[Any, ...]]]]:
+    """`run_pipelined`, with each result's column type codes beside its rows.
+
+    The type codes are what a statement's own column types need to decode the rows exactly as
+    SQLAlchemy would (`app.core.reads`). A statement that returns no rows has no columns.
+    """
     deferred: _DeferredContext | None = session.info.get(_DEFERRED_CONTEXT)
     if deferred is not None and deferred.open:
         driver_connection = deferred.driver_connection
@@ -244,7 +274,16 @@ def run_pipelined(
                 cursors.append(driver_connection.execute(sql, parameters))
             if commit:
                 driver_connection.commit()
-    return [cursor.fetchall() if cursor.description else [] for cursor in cursors]
+    results: list[tuple[list[int], list[tuple[Any, ...]]]] = []
+    for cursor in cursors:
+        description = cursor.description
+        if description is None:
+            results.append(([], []))
+        else:
+            results.append(
+                ([column.type_code for column in description], cursor.fetchall())
+            )
+    return results
 
 
 def _set_context(session: Session, values: dict[str, str]) -> None:
