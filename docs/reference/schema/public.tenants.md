@@ -6,6 +6,7 @@
 | ---- | ---- | ------- | -------- | -------- | ------- | ------- |
 | created_at | timestamp with time zone |  | false |  |  |  |
 | data_region | varchar(32) |  | false |  |  |  |
+| display_name | varchar(120) |  | false |  |  |  |
 | id | uuid | gen_random_uuid() | false | [public.appointment_settings](public.appointment_settings.md) [public.appointments](public.appointments.md) [public.care_relationships](public.care_relationships.md) [public.clinical_record_versions](public.clinical_record_versions.md) [public.clinical_records](public.clinical_records.md) [public.clinics](public.clinics.md) [public.dispatch_attempts](public.dispatch_attempts.md) [public.patients](public.patients.md) [public.prescription_events](public.prescription_events.md) [public.prescriptions](public.prescriptions.md) [public.role_permissions](public.role_permissions.md) [public.roles](public.roles.md) [public.staff_invitations](public.staff_invitations.md) [public.step_up_grants](public.step_up_grants.md) [public.tga_approval_events](public.tga_approval_events.md) [public.tga_approvals](public.tga_approvals.md) [public.user](public.user.md) [public.user_roles](public.user_roles.md) |  |  |
 | legal_name | varchar(255) |  | false |  |  |  |
 | retention_profile | varchar(64) |  | false |  |  |  |
@@ -17,11 +18,13 @@
 
 | Name | Type | Definition |
 | ---- | ---- | ---------- |
+| ck_tenants_display_name | CHECK | CHECK ((((char_length((display_name)::text) >= 1) AND (char_length((display_name)::text) <= 120)) AND ((display_name)::text = btrim((display_name)::text)) AND ((display_name)::text !~ '[[:cntrl:]]'::text))) |
 | ck_tenants_slug_lowercase | CHECK | CHECK (((slug)::text = lower((slug)::text))) |
 | ck_tenants_status | CHECK | CHECK (((status)::text = ANY ((ARRAY['ACTIVE'::character varying, 'SUSPENDED'::character varying, 'CLOSING'::character varying, 'CLOSED'::character varying])::text[]))) |
 | pk_tenants | PRIMARY KEY | PRIMARY KEY (id) |
 | tenants_created_at_not_null | n | NOT NULL created_at |
 | tenants_data_region_not_null | n | NOT NULL data_region |
+| tenants_display_name_not_null | n | NOT NULL display_name |
 | tenants_id_not_null | n | NOT NULL id |
 | tenants_legal_name_not_null | n | NOT NULL legal_name |
 | tenants_retention_profile_not_null | n | NOT NULL retention_profile |
@@ -63,6 +66,7 @@ erDiagram
 "public.tenants" {
   timestamp_with_time_zone created_at
   varchar_32_ data_region
+  varchar_120_ display_name
   uuid id
   varchar_255_ legal_name
   varchar_64_ retention_profile

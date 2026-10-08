@@ -23,9 +23,10 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.sql.elements import TextClause
 
 _INSERT_TENANT = sa.text(
-    "INSERT INTO tenants (id, slug, legal_name, status, data_region, retention_profile,"
-    " created_at, updated_at)"
-    " VALUES (:id, :slug, :legal_name, 'ACTIVE', 'ap-southeast-2', 'default', now(), now())"
+    "INSERT INTO tenants (id, slug, legal_name, display_name, status, data_region,"
+    " retention_profile, created_at, updated_at)"
+    " VALUES (:id, :slug, :legal_name, :legal_name, 'ACTIVE', 'ap-southeast-2', 'default',"
+    " now(), now())"
 )
 _INSERT_CLINIC = sa.text(
     "INSERT INTO clinics (id, tenant_id, name, address, phone, created_at, updated_at)"

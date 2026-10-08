@@ -72,6 +72,7 @@ def _tenant(**overrides: Any) -> Tenant:
     fields: dict[str, Any] = {
         "slug": "demo-clinic",
         "legal_name": "Demo Clinic Pty Ltd",
+        "display_name": "Demo Clinic",
         "retention_profile": "default",
     }
     fields.update(overrides)

@@ -14,7 +14,15 @@ may do, and each refusal is attempted rather than described.
 the design's `REVOKE ALL` assumes central provisioning (that migration's deviation 4 — *"Approved
 deviation, recorded against that decision"*). This file asserts the state that exists and names where the
 deviation is recorded, so narrowing it later fails here and forces the change to be deliberate. The
-refusals that matter — `UPDATE`, `DELETE`, and both withheld columns — are asserted as refusals.
+refusals that matter - `UPDATE` of anything but the display name, `DELETE`, and both withheld
+columns - are asserted as refusals.
+
+## The one column-level `UPDATE`
+
+`b7d2e4f6a8c1` added `display_name`, the clinic's PUBLIC name, readable by the application and
+writable by it on exactly two columns: `UPDATE (display_name, updated_at)`. That is how the Practice
+Owner renames the clinic (`PATCH /api/v1/tenants/current/profile`). Every other column stays
+unwritable, and that is asserted by execution below.
 
 Every attempt that must fail gets its own transaction: a failed statement aborts the transaction it ran
 in, so a second statement in the same block would raise `InFailedSqlTransaction` and prove nothing.
@@ -47,6 +55,11 @@ _SELECT_COLUMN_GRANTS = text(
     " WHERE grantee = 'clinos_app' AND table_name = :table"
     " AND privilege_type = 'SELECT'"
 )
+_UPDATE_COLUMN_GRANTS = text(
+    "SELECT column_name FROM information_schema.column_privileges"
+    " WHERE grantee = 'clinos_app' AND table_name = :table"
+    " AND privilege_type = 'UPDATE'"
+)
 _TABLE_OWNER = text(
     "SELECT r.rolname FROM pg_class c"
     " JOIN pg_namespace n ON n.oid = c.relnamespace"
@@ -64,7 +77,9 @@ TENANT_TABLE_GRANTS = {
 
 # `tenants` is global, so column-level grants are its protection: `retention_profile` and
 # `legal_name` are withheld from the application role.
-TENANTS_SELECT_COLUMNS = {"id", "slug", "status", "data_region"}
+TENANTS_SELECT_COLUMNS = {"id", "slug", "status", "data_region", "display_name"}
+# The PUBLIC display name and its timestamp: the only columns the application may change.
+TENANTS_UPDATE_COLUMNS = {"display_name", "updated_at"}
 
 # The one table-level write grant on `tenants`, and the migration that records it as an approved
 # deviation (`f96bc0861b16`, deviation 4).
@@ -111,6 +126,11 @@ def test_tenants_grants_are_column_level_read_plus_the_recorded_insert() -> None
         f"would expose `retention_profile`. Found {sorted(table_grants)}"
     )
     assert columns == TENANTS_SELECT_COLUMNS
+    with engine.connect() as conn:
+        updatable = {
+            row[0] for row in conn.execute(_UPDATE_COLUMN_GRANTS, {"table": "tenants"})
+        }
+    assert updatable == TENANTS_UPDATE_COLUMNS
 
 
 def test_the_app_role_cannot_read_a_withheld_tenant_column() -> None:
@@ -140,10 +160,10 @@ def test_the_insert_deviation_is_real_and_leaves_no_row() -> None:
             conn.execute(AS_APP_ROLE)
             conn.execute(
                 text(
-                    "INSERT INTO tenants (slug, legal_name, status, data_region, retention_profile,"
-                    " created_at, updated_at)"
-                    " VALUES ('grant-probe', 'Grant Probe', 'ACTIVE', 'ap-southeast-2', 'default',"
-                    " now(), now())"
+                    "INSERT INTO tenants (slug, legal_name, display_name, status, data_region,"
+                    " retention_profile, created_at, updated_at)"
+                    " VALUES ('grant-probe', 'Grant Probe', 'Grant Probe', 'ACTIVE',"
+                    " 'ap-southeast-2', 'default', now(), now())"
                 )
             )
             # `slug` is one of the four granted columns, so the inserted row can be read back.
@@ -158,9 +178,37 @@ def test_the_insert_deviation_is_real_and_leaves_no_row() -> None:
 
 
 def test_the_app_role_cannot_update_or_delete_tenants() -> None:
-    """No `UPDATE` and no `DELETE`; `INSERT` is the single recorded deviation."""
+    """No `UPDATE` beyond the display name and no `DELETE`; `INSERT` is the recorded deviation."""
     _refused("UPDATE tenants SET status = 'SUSPENDED'")
+    _refused("UPDATE tenants SET legal_name = 'Renamed Pty Ltd'")
+    _refused("UPDATE tenants SET slug = 'renamed-slug'")
+    _refused("UPDATE tenants SET retention_profile = 'none'")
     _refused("DELETE FROM tenants")
+
+
+def test_the_app_role_may_update_only_the_display_name() -> None:
+    """The column grant works as declared, on a real row, in a transaction that is rolled back."""
+    with engine.connect() as conn:
+        transaction = conn.begin()
+        try:
+            conn.execute(
+                text(
+                    "INSERT INTO tenants (slug, legal_name, display_name, status, data_region,"
+                    " retention_profile, created_at, updated_at)"
+                    " VALUES ('grant-rename-probe', 'Probe Pty Ltd', 'Probe', 'ACTIVE',"
+                    " 'ap-southeast-2', 'default', now(), now())"
+                )
+            )
+            conn.execute(AS_APP_ROLE)
+            renamed = conn.execute(
+                text(
+                    "UPDATE tenants SET display_name = 'Probe Renamed', updated_at = now()"
+                    " WHERE slug = 'grant-rename-probe' RETURNING display_name"
+                )
+            ).scalar_one()
+            assert renamed == "Probe Renamed"
+        finally:
+            transaction.rollback()
 
 
 def test_the_app_role_cannot_delete_or_truncate_clinics() -> None:

@@ -30,6 +30,12 @@ STATUS_VOCABULARY: tuple[TenantStatus, ...] = (
 # Data stays in Australia (INV-6); this release admits one region.
 DATA_REGIONS: tuple[str, ...] = ("ap-southeast-2",)
 
+# The clinic's public name: what the sidebar, the public booking page and the emails a clinic sends
+# show. PUBLIC (`01-tenancy-and-clinics/05-data-and-audit.md` classification ladder), unlike
+# `legal_name`, which is CONFIDENTIAL and never shown. Contract:
+# `docs2/sdlc/01-auth-and-shell/api.md`, "Clinic display name".
+DISPLAY_NAME_MAX_LENGTH: int = 120
+
 
 def _utcnow() -> datetime:
     return datetime.now(UTC)
@@ -47,6 +53,14 @@ class Tenant(SQLModel, table=True):
         # The slug is routing only, never an authorisation input; keeping it
         # lower-case makes the uniqueness guarantee predictable.
         sa.CheckConstraint("slug = lower(slug)", name="slug_lowercase"),
+        # The display name is shown to anyone, so the database refuses what the API refuses: blank,
+        # padded, over-long, or carrying a control character (`ck_tenants_display_name`).
+        sa.CheckConstraint(
+            f"char_length(display_name) BETWEEN 1 AND {DISPLAY_NAME_MAX_LENGTH}"
+            " AND display_name = btrim(display_name)"
+            " AND display_name !~ '[[:cntrl:]]'",
+            name="display_name",
+        ),
     )
 
     id: uuid.UUID = Field(
@@ -56,6 +70,7 @@ class Tenant(SQLModel, table=True):
     )
     slug: str = Field(unique=True, index=True, max_length=64)
     legal_name: str = Field(max_length=255)
+    display_name: str = Field(max_length=DISPLAY_NAME_MAX_LENGTH)
     status: str = Field(default="ACTIVE", max_length=16)
     data_region: str = Field(default="ap-southeast-2", max_length=32)
     retention_profile: str = Field(max_length=64)

@@ -87,6 +87,27 @@ unclassified store under a route whose write path is already blocked (below).
   reported gap: a success path invented here would be a tenant-configuration write with no step-up, no
   named setting and no audit writer.
 
+#### `GET /api/v1/tenants/current/profile`
+- Authentication: Yes
+- Permission: none beyond membership of an active organisation - the display name is PUBLIC
+  (`docs2/sdlc/01-auth-and-shell/api.md`, "Clinic display name")
+- Tenant scope: session only; Output: `TenantProfileRead` (`display_name` only)
+- Audit: none (PUBLIC data; the closed catalogue names no tenant read)
+- Rate limit: 300/min per session, the read class
+- Errors: `401`, `403` (`NO_ORGANISATION`, `TENANT_NOT_ACTIVE`), `429`; fails closed = yes
+
+#### `PATCH /api/v1/tenants/current/profile`
+- Authentication: Yes
+- Permission: `tenant:configure` (Practice Owner only)
+- Tenant scope: session only; a body `tenant_id` is ignored and audited `CLIENT_TENANT_ID_IGNORED`
+- Input: `TenantProfileUpdate` (`display_name`, normalised, 1-120 printable characters); Output:
+  `TenantProfileRead`
+- Audit: `tenant.config_changed` (`changed_fields`, `step_up: false`), `SUCCESS` on the change's
+  transaction, `DENIED` for a refusal
+- Rate limit: 20/min per session, administrative class (R15)
+- Errors: `401`, `403` (`PERMISSION_NOT_HELD`, `NO_ORGANISATION`), `422`, `429`; fails closed = yes
+- Step-up: no - a display name is not a security setting (R12 governs `PATCH /tenants/current`)
+
 `PATCH` is also refused for a caller without `tenant:configure` — the permission check runs first, so an
 `ADMINISTRATOR` (who holds `users:manage` but not `tenant:configure`) receives `PERMISSION_NOT_HELD`
 rather than the step-up refusal, exactly as the `users:manage` boundary is documented in feature 03.
@@ -106,10 +127,12 @@ from app.modules.identity_tenancy.schemas import (
     StepUpGrantRead,
     StepUpRequest,
     TenantCurrentRead,
+    TenantProfileRead,
+    TenantProfileUpdate,
     TenantSettingsUpdate,
 )
 from app.modules.users_roles.catalog import TENANCY_PERMISSIONS
-from app.modules.users_roles.service import authorize
+from app.modules.users_roles.service import authorize, can, enforce
 
 # R15: a change under `/api/v1/tenants/*` is the administrative class (20/min); a single-resource
 # read is the read class (300/min). Each route declares its class as a route dependency, which runs
@@ -232,6 +255,61 @@ def update_current_tenant(
                 "available yet; nothing was changed."
             ),
         },
+    )
+
+
+@router.get(
+    "/current/profile",
+    response_model=TenantProfileRead,
+    dependencies=[Depends(read_rate_limit)],
+)
+def read_current_tenant_profile(*, actor: ActorDep) -> TenantProfileRead:
+    """The caller's own clinic's display name, for every member of it.
+
+    No permission code: the display name is PUBLIC (the booking page shows it to anyone), and the
+    route answers only for the session's own organisation. An account with no organisation, or one
+    whose organisation is not active, is refused by `get_actor` before this runs.
+    """
+    profile = identity_service.tenant_profile(tenant_id=actor.tenant_id)
+    if profile is None:
+        raise _tenant_not_found()
+    return profile
+
+
+@router.patch(
+    "/current/profile",
+    response_model=TenantProfileRead,
+    dependencies=[Depends(admin_rate_limit)],
+    responses={
+        status.HTTP_403_FORBIDDEN: {
+            "description": "`PERMISSION_NOT_HELD`: renaming the clinic needs `tenant:configure`. "
+            "Audited `tenant.config_changed` `DENIED`; nothing is changed."
+        }
+    },
+)
+def update_current_tenant_profile(
+    *, actor: ActorDep, body: TenantProfileUpdate
+) -> TenantProfileRead:
+    """Rename the caller's own clinic (Practice Owner). Audited on the same transaction.
+
+    The body is validated first (a blank, over-long or unprintable name is a `422`), then the
+    permission is decided; a refusal is audited before it is raised.
+    """
+    decision = can(actor, TENANCY_PERMISSIONS["configure"])
+    if not decision.allowed:
+        identity_service.record_display_name_denial(
+            tenant_id=actor.tenant_id,
+            actor_id=actor.user_id,
+            actor_role=actor.actor_role,
+            reason=decision.code.value,
+        )
+        enforce(decision)
+    return identity_service.update_display_name(
+        tenant_id=actor.tenant_id,
+        actor_id=actor.user_id,
+        actor_role=actor.actor_role,
+        display_name=body.display_name,
+        client_tenant_id_supplied=body.client_tenant_id_supplied,
     )
 
 

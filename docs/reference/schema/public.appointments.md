@@ -113,6 +113,7 @@ erDiagram
 "public.tenants" {
   timestamp_with_time_zone created_at
   varchar_32_ data_region
+  varchar_120_ display_name
   uuid id
   varchar_255_ legal_name
   varchar_64_ retention_profile

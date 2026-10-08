@@ -217,6 +217,14 @@ BUDGETS = [
         why="prelude, BEGIN+ the active accounts joined through their grants, COMMIT",
         seeded_rows=_data,
     ),
+    Budget(
+        "clinic profile",
+        "/tenants/current/profile",
+        seeded=3,
+        empty=3,
+        why="prelude, BEGIN+ the display name (one column of the session's own tenant), COMMIT;"
+        " every page load asks it for the sidebar",
+    ),
 ]
 
 
