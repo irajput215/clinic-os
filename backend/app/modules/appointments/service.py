@@ -28,12 +28,12 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from typing import Any, Final, Literal
 
-from sqlalchemy import text
+from sqlalchemy import TextClause, text
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
 from app.core.db import tenant_transaction
-from app.core.reads import ReadBatch
+from app.core.reads import Plan, ReadBatch, run_plan
 from app.modules.appointments.models import (
     APPOINTMENT_STATUSES,
     APPOINTMENT_TYPES,
@@ -156,12 +156,9 @@ def list_practitioners(*, tenant_id: uuid.UUID) -> list[PractitionerRead]:
 # -- reads -----------------------------------------------------------------------------------------
 
 
-def _reads(
-    session: Session, *, tenant_id: uuid.UUID, rows: Sequence[Appointment]
+def _convert(
+    rows: Sequence[Appointment], names: dict[uuid.UUID, str]
 ) -> list[AppointmentRead]:
-    names = patients.display_names(
-        session, tenant_id=tenant_id, patient_ids=[row.patient_id for row in rows]
-    )
     # Validated, not cast: the check constraints hold the vocabularies, and the schema re-checks them.
     return [
         AppointmentRead.model_validate(
@@ -181,6 +178,17 @@ def _reads(
         )
         for row in rows
     ]
+
+
+def _reads(
+    session: Session, *, tenant_id: uuid.UUID, rows: Sequence[Appointment]
+) -> list[AppointmentRead]:
+    batch = ReadBatch()
+    names = patients.queue_display_names(
+        batch, tenant_id=tenant_id, patient_ids=[row.patient_id for row in rows]
+    )
+    batch.send(session)
+    return _convert(rows, names.value)
 
 
 def list_appointments(
@@ -216,11 +224,13 @@ def list_for_patient(
 ) -> list[AppointmentRead] | None:
     """One patient's bookings, newest first; `None` when the patient is absent or another tenant's."""
     with tenant_transaction(tenant_id=tenant_id) as session:
-        if not patients.display_names(
-            session, tenant_id=tenant_id, patient_ids=[patient_id]
-        ):
-            return None
-        rows = session.exec(
+        # The patient's name and its bookings in one flight. The bookings are only returned once the
+        # patients facade has answered that the patient is this tenant's own and live.
+        batch = ReadBatch()
+        names = patients.queue_display_names(
+            batch, tenant_id=tenant_id, patient_ids=[patient_id]
+        )
+        rows = batch.scalars(
             select(Appointment)
             .where(
                 Appointment.tenant_id == tenant_id,
@@ -228,50 +238,94 @@ def list_for_patient(
             )
             .order_by(col(Appointment.starts_at).desc(), col(Appointment.id))
             .limit(MAX_PATIENT_HISTORY)
-        ).all()
-        return _reads(session, tenant_id=tenant_id, rows=rows)
+        )
+        batch.send(session)
+        if patient_id not in names.value:
+            return None
+        return _convert(rows.value, names.value)
+
+
+@dataclass(frozen=True)
+class ClinicDay:
+    """A clinic day (R7) and its bounds `[starts, ends)` as instants.
+
+    The bounds are the day's `00:00` and the next day's `00:00` in Sydney, so the day of a daylight
+    saving change is 23 or 25 hours long, exactly as the clinic lives it.
+    """
+
+    day: date
+    starts: datetime
+    ends: datetime
+
+
+# Today's date in the clinic and its bounds, from the database clock, in one statement. `now()` is the
+# transaction's start time, so every read on one transaction agrees on "today".
+_TODAY_SQL = text(
+    "SELECT today.day,"
+    " today.day::timestamp AT TIME ZONE :zone,"
+    " (today.day + 1)::timestamp AT TIME ZONE :zone"
+    " FROM (SELECT (now() AT TIME ZONE :zone)::date AS day) AS today"
+)
+_DAY_BOUNDS_SQL = text(
+    "SELECT CAST(:day AS date),"
+    " CAST(:day AS date)::timestamp AT TIME ZONE :zone,"
+    " (CAST(:day AS date) + 1)::timestamp AT TIME ZONE :zone"
+)
+
+
+def _clinic_day(session: Session, statement: TextClause, **values: object) -> ClinicDay:
+    day, starts, ends = (
+        session.connection().execute(statement, {"zone": TIMEZONE, **values}).one()
+    )
+    assert isinstance(day, date), "the database clock must answer with a date"
+    return ClinicDay(day=day, starts=starts, ends=ends)
+
+
+def clinic_day(session: Session) -> ClinicDay:
+    """Today in the clinic (R7) and its bounds, from the database clock on the caller's transaction.
+
+    One statement for the date and both bounds; the Today page reads it once for every section.
+    """
+    return _clinic_day(session, _TODAY_SQL)
 
 
 # A clinic day's schedule is bounded by its practitioners' hours; the ceiling only stops a runaway.
 MAX_DAY_SCHEDULE: Final[int] = 500
 
-# The clinic day `[00:00, 24:00)` in Sydney as two instants, so the day of a DST change is 23 or 25
-# hours long, exactly as the clinic lives it.
-_DAY_BOUNDS_SQL = text(
-    "SELECT CAST(:day AS date)::timestamp AT TIME ZONE :zone,"
-    " (CAST(:day AS date) + 1)::timestamp AT TIME ZONE :zone"
-)
 
+def day_schedule_plan(*, tenant_id: uuid.UUID, day: ClinicDay) -> Plan[DaySchedule]:
+    """Every booking starting on the clinic day `day`, earliest first, as a read plan.
 
-def day_schedule(session: Session, *, tenant_id: uuid.UUID, day: date) -> DaySchedule:
-    """Every booking starting on the clinic day `day`, earliest first, on the caller's transaction.
-
-    For the Today page (`dashboard` module), which reads every section on one transaction so the
-    sections are one snapshot. Cancelled and no-show bookings are listed too: the day's record is
-    what happened, and `by_status` lets the screen count what is still to come.
+    For the Today page (`dashboard` module), which runs every section's plan on one transaction, so
+    the sections are one snapshot and share their round trips (`app.core.reads`): the bookings are
+    one step, the patients' and the practitioners' names the next. Cancelled and no-show bookings
+    are listed too: the day's record is what happened, and `by_status` lets the screen count what is
+    still to come.
     """
-    starts, ends = (
-        session.connection()
-        .execute(_DAY_BOUNDS_SQL, {"day": day, "zone": TIMEZONE})
-        .one()
-    )
-    rows = session.exec(
+    first = ReadBatch()
+    bookings = first.scalars(
         select(Appointment)
         .where(
             Appointment.tenant_id == tenant_id,
-            col(Appointment.starts_at) >= starts,
-            col(Appointment.starts_at) < ends,
+            col(Appointment.starts_at) >= day.starts,
+            col(Appointment.starts_at) < day.ends,
         )
         .order_by(col(Appointment.starts_at), col(Appointment.id))
         .limit(MAX_DAY_SCHEDULE)
-    ).all()
-    reads = _reads(session, tenant_id=tenant_id, rows=rows)
-    batch = ReadBatch()
-    practitioner_names = users_roles.queue_display_names(
-        batch, tenant_id=tenant_id, user_ids=[read.practitioner_id for read in reads]
     )
-    batch.send(session)
-    names = practitioner_names.value
+    yield first
+
+    rows = bookings.value
+    second = ReadBatch()
+    patient_names = patients.queue_display_names(
+        second, tenant_id=tenant_id, patient_ids=[row.patient_id for row in rows]
+    )
+    practitioner_names = users_roles.queue_display_names(
+        second, tenant_id=tenant_id, user_ids=[row.practitioner_id for row in rows]
+    )
+    yield second
+
+    reads = _convert(rows, patient_names.value)
     by_status = dict.fromkeys(APPOINTMENT_STATUSES, 0)
     for read in reads:
         by_status[read.status] += 1
@@ -281,12 +335,20 @@ def day_schedule(session: Session, *, tenant_id: uuid.UUID, day: date) -> DaySch
             "data": [
                 DayAppointment(
                     **read.model_dump(),
-                    practitioner_name=names.get(read.practitioner_id),
+                    practitioner_name=practitioner_names.value.get(
+                        read.practitioner_id
+                    ),
                 )
                 for read in reads
             ],
         }
     )
+
+
+def day_schedule(session: Session, *, tenant_id: uuid.UUID, day: date) -> DaySchedule:
+    """`day_schedule_plan` for any clinic day `day`, run on the caller's transaction."""
+    bounds = _clinic_day(session, _DAY_BOUNDS_SQL, day=day)
+    return run_plan(session, day_schedule_plan(tenant_id=tenant_id, day=bounds))
 
 
 # -- writes ----------------------------------------------------------------------------------------
@@ -642,12 +704,7 @@ def clinic_today(session: Session) -> date:
 
     `now()` is the transaction's start time, so every read on one transaction agrees on "today".
     """
-    value = session.connection().execute(
-        text("SELECT (now() AT TIME ZONE :zone)::date"), {"zone": TIMEZONE}
-    )
-    today = value.scalar_one()
-    assert isinstance(today, date)
-    return today
+    return clinic_day(session).day
 
 
 def _age_on(date_of_birth: date, today: date) -> int:

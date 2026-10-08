@@ -67,9 +67,11 @@ from fastapi import status
 from sqlalchemy import ColumnElement, and_, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select, text
+from sqlmodel.sql.expression import Select, SelectOfScalar
 
 from app.core.config import settings
 from app.core.db import tenant_transaction
+from app.core.reads import Pending, Plan, ReadBatch
 
 # The audit module is reached through its service facade (`docs/reference/build-contract.md` §7). The
 # import is one-way — `audit` knows nothing about `tga_approvals` — so there is no cycle.
@@ -112,6 +114,7 @@ __all__ = [
     "VERIFIER_CANNOT_BE_CREATOR",
     "ApprovalNotFound",
     "InvalidCursor",
+    "MatchQuestion",
     "MatchReason",
     "Refusal",
     "audit_denial",
@@ -124,7 +127,8 @@ __all__ = [
     "list_approvals",
     "list_register",
     "match_approval",
-    "needs_action_digest",
+    "queue_matches",
+    "needs_action_digest_plan",
     "revoke_approval",
     "service_date_today",
     "supersede_approval",
@@ -536,14 +540,13 @@ def _check_limit(limit: int) -> None:
         raise ValueError(f"limit must be between 1 and {MAX_PAGE_SIZE}")
 
 
-def _keyset_page(
-    session: Session,
+def _keyset_statement(
     *,
     conditions: list[ColumnElement[bool]],
     limit: int,
     cursor: tuple[datetime, uuid.UUID] | None,
-) -> tuple[Sequence[TgaApproval], str | None]:
-    """One newest-first page on the `(created_at, id)` keyset, and the cursor that continues it.
+) -> SelectOfScalar[TgaApproval]:
+    """One newest-first page on the `(created_at, id)` keyset; read it with `_keyset_page`.
 
     Keyset and never `OFFSET`: an approval landing while a clinician pages must not make the next
     page skip or repeat a row, and a skipped clinical record is the failure mode that matters. The
@@ -562,14 +565,45 @@ def _keyset_page(
                 ),
             ),
         ]
-    rows: Sequence[TgaApproval] = session.exec(
+    return (
         select(TgaApproval)
         .where(*conditions)
         .order_by(col(TgaApproval.created_at).desc(), col(TgaApproval.id).desc())
         .limit(limit + 1)
-    ).all()
+    )
+
+
+def _keyset_page(
+    rows: Sequence[TgaApproval], limit: int
+) -> tuple[Sequence[TgaApproval], str | None]:
+    """The page `_keyset_statement` read, and the cursor that continues it."""
     page, overflow = rows[:limit], rows[limit:]
     return page, None if not overflow else encode_cursor(page[-1])
+
+
+def _counts_statement(
+    tenant_id: uuid.UUID, bound: date
+) -> Select[tuple[str, int, int]]:
+    """Per state: how many approvals, and how many of them are expiring by `bound`. One statement."""
+    return (
+        select(
+            col(TgaApproval.state),
+            func.count(),
+            func.count().filter(_expiring(bound)),
+        )
+        .where(col(TgaApproval.tenant_id) == tenant_id)
+        .group_by(col(TgaApproval.state))
+    )
+
+
+def _totals(rows: Sequence[tuple[str, int, int]]) -> tuple[dict[str, int], int]:
+    """`({state: total}, expiring)` from `_counts_statement`'s rows; every state is present."""
+    by_state = dict.fromkeys(APPROVAL_STATES, 0)
+    expiring = 0
+    for state, total, expiring_in_state in rows:
+        by_state[state] = total
+        expiring += expiring_in_state
+    return by_state, expiring
 
 
 def list_approvals(
@@ -580,26 +614,56 @@ def list_approvals(
     cursor: str | None = None,
     actor_id: uuid.UUID | None = None,
     actor_role: str | None = None,
-) -> TgaApprovalsPublic:
+) -> TgaApprovalsPublic | None:
     """One keyset page of a patient's approvals, newest first, tenant-scoped by RLS (T2-12, F15).
+
+    `None` when the patient is not one of the caller's own (absent and another tenant's alike, R8):
+    the refusal is audited `CROSS_TENANT` on this transaction and the router answers `404`, before a
+    cursor is judged. The patient is resolved through the patients facade (this module never reads
+    `patients`), in the same flight as the page; the page is only returned once the patient is.
 
     Audited as one `tga_approval.read` per page with the patient and the row count, never one per
     row (US-2: *"`approval.read` once per patient-level access, not per row"*).
     """
     _check_limit(limit)
-    decoded = None if cursor is None else decode_cursor(cursor)
     with tenant_transaction(
         tenant_id=tenant_id, actor_id=actor_id, actor_role=actor_role
     ) as session:
-        page, next_cursor = _keyset_page(
-            session,
-            conditions=[
-                col(TgaApproval.tenant_id) == tenant_id,
-                col(TgaApproval.patient_id) == patient_id,
-            ],
-            limit=limit,
-            cursor=decoded,
+        batch = ReadBatch()
+        patient = patients_service.queue_display_names(
+            batch, tenant_id=tenant_id, patient_ids=[patient_id]
         )
+        refused_cursor: InvalidCursor | None = None
+        found: Pending[list[TgaApproval]] | None = None
+        try:
+            decoded = None if cursor is None else decode_cursor(cursor)
+        except InvalidCursor as error:
+            refused_cursor = error
+        else:
+            found = batch.scalars(
+                _keyset_statement(
+                    conditions=[
+                        col(TgaApproval.tenant_id) == tenant_id,
+                        col(TgaApproval.patient_id) == patient_id,
+                    ],
+                    limit=limit,
+                    cursor=decoded,
+                )
+            )
+        batch.send(session)
+        if patient_id not in patient.value:
+            _record(
+                session,
+                action=APPROVAL_READ,
+                resource_id=None,
+                result="DENIED",
+                reason=CROSS_TENANT,
+            )
+            return None
+        if refused_cursor is not None:
+            raise refused_cursor
+        assert found is not None, "the page is read whenever the cursor decodes"
+        page, next_cursor = _keyset_page(found.value, limit)
         data = [_read(row) for row in page]
         _record(
             session,
@@ -682,23 +746,16 @@ def list_register(
         ]
         if selectors:
             conditions.append(or_(*selectors))
-        page, next_cursor = _keyset_page(
-            session, conditions=conditions, limit=limit, cursor=decoded
+        # The page and the practice's totals are independent reads: one flight.
+        batch = ReadBatch()
+        found = batch.scalars(
+            _keyset_statement(conditions=conditions, limit=limit, cursor=decoded)
         )
+        counts = batch.rows(_counts_statement(tenant_id, bound))
+        batch.send(session)
+        page, next_cursor = _keyset_page(found.value, limit)
         rows = [_read(row) for row in page]
-
-        by_state = dict.fromkeys(APPROVAL_STATES, 0)
-        for state, total in session.exec(
-            select(col(TgaApproval.state), func.count())
-            .where(col(TgaApproval.tenant_id) == tenant_id)
-            .group_by(col(TgaApproval.state))
-        ).all():
-            by_state[state] = total
-        expiring = session.exec(
-            select(func.count())
-            .select_from(TgaApproval)
-            .where(col(TgaApproval.tenant_id) == tenant_id, _expiring(bound))
-        ).one()
+        by_state, expiring = _totals(counts.value)
 
         query_filters: dict[str, object] = {}
         if wanted_states:
@@ -739,19 +796,25 @@ def list_register(
     )
 
 
-def needs_action_digest(
+def needs_action_digest_plan(
     session: Session,
     *,
     tenant_id: uuid.UUID,
+    today: date,
     limit: int,
     client_tenant_id_supplied: bool = False,
-) -> TgaApprovalDigest:
+) -> Plan[TgaApprovalDigest]:
     """The register's "Needs action" set at a glance, on the caller's transaction (Today page).
 
     Pending approvals (oldest first) and `ACTIVE` approvals lapsing within the register's default
-    window (soonest first), each list at most `limit`, with the practice's two totals. "Today" is the
-    database clock in `Australia/Sydney` (T2-10), and "expiring" is `last_expiring_valid_to`, the
-    same D-006 bound the register uses, so the two screens can never disagree.
+    window (soonest first), each list at most `limit`, with the practice's two totals. "Expiring" is
+    `last_expiring_valid_to`, the same D-006 bound the register uses, so the two screens can never
+    disagree. `today` is the caller's reading of the **database** clock in `Australia/Sydney` on
+    this transaction (T2-10), the date `service_date_today` reads; the Today page reads it once for
+    all its sections.
+
+    A read plan (`app.core.reads`): the totals and both lists are one step, the patients' names the
+    next, so the Today page sends them with its other sections' reads.
 
     Audited exactly as the register is: one `tga_approval.read` on this transaction, with the
     register filter it is equivalent to and the number of rows returned. A `tenant_id` the client
@@ -759,50 +822,49 @@ def needs_action_digest(
     """
     _check_limit(limit)
     window = DEFAULT_EXPIRING_WITHIN_DAYS
-    bound = last_expiring_valid_to(
-        today=service_date_today(session), within_days=window
-    )
+    bound = last_expiring_valid_to(today=today, within_days=window)
     tenant = col(TgaApproval.tenant_id) == tenant_id
-    pending_only = col(TgaApproval.state) == "PENDING"
 
-    def total(condition: ColumnElement[bool]) -> int:
-        return session.exec(
-            select(func.count()).select_from(TgaApproval).where(tenant, condition)
-        ).one()
-
-    pending = session.exec(
+    reads = ReadBatch()
+    counts = reads.rows(_counts_statement(tenant_id, bound))
+    pending = reads.scalars(
         select(TgaApproval)
-        .where(tenant, pending_only)
+        .where(tenant, col(TgaApproval.state) == "PENDING")
         .order_by(col(TgaApproval.created_at), col(TgaApproval.id))
         .limit(limit)
-    ).all()
-    expiring = session.exec(
+    )
+    expiring = reads.scalars(
         select(TgaApproval)
         .where(tenant, _expiring(bound))
         .order_by(col(TgaApproval.valid_to), col(TgaApproval.id))
         .limit(limit)
-    ).all()
-    names = patients_service.display_names(
-        session,
-        tenant_id=tenant_id,
-        patient_ids=[row.patient_id for row in (*pending, *expiring)],
     )
+    yield reads
+
+    named = ReadBatch()
+    names = patients_service.queue_display_names(
+        named,
+        tenant_id=tenant_id,
+        patient_ids=[row.patient_id for row in (*pending.value, *expiring.value)],
+    )
+    yield named
 
     def rows(found: Sequence[TgaApproval]) -> list[TgaApprovalRegisterRow]:
         return [
             TgaApprovalRegisterRow(
                 **_read(row).model_dump(),
-                patient_display_name=names.get(row.patient_id),
+                patient_display_name=names.value.get(row.patient_id),
             )
             for row in found
         ]
 
+    by_state, expiring_total = _totals(counts.value)
     digest = TgaApprovalDigest(
-        pending_verification=total(pending_only),
-        expiring=total(_expiring(bound)),
+        pending_verification=by_state["PENDING"],
+        expiring=expiring_total,
         expiring_within_days=window,
-        pending=rows(pending),
-        expiring_soon=rows(expiring),
+        pending=rows(pending.value),
+        expiring_soon=rows(expiring.value),
     )
     _record(
         session,
@@ -811,7 +873,7 @@ def needs_action_digest(
         reason=CLIENT_TENANT_ID_IGNORED if client_tenant_id_supplied else None,
         payload={
             "query_filters": {"state": ["PENDING"], "expiring_within_days": window},
-            "result_count": len(pending) + len(expiring),
+            "result_count": len(pending.value) + len(expiring.value),
         },
     )
     return digest
@@ -1460,12 +1522,69 @@ def evaluate_match(
             populate_existing=True
         )
     rows: Sequence[TgaApproval] = session.exec(statement).all()
+    return _answer(
+        rows,
+        MatchQuestion(
+            patient_id=patient_id,
+            tga_category=tga_category,
+            dosage_form=dosage_form,
+            date_of_service=date_of_service,
+        ),
+    )
 
+
+@dataclass(frozen=True)
+class MatchQuestion:
+    """One point-in-time match question: this patient, this grain, this consultation date."""
+
+    patient_id: uuid.UUID
+    tga_category: str
+    dosage_form: str
+    date_of_service: date
+
+
+def queue_matches(
+    batch: ReadBatch, *, tenant_id: uuid.UUID, questions: Sequence[MatchQuestion]
+) -> Pending[list[TgaMatchResponse]]:
+    """The unlocked match for several questions at once, queued on the caller's batch.
+
+    For display only (the script queue's gate column, `prescriptions.gate.advise_many`): it takes
+    no lock and its answers authorise nothing, exactly like `evaluate_match` with `lock=False`. One
+    statement reads every approval of every patient asked about, newest first, and each question is
+    then decided by `_decide`, the same matrix, on that patient's rows in that order. The answers are
+    in the order of `questions`.
+    """
+    patient_ids = sorted({question.patient_id for question in questions})
+    if not patient_ids:
+        return Pending.ready([])
+    approvals = batch.scalars(
+        select(TgaApproval)
+        .where(
+            col(TgaApproval.tenant_id) == tenant_id,
+            col(TgaApproval.patient_id).in_(patient_ids),
+        )
+        .order_by(col(TgaApproval.created_at).desc(), col(TgaApproval.id).desc())
+    )
+
+    def answers(rows: list[TgaApproval]) -> list[TgaMatchResponse]:
+        by_patient: dict[uuid.UUID, list[TgaApproval]] = {}
+        for row in rows:
+            by_patient.setdefault(row.patient_id, []).append(row)
+        return [
+            _answer(by_patient.get(question.patient_id, []), question)
+            for question in questions
+        ]
+
+    return approvals.then(answers)
+
+
+def _answer(rows: Sequence[TgaApproval], question: MatchQuestion) -> TgaMatchResponse:
+    """The match response for one question, decided on that patient's rows, newest first."""
     answer = _decide(
         rows,
-        tga_category=tga_category,
-        dosage_form=dosage_form,
-        date_of_service=date_of_service,
+        tga_category=question.tga_category,
+        dosage_form=question.dosage_form,
+        date_of_service=question.date_of_service,
     )
     row = answer.row
     return TgaMatchResponse(
@@ -1476,7 +1595,7 @@ def evaluate_match(
         validity_interval=None
         if row is None
         else ValidityInterval(valid_from=row.valid_from, valid_to=row.valid_to),
-        date_of_service=date_of_service,
+        date_of_service=question.date_of_service,
         evaluated_timezone=evaluated_timezone(),
     )
 

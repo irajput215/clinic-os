@@ -18,15 +18,17 @@ Rules this module holds to, each checked by a static test in `tests/prescription
 4. **Fail closed.** Any error in the lookup propagates and rolls the caller's transaction back: no
    decision is a refusal.
 
-`advise` is the read-only counterpart for the queue's display. It never authorises anything: it holds
-no lock, its answer is never written, and every action re-asks `decide`.
+`advise_many` is the read-only counterpart for the queue's display. It never authorises anything: it
+holds no lock, its answer is never written, and every action re-asks `decide`.
 """
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from sqlmodel import Session
 
+from app.core.reads import Pending, ReadBatch
 from app.modules.prescriptions.models import Prescription
 from app.modules.tga_approvals import service as tga_approvals
 from app.modules.tga_approvals.schemas import TgaMatchResponse
@@ -76,6 +78,36 @@ def decide(session: Session, prescription: Prescription) -> GateDecision:
     )
 
 
-def advise(session: Session, prescription: Prescription) -> TgaMatchResponse:
-    """The gate's current answer for display only: no lock, never an authorisation."""
-    return _ask(session, prescription, lock=False)
+def advise_many(
+    batch: ReadBatch, prescriptions: Sequence[Prescription]
+) -> Pending[dict[uuid.UUID, TgaMatchResponse]]:
+    """The gate's current answer for each prescription, for display only: no lock, never an
+    authorisation.
+
+    Queued on the caller's batch (`app.core.reads`), so a whole queue is answered by one read of the
+    patients' approvals rather than one read per prescription. Each answer is the same match
+    `decide` evaluates, minus the lock; signing and dispatch re-ask `decide` on their own
+    transaction.
+    """
+    if not prescriptions:
+        return Pending.ready({})
+    [tenant_id] = {prescription.tenant_id for prescription in prescriptions}
+    answers = tga_approvals.queue_matches(
+        batch,
+        tenant_id=tenant_id,
+        questions=[
+            tga_approvals.MatchQuestion(
+                patient_id=prescription.patient_id,
+                tga_category=prescription.tga_category,
+                dosage_form=prescription.dosage_form,
+                date_of_service=prescription.date_of_service,
+            )
+            for prescription in prescriptions
+        ],
+    )
+    return answers.then(
+        lambda found: {
+            prescription.id: answer
+            for prescription, answer in zip(prescriptions, found, strict=True)
+        }
+    )
