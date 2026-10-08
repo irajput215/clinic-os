@@ -109,6 +109,11 @@ class Settings(BaseSettings):
     # (login, password recovery). Tests clear the window between cases.
     RATE_LIMIT_ENABLED: bool = True
 
+    # `Server-Timing` on the responses that opt in (`app.core.server_timing`): durations and counts
+    # only, so speed can be judged at the origin rather than from wherever the observer sits
+    # (`docs/reference/performance.md`). On by default, which is what production runs.
+    SERVER_TIMING_ENABLED: bool = True
+
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":
             message = (

@@ -16,6 +16,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
 from app.core.health import database_is_ready
+from app.core.server_timing import expose_server_timing
 
 router = APIRouter(prefix="/health", tags=["health"])
 
@@ -44,6 +45,8 @@ def readiness() -> JSONResponse:
     a release actually works; a non-200 means the app is up but cannot serve, which is exactly the
     failure a liveness probe cannot see.
     """
+    # The probe's timing is the platform's own figure, the same for every caller.
+    expose_server_timing()
     if not database_is_ready():
         return JSONResponse(status_code=503, content=False)
     return JSONResponse(status_code=200, content=True)

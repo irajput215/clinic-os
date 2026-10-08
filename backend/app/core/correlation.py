@@ -30,6 +30,7 @@ from starlette.datastructures import Headers, MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.logging import request_context
+from app.core.server_timing import request_log_fields
 
 logger = logging.getLogger("app.request")
 
@@ -169,6 +170,8 @@ def _log_request_line(
             "latency_ms": latency_ms,
             "outcome": _outcome(status),
             "error_class": _error_class(status),
+            # Durations, counts and the serving instance: never SQL, parameters or identifiers.
+            **request_log_fields(),
         },
     )
 
