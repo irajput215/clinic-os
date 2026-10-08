@@ -42,7 +42,8 @@ export const MANAGE_USERS = "users:manage"
  */
 export function useCanAdminister(): boolean {
   const me = useQuery(currentUserQuery)
-  // Asked only when the answer can change what is shown.
+  // Read only when the answer can change what is shown. The `_app` loader has already asked, in
+  // parallel with `/users/me` (`routes/_app.tsx`), so this usually reads the cache.
   const permissions = useQuery({
     ...myPermissionsQuery,
     retry: false,

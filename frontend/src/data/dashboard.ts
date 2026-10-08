@@ -35,5 +35,5 @@ export const todayQuery = queryOptions({
   // The generated types are wider than the backend's vocabularies (state, reason codes); `Today`
   // narrows them the same way `scripts.ts` and `approvals.ts` narrow their own reads.
   queryFn: async () => (await DashboardService.readToday()).data as Today,
-  staleTime: 10_000,
+  staleTime: 15_000,
 })
