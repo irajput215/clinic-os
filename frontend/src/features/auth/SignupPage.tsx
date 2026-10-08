@@ -117,7 +117,7 @@ export function SignupPage() {
     } catch {
       setRegistered(true)
     }
-  }, focusFirstError(form.setFocus))
+  }, focusFirstError)
 
   const refuse = (error: unknown) => {
     const status = httpStatus(error)

@@ -112,10 +112,7 @@ function ProfileTab({ me }: { me: UserPublic }) {
     <div className="space-y-5">
       <Card title="Profile">
         <form
-          onSubmit={form.handleSubmit(
-            (v) => save.mutate(v),
-            focusFirstError(form.setFocus),
-          )}
+          onSubmit={form.handleSubmit((v) => save.mutate(v), focusFirstError)}
           noValidate
           className="grid gap-4"
         >
@@ -277,10 +274,7 @@ function PasswordTab() {
   return (
     <Card title="Change password">
       <form
-        onSubmit={form.handleSubmit(
-          (v) => save.mutate(v),
-          focusFirstError(form.setFocus),
-        )}
+        onSubmit={form.handleSubmit((v) => save.mutate(v), focusFirstError)}
         noValidate
         className="grid gap-4"
       >

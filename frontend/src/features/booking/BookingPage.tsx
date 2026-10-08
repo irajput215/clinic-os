@@ -295,10 +295,7 @@ function DetailsStep({
   const { errors } = form.formState
   const tried = form.watch("tried_conventional")
   return (
-    <form
-      onSubmit={form.handleSubmit(onNext, focusFirstError(form.setFocus))}
-      noValidate
-    >
+    <form onSubmit={form.handleSubmit(onNext, focusFirstError)} noValidate>
       <h1 className="font-serif text-[26px] font-medium">A little about you</h1>
       <p className="mt-1 text-sm text-stone">
         The first two questions only check that booking online suits you; your

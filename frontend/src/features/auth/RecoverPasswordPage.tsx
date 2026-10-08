@@ -55,7 +55,7 @@ export function RecoverPasswordPage() {
     } catch (error) {
       setFailure({ message: describeError(error), error })
     }
-  }, focusFirstError(form.setFocus))
+  }, focusFirstError)
 
   if (sentTo)
     return (

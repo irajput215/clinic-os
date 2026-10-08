@@ -191,10 +191,7 @@ function StageScriptFields({
 
   return (
     <form
-      onSubmit={form.handleSubmit(
-        (v) => stage.mutate(v),
-        focusFirstError(form.setFocus),
-      )}
+      onSubmit={form.handleSubmit((v) => stage.mutate(v), focusFirstError)}
       noValidate
       className="grid gap-4"
     >

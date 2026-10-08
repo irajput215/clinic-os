@@ -110,7 +110,7 @@ function AcceptInviteForm({ token }: { token: string }) {
       form.reset()
       setAccepted(true)
     }
-  }, focusFirstError(form.setFocus))
+  }, focusFirstError)
 
   if (accepted)
     return (

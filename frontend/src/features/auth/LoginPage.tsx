@@ -55,7 +55,7 @@ export function LoginPage({ redirectTo }: { redirectTo: string }) {
       form.setValue("password", "")
       form.setFocus("password")
     }
-  }, focusFirstError(form.setFocus))
+  }, focusFirstError)
 
   return (
     <AuthLayout>

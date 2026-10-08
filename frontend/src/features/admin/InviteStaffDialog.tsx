@@ -113,7 +113,7 @@ export function InviteStaffDialog({
         <form
           onSubmit={form.handleSubmit(
             (values) => invite.mutate(values),
-            focusFirstError(form.setFocus),
+            focusFirstError,
           )}
           noValidate
           className="grid min-w-0 gap-4"

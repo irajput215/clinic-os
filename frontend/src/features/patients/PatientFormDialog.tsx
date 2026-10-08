@@ -140,10 +140,7 @@ export function PatientFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[620px]">
         <form
-          onSubmit={form.handleSubmit(
-            (v) => save.mutate(v),
-            focusFirstError(form.setFocus),
-          )}
+          onSubmit={form.handleSubmit((v) => save.mutate(v), focusFirstError)}
           noValidate
           className="grid gap-4"
         >

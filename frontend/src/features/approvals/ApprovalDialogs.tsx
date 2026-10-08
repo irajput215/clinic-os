@@ -140,10 +140,7 @@ function RecordApprovalForm({
 
   return (
     <form
-      onSubmit={form.handleSubmit(
-        (v) => create.mutate(v),
-        focusFirstError(form.setFocus),
-      )}
+      onSubmit={form.handleSubmit((v) => create.mutate(v), focusFirstError)}
       noValidate
       className="grid gap-4"
     >

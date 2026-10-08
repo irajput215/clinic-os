@@ -97,7 +97,7 @@ function ResetPasswordForm({ token }: { token: string }) {
       const message = validationMessages(error).new_password
       if (message) form.setError("new_password", { message })
     }
-  }, focusFirstError(form.setFocus))
+  }, focusFirstError)
 
   if (done)
     return (

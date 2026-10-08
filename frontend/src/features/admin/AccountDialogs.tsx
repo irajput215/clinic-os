@@ -146,10 +146,7 @@ export function AccountFormDialog({
     >
       <DialogContent className="sm:max-w-[520px]">
         <form
-          onSubmit={form.handleSubmit(
-            (v) => save.mutate(v),
-            focusFirstError(form.setFocus),
-          )}
+          onSubmit={form.handleSubmit((v) => save.mutate(v), focusFirstError)}
           noValidate
           className="grid gap-4"
         >
