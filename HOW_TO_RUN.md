@@ -102,6 +102,10 @@ once: after it has set a password it is refused like an expired one.
    invited roles.
 5. From then on they sign in at `/login` with that email and password.
 
+Until they choose a password, Staff shows them as **Invited** with when the link expires (or
+**Invitation expired**). **Resend invite** on their row emails a new link, valid for another 72 hours;
+the earlier link stops working at once.
+
 With no outgoing mail configured, **Send invitation** is refused (`503 EMAIL_NOT_CONFIGURED`) and
 nothing is created.
 
