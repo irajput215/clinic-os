@@ -6,7 +6,8 @@ import type {
   Page,
   TestInfo,
 } from "@playwright/test"
-import { type Clinic, expect, readClinic, test } from "./fixtures"
+import { signInWithApi, signUp } from "./accounts"
+import { type Clinic, expect, openSignedIn, readClinic, test } from "./fixtures"
 
 /**
  * Every screen at every supported width (docs2/design-system.md, Layout): the page never scrolls
@@ -437,10 +438,15 @@ test("the prescribing screens fit every width", async ({
 })
 
 test("administration and settings fit every width", async ({
-  signedIn: page,
+  page,
+  request,
 }, testInfo) => {
   test.setTimeout(120_000)
-  await page.goto("/admin")
+  // An owner of its own: the administration routes allow 20 requests a minute per session, and the
+  // admin and staff specs spend the shared owner's budget in the same minute (CI shard 3 saw 429s on
+  // `/users/staff` and `/permissions`). One signup and one sign-in, inside both limits.
+  const owner = await signUp(request, { clinic: true })
+  await openSignedIn(page, await signInWithApi(request, owner), "/admin")
   await checkEveryWidth(page, testInfo, "admin-staff", [
     h1(page, "Administration"),
     button(page, "Invite staff member"),
