@@ -10,7 +10,7 @@ import logging
 import select as io_select
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from typing import Any, Final
+from typing import Any, Final, LiteralString, cast
 from uuid import UUID
 
 import psycopg
@@ -134,6 +134,16 @@ def _driver_connection(session: Session) -> psycopg.Connection[Any]:
     return driver_connection
 
 
+def _query(sql: str) -> LiteralString:
+    """Driver SQL as psycopg's typing wants it: a constant, never a value.
+
+    Every statement sent to the driver here is either assembled from constant fragments
+    (`_CONTEXT_SETTINGS`, `driver_sql`) or compiled by SQLAlchemy (`driver_statement`); every value
+    travels as a bound parameter. The cast states that for the type checker.
+    """
+    return cast(LiteralString, sql)  # type: ignore[redundant-cast]  # mypy reads it as str
+
+
 def driver_sql(clause: TextClause) -> str:
     """A `text()` clause as psycopg reads it (`:name` becomes `%(name)s`), for `run_pipelined`."""
     return str(clause.compile(dialect=engine.dialect))
@@ -203,7 +213,8 @@ class _DeferredContext:
         self._pipeline = self.driver_connection.pipeline()
         self._pipeline.__enter__()
         self.open = True
-        self.driver_connection.execute(*_context_statement(values))
+        context_sql, context_parameters = _context_statement(values)
+        self.driver_connection.execute(_query(context_sql), context_parameters)
         for name in _CLOSING_EVENTS:
             event.listen(self._connection, name, self._close_on_event)
 
@@ -262,7 +273,7 @@ def run_pipelined_described(
     deferred: _DeferredContext | None = session.info.get(_DEFERRED_CONTEXT)
     if deferred is not None and deferred.open:
         driver_connection = deferred.driver_connection
-        cursors = [driver_connection.execute(sql, p) for sql, p in statements]
+        cursors = [driver_connection.execute(_query(sql), p) for sql, p in statements]
         if commit:
             driver_connection.commit()
         deferred.close()
@@ -271,7 +282,7 @@ def run_pipelined_described(
         cursors = []
         with driver_connection.pipeline():
             for sql, parameters in statements:
-                cursors.append(driver_connection.execute(sql, parameters))
+                cursors.append(driver_connection.execute(_query(sql), parameters))
             if commit:
                 driver_connection.commit()
     results: list[tuple[list[int], list[tuple[Any, ...]]]] = []

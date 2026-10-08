@@ -20,6 +20,7 @@ from itertools import islice
 from typing import Any, Final
 
 from sqlalchemy import func, insert, text, update
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy import select as sa_select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import make_transient_to_detached
@@ -98,7 +99,7 @@ def tenant_is_active(session: Session, *, tenant_id: uuid.UUID) -> bool:
     return tenant is not None and is_active_status(tenant.status)
 
 
-_ACCOUNT_COLUMNS: Final = tuple(User.__table__.columns)  # type: ignore[attr-defined]
+_ACCOUNT_COLUMNS: Final = tuple(sa_inspect(User).local_table.columns)
 
 
 def session_account_statement(user_id: uuid.UUID) -> tuple[str, dict[str, Any]]:
