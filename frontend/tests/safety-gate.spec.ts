@@ -1,7 +1,6 @@
 import { randomBytes } from "node:crypto"
 import type { APIRequestContext } from "@playwright/test"
 import { expect, test } from "./fixtures"
-import { emailedPath, waitForEmailHtml } from "./mail"
 
 /**
  * The prescription safety gate, as the clinician meets it, against the real prescriptions API: the
@@ -40,56 +39,42 @@ const patientId = async (
 }
 
 /**
- * An ACTIVE approval needs a second clinician (four-eyes): invite a doctor into the clinic, accept
- * through the emailed link's token, sign in once as them, and verify the owner's entry.
+ * An ACTIVE approval for the grain: recorded by the owner, verified by the setup project's second
+ * clinician (four-eyes). Idempotent, so a retried test reuses what its first attempt recorded.
  */
 const activeApproval = async (
-  request: APIRequestContext,
   owner: ReturnType<typeof api>,
+  verifier: ReturnType<typeof api>,
   patient: string,
   grain: { tga_category: string; dosage_form: string },
 ) => {
-  const { data: roles } = await owner.get<{
-    data: { id: string; code: string }[]
-  }>("/roles")
-  const doctorRole = roles.find((r) => r.code === "DOCTOR")!
-  const doctor = {
-    email: `doctor-${randomBytes(4).toString("hex")}@e2e.example.com`,
-    password: `E2e-${randomBytes(9).toString("base64url")}`,
+  type Approval = {
+    id: string
+    state: string
+    tga_category: string
+    dosage_form: string
+    approval_reference: string
   }
-  await owner.post("/users/staff", {
-    email: doctor.email,
-    full_name: "Dr Tom Verifier",
-    role_ids: [doctorRole.id],
-  })
-  const link = emailedPath(
-    await waitForEmailHtml(request, doctor.email),
-    "/accept-invite",
+  const { data: existing } = await owner.get<{ data: Approval[] }>(
+    `/patients/${patient}/tga-approvals`,
   )
-  const token = new URL(link, "http://x").searchParams.get("token")
-  const accepted = await request.post("/api/v1/users/invitations/accept", {
-    data: { token, new_password: doctor.password },
-  })
-  expect(accepted.ok(), await accepted.text()).toBeTruthy()
-  const login = await request.post("/api/v1/login/access-token", {
-    form: { username: doctor.email, password: doctor.password },
-  })
-  expect(login.ok(), await login.text()).toBeTruthy()
-  const doctorApi = api(
-    request,
-    ((await login.json()) as { access_token: string }).access_token,
+  let approval = existing.find(
+    (a) =>
+      a.tga_category === grain.tga_category &&
+      a.dosage_form === grain.dosage_form &&
+      (a.state === "ACTIVE" || a.state === "PENDING"),
   )
-  const reference = `SAS-B 2026-${randomBytes(3).toString("hex")}`
-  const approval = await owner.post<{ id: string }>("/tga-approvals", {
+  if (approval?.state === "ACTIVE") return
+  approval ??= await owner.post<Approval>("/tga-approvals", {
     patient_id: patient,
     ...grain,
-    approval_reference: reference,
+    approval_reference: `SAS-B 2026-${randomBytes(3).toString("hex")}`,
     creation_reason: "NEW_APPLICATION",
     valid_from: "2026-01-01",
     valid_to: "2027-12-31",
   })
-  await doctorApi.post(`/tga-approvals/${approval.id}/verify`, {
-    tga_application_number: reference,
+  await verifier.post(`/tga-approvals/${approval.id}/verify`, {
+    tga_application_number: approval.approval_reference,
   })
 }
 
@@ -102,7 +87,8 @@ test("a script with no covering approval cannot be signed", async ({
   await page.getByRole("tab", { name: "Scripts" }).click()
   await page.getByRole("button", { name: "Stage a script" }).click()
   const stage = page.getByRole("dialog")
-  await stage.getByLabel("Product").fill("Aurora 10 Capsules")
+  const product = `Aurora 10 Capsules ${randomBytes(2).toString("hex")}`
+  await stage.getByLabel("Product").fill(product)
   await stage.getByLabel("TGA category").selectOption("CATEGORY_3")
   await stage.getByLabel("Dosage form").selectOption("CAPSULE")
   await stage.getByLabel("Directions / titration").fill("1 capsule nocte")
@@ -115,7 +101,7 @@ test("a script with no covering approval cannot be signed", async ({
     page.getByText("It can't be signed until one does."),
   ).toBeVisible()
 
-  const card = page.locator("article", { hasText: "Aurora 10 Capsules" })
+  const card = page.locator("article", { hasText: product })
   await expect(card).toContainText("No TGA approval on file for this patient")
   await card.getByRole("button", { name: "Review & sign" }).click()
   const review = page.getByRole("dialog")
@@ -148,7 +134,8 @@ test("the queue's staging form finds the patient with the server search", async 
   await expect(
     matches.getByRole("radio", { name: /Priya Sharma/ }),
   ).toBeVisible()
-  await stage.getByLabel("Product").fill("Picker Check Oil")
+  const product = `Picker Check Oil ${randomBytes(2).toString("hex")}`
+  await stage.getByLabel("Product").fill(product)
   await stage.getByLabel("TGA category").selectOption("CATEGORY_1")
   await stage.getByLabel("Dosage form").selectOption("ORAL_LIQUID")
   await stage.getByLabel("Directions / titration").fill("0.25 mL mane")
@@ -156,9 +143,9 @@ test("the queue's staging form finds the patient with the server search", async 
   await stage.getByLabel("Conventional therapy first").fill("SSRIs, 12 months")
   await stage.getByRole("button", { name: "Stage draft" }).click()
   await expect(stage).toBeHidden()
-  await expect(
-    page.locator("article", { hasText: "Picker Check Oil" }),
-  ).toContainText("Marcus Webb")
+  await expect(page.locator("article", { hasText: product })).toContainText(
+    "Marcus Webb",
+  )
 })
 
 // The approvals are the real API's (`tgaApprovals: "api"`); this one is recorded on the patient's
@@ -200,12 +187,14 @@ test("a covered script is signed with a password re-entry and queued, not sent",
   const owner = api(request, clinic.token)
   const dean = await patientId(owner, "Dean")
   const grain = { tga_category: "CATEGORY_2", dosage_form: "ORAL_LIQUID" }
-  await activeApproval(request, owner, dean, grain)
+  await activeApproval(owner, api(request, clinic.verifier.token), dean, grain)
+  // Unique per attempt, so a retry never meets the script its first attempt staged.
+  const product = `Solace CBD Oil ${randomBytes(2).toString("hex")}`
   const me = await owner.get<{ id: string }>("/users/me")
   await owner.post("/prescriptions", {
     patient_id: dean,
     prescriber_id: me.id,
-    medicine_name: "Solace CBD Oil 50",
+    medicine_name: product,
     ...grain,
     dose_instruction: "0.5 mL twice daily",
     quantity: "1",
@@ -218,7 +207,7 @@ test("a covered script is signed with a password re-entry and queued, not sent",
   })
 
   await page.goto("/scripts")
-  const card = page.locator("article", { hasText: "Solace CBD Oil 50" })
+  const card = page.locator("article", { hasText: product })
   await expect(card).toContainText("Covered through")
   await card.getByRole("button", { name: "Review & sign" }).click()
   const review = page.getByRole("dialog")
@@ -244,7 +233,7 @@ test("a covered script is signed with a password re-entry and queued, not sent",
   ).toBeVisible()
   await expect(
     page.getByRole("row", {
-      name: /Dean Caruso.*Solace CBD Oil 50.*Queued, not sent/,
+      name: new RegExp(`Dean Caruso.*${product}.*Queued, not sent`),
     }),
   ).toBeVisible()
 })

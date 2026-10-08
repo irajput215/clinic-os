@@ -17,6 +17,14 @@ export interface Clinic {
    * touch the shared clinic and never spend a sign-in of their own.
    */
   peer: SignedInAccount
+  /**
+   * A second clinician (Doctor) in the shared clinic, invited, accepted and signed in once by the
+   * setup project. Verifying a TGA approval needs someone other than the person who recorded it
+   * (four-eyes), so the safety-gate specs record as the owner and verify as this account, without
+   * spending an invitation or a sign-in of their own (a retried test would otherwise spend both
+   * again).
+   */
+  verifier: SignedInAccount
 }
 
 export interface SignedInAccount {
@@ -38,7 +46,8 @@ export const readClinic = (): Clinic =>
  * token the setup project signed in for, never a fresh sign-in: the only sign-ins a run spends are
  * the setup project's, one per fresh account a test must own, and those whose subject is signing in
  * (the sign-in page, a changed or recovered password, a deactivated account, an accepted invitation,
- * the password re-entry that signs a script). One run spends 18 of the 20; adding one is a budget
+ * the setup project's verifier; signing a script re-enters the password through `/auth/step-up`,
+ * which is not a sign-in). One run spends 18 of the 20; adding one is a budget
  * decision, not a free step. The setup project also waits out the window a previous run against the same
  * backend may have left (`waitOutPreviousRun`), so back-to-back runs never meet a `429`.
  * Tokens live 15 minutes, longer than a run (CI bounds a shard at 13).
