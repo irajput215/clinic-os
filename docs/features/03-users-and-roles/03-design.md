@@ -51,6 +51,43 @@ tenant role code is **OPEN** (OPEN-2). No hard delete: `status = 'OFFBOARDED'` r
 attribution. **The `users` credential columns depend on the open D-003 decision and are not fixed here**
 (`../../reference/decisions/D-003-identity-model.md`).
 
+### As built: the `INVITED` status before `users` exists (2026-10-08)
+The design puts the invitation on the account: `users.status = 'INVITED'` until the person accepts. A
+pending invitation is therefore **not a resource of its own** in the API; it is the state of a staff
+member, read on `GET /api/v1/users/staff` (`status`, `invitation`) and re-sent on that member
+(`POST /api/v1/users/staff/{user_id}/invitation`). The `users` table is T1-03, blocked by D-003, and the
+legacy `user` table is frozen, so the state is held, until T1-03 lands, in a `users_roles`-owned table:
+
+| Table | Column(s) | Type | Constraints and notes |
+| --- | --- | --- | --- |
+| `staff_invitations` | `user_id` | uuid | PK; FK `user(id)` ON DELETE RESTRICT; one invitation state per account |
+| | `tenant_id` | uuid | NOT NULL; FK `tenants(id)` ON DELETE RESTRICT; RLS key (`ENABLE`+`FORCE`, the `NULLIF` guard) |
+| | `invited_by` | uuid | NOT NULL; FK `user(id)` ON DELETE RESTRICT; who sent the current link |
+| | `sent_at`, `expires_at` | timestamptz | NOT NULL; `CHECK (expires_at > sent_at)`; reset by a resend |
+| | `pending_password_digest` | varchar(64) | NOT NULL; SHA-256 of the placeholder password hash the current link is bound to (below) |
+| | `accepted_at` | timestamptz | NULL until the invitation is accepted |
+| | `created_at` | timestamptz | NOT NULL; the first invitation |
+
+Grants: `SELECT, INSERT, UPDATE` to `clinos_app`, never `DELETE` or `TRUNCATE` (the no-hard-delete rule
+for tenant tables). Status is derived, never stored twice: **`INVITED`** while the row is unaccepted *and*
+the account still holds the placeholder password the row records; **`ACTIVE`** otherwise;
+**`INACTIVE`** for a deactivated account. The digest is what makes a password set another way (password
+recovery) end the invitation without the frozen recovery route knowing this table exists: it is the
+digest of the hash of a random secret nobody was told, so it discloses nothing, and it survives a
+`SECRET_KEY` rotation (which retires every link but leaves the invitation resendable). Accounts invited
+before this table existed have no row and show `ACTIVE`; their links keep working until they expire.
+
+**Resend.** A resend replaces the account's placeholder password with a new one and signs the new link
+against it, so the previous link no longer matches the account and is refused like a spent one
+(single use, `password_bound_tokens`); the window restarts. Permission is the invitation's own:
+`users:manage`, then R3 over the bundles of the roles the person holds now. It is refused `409
+INVITATION_NOT_PENDING` unless the status is `INVITED`, which is also what stops a resend from ever
+overwriting a password the person chose.
+
+**Revoke.** No document defines revoking an outstanding invitation; the designed path for removing an
+account is `POST /users/{id}/deactivate` (T1-03, blocked by D-003). Recorded as OPEN-7 in
+`01-requirements.md` rather than invented.
+
 ## The central policy layer
 One module owns every decision: `backend/app/modules/rbac/policy.py`, exposing
 `can(actor, permission, resource)`. It **recomputes** the decision from the verified identity, the tenant
@@ -113,6 +150,7 @@ All client-facing paths carry the `/api/v1` prefix (D-005).
 | `GET /api/v1/users` | `users:manage` | no | tenant-scoped list, cursor-paginated. **Served as `GET /api/v1/users/staff`** (the bare `/users/` is the frozen superuser route), `skip`/`limit` offset paging like `UsersPublic` |
 | `POST /api/v1/users` | `users:manage` | yes, 5 min | invite; `409` duplicate email; `422` role not grantable. **Served as `POST /api/v1/users/staff`**: R3 refusal is `403 GRANT_EXCEEDS_ACTOR` (the policy layer's code), the duplicate is one `409 EMAIL_UNAVAILABLE` for every tenant, a client `tenant_id` is ignored and audited (INV-1); step-up deferred (D-003). The invitee sets a password at `POST /api/v1/users/invitations/accept` with a single-use, expiring emailed token (R10) |
 | `GET /api/v1/users/{id}` | `users:manage` | no | `404` on cross-tenant |
+| `POST /api/v1/users/staff/{id}/invitation` | `users:manage` + R3 over the person's current roles | deferred (D-003), as for the invite | **Resend invite** (added 2026-10-08, see "As built: the `INVITED` status"): a fresh single-use link, the previous one retired, the expiry reset; `404` absent or cross-tenant; `409 INVITATION_NOT_PENDING` unless `INVITED`; `503 EMAIL_NOT_CONFIGURED`; `user.create` `INVITATION_RESENT` in the same transaction; administrative rate limit |
 | `POST /api/v1/users/{id}/deactivate` | `users:manage` | yes | revokes sessions; `USER_DEACTIVATED` |
 | `POST /api/v1/users/{id}/roles` | `users:manage` | yes, 5 min | `ROLE_ASSIGNED`; `200` when the account already holds the role, `201` when the grant is created |
 | `DELETE /api/v1/users/{id}/roles/{role_id}` | `users:manage` | yes, 5 min | `ROLE_REVOKED`; `409 LAST_ADMINISTRATOR` when it would remove the last role granting `users:manage` (R8) |
