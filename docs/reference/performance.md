@@ -229,3 +229,52 @@ hot endpoint in `tests/performance/test_round_trips.py`.
    the pooled host for connection limits, the value shape is
    `postgresql://<role>:<password>@ep-blue-truth-a7e0s0il-pooler.ap-southeast-2.aws.neon.tech/<db>?sslmode=require`;
    the app is compatible (every tenant setting is `set_config(..., true)` inside the transaction).
+
+## 6. Before and after (Milestone 3)
+
+### Production, at the origin
+
+Measure Production after each deploy; `upstream` is FastAPI Cloud's own figure, the others are the
+app's `Server-Timing`. Before: 2026-10-08 11:36 UTC (3A deployed, nothing else). After: 14:18 UTC
+(#64, #65, #66, #67 and #71 deployed).
+
+| Readiness probe | Before | After |
+|---|---|---|
+| Warm, sequential: upstream median / p90 | 867 / 871 ms | **212 / 214 ms** |
+| Warm: database round trips | 4 | **1** |
+| First call after the deploy | 3932 ms (12 round trips, 1330 ms connect) | **202 ms** (1 round trip, pool already warm) |
+| Five concurrent: upstream p90 | 2012 ms (new connections, 1324 ms connect) | **420 ms** (no connection opened) |
+| Liveness (no database) | 2 ms | 2 ms |
+
+One round trip is now the whole cost of the probe: ~210 ms of network between the app and the
+database. The authenticated reads were not measured in production (no probe account, section 5);
+their database share follows from the pinned round trips times ~210 ms:
+
+| Request | Round trips before (empty clinic) | Round trips after (seeded clinic) | Database wait before | Database wait after |
+|---|---|---|---|---|
+| Session (`/users/me`, permissions) | 4 / 15 | 1 / 1 | ~0.8 / 3.2 s | ~0.2 / 0.2 s |
+| Today | 35 | 7 | ~7.4 s | ~1.5 s |
+| Patients list | 16 | 5 | ~3.4 s | ~1.1 s |
+| Approvals register | 29 | 7 | ~6.1 s | ~1.5 s |
+| Script queue | 21 | 4 | ~4.4 s | ~0.8 s |
+| Calendar week | 21 | 4 | ~4.4 s | ~0.8 s |
+| Staff list | 24 | 3 | ~5.0 s | ~0.6 s |
+
+The 150 ms per-call target cannot be met while each round trip costs ~210 ms; with the app next to
+the database (owner action 1) these become single-digit to low tens of milliseconds, which the
+Server-Timing e2e budgets (readiness < 50 ms, every screen's API calls < 150 ms) already assert
+locally on every pull request.
+
+### What the browser downloads
+
+| | Before | After |
+|---|---|---|
+| Hashed assets `cache-control` | `public, max-age=14400` | `public, max-age=31536000` (the origin also sends `immutable`; the platform edge drops that directive) |
+| App HTML `cache-control` | none | `no-cache` |
+| JS and CSS encoding | gzip (two chunks uncompressed) | Brotli, precompressed at build |
+| Entry chunk (gzip) | 98.3 KB | 44.5 KB (React in its own long-cached chunk) |
+| Initial JS (gzip) | 145.2 KB | 145.8 KB (the toaster stays on the first load: deferring it lost toasts) |
+| Font files in the build | 44 (1.25 MB) | 16 (latin and latin-ext woff2 only, two preloaded) |
+| LCP, sign-in / Today (Fast 4G, ~30 ms RTT, CPU 2x, local served build) | 1104 / 1100 ms | ~700 / ~705 ms |
+| First-load requests on Today | sidebar reads ~200 ms after `/users/me` | all start within ~6 ms |
+| Layout | horizontal scroll and clipped controls on phones | every screen at 360-1440 px without sideways scroll; 44 px targets below 1024 px; drawer navigation |
