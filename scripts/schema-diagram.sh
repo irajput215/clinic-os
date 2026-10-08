@@ -17,7 +17,8 @@
 #
 # On macOS and Windows, Docker Desktop reaches the host as `host.docker.internal`; on Linux the
 # container shares the host's loopback, which is what a CI runner relies on. Override the whole DSN
-# with `TBLS_DATABASE_URL` when the database is somewhere else.
+# with `TBLS_DATABASE_URL` when the database is somewhere else, and use a local `tbls` binary of the
+# pinned version with `TBLS_BIN` when the image cannot be pulled (see below).
 #
 # No `set -x` here: this script handles a DSN that contains a password.
 
@@ -96,9 +97,18 @@ for table in "${exclude_tables[@]}"; do
   exclude_args+=(--exclude "$table")
 done
 
-docker run --rm "${network_args[@]+"${network_args[@]}"}" -v "$repo_root:/work" "$image" doc \
-  "$dsn" "/work/$target_relative" \
-  --er-format mermaid --sort --rm-dist "${exclude_args[@]}"
+if [ -n "${TBLS_BIN:-}" ]; then
+  # A local tbls of the same version, for environments that cannot pull the image (a cloud
+  # container whose proxy blocks ghcr.io). Build it with
+  #   GOBIN=<dir> go install github.com/k1LoW/tbls@v1.96.1
+  # and pass the binary: TBLS_BIN=<dir>/tbls ./scripts/schema-diagram.sh --check
+  "$TBLS_BIN" doc "$dsn" "$repo_root/$target_relative" \
+    --er-format mermaid --sort --rm-dist "${exclude_args[@]}"
+else
+  docker run --rm "${network_args[@]+"${network_args[@]}"}" -v "$repo_root:/work" "$image" doc \
+    "$dsn" "/work/$target_relative" \
+    --er-format mermaid --sort --rm-dist "${exclude_args[@]}"
+fi
 
 # tbls also writes schema.json, which embeds the server's full `version()` string — including the
 # compiler and architecture it was built with. That differs between a laptop and a CI runner, so it
