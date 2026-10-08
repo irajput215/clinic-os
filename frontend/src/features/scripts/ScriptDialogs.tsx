@@ -2,10 +2,10 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { Loader2, ShieldAlert, ShieldCheck } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { toast } from "sonner"
-import type { PatientRead } from "@/client/types.gen"
+import type { PatientRead, PrescriberRead } from "@/client/types.gen"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -15,22 +15,37 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { categoryShort, formLabel } from "@/data/approvals"
-import { patientName, patientsQuery } from "@/data/patients"
-import { previewPractitionersQuery } from "@/data/preview/practitioners"
-import { productsQuery, scriptsRepo } from "@/data/scripts"
 import {
-  MATCH_REASONS,
-  type Practitioner,
-  type Product,
-  type Script,
-} from "@/data/types"
+  categoryShort,
+  DOSAGE_FORMS,
+  formLabel,
+  TGA_CATEGORIES,
+} from "@/data/approvals"
+import {
+  patientName,
+  patientQuickFindQuery,
+  useSearchTerm,
+} from "@/data/patients"
+import {
+  formatQuantity,
+  type Prescription,
+  prescribersQuery,
+  scriptsRepo,
+} from "@/data/scripts"
+import { MATCH_REASONS } from "@/data/types"
 import { ErrorState, Field, Mono } from "@/design/primitives"
 import { focusFirstError } from "@/lib/form"
-import { clinicToday, formatDate, lastCoveredDay } from "@/lib/format"
-import { describeError, httpStatus } from "@/lib/http"
-import { currentUserQuery, signIn } from "@/lib/session"
+import {
+  clinicToday,
+  formatDate,
+  lastCoveredDay,
+  patientRef,
+} from "@/lib/format"
+import { describeError, refusalCode, validationMessages } from "@/lib/http"
+import { currentUserQuery } from "@/lib/session"
+import { uuid } from "@/lib/uuid"
 import { z } from "@/lib/zod"
+import type { ScriptAction } from "./ScriptCard"
 
 const invalidateScripts = (queryClient: ReturnType<typeof useQueryClient>) =>
   Promise.all([
@@ -40,10 +55,20 @@ const invalidateScripts = (queryClient: ReturnType<typeof useQueryClient>) =>
 
 const schema = z.object({
   patient_id: z.string().min(1, "Choose the patient."),
-  product_id: z.string().min(1, "Choose a product."),
-  quantity: z.string().trim().min(1, "Enter the quantity.").max(32),
-  repeats: z.coerce.number<string>().int().min(0).max(5),
-  directions: z
+  medicine_name: z
+    .string()
+    .trim()
+    .min(2, "Enter the product, as it will appear on the script.")
+    .max(200),
+  tga_category: z.string().min(1, "Choose the TGA category."),
+  dosage_form: z.string().min(1, "Choose the dosage form."),
+  quantity: z
+    .string()
+    .trim()
+    .regex(/^\d{1,8}(\.\d{1,2})?$/, "Enter a quantity, e.g. 1 or 2.5.")
+    .refine((v) => Number(v) > 0, "The quantity must be more than zero."),
+  repeats: z.coerce.number<string>().int().min(0).max(12),
+  dose_instruction: z
     .string()
     .trim()
     .min(3, "Enter the directions for use.")
@@ -64,7 +89,7 @@ const schema = z.object({
 type FormIn = z.input<typeof schema>
 type FormOut = z.output<typeof schema>
 
-/** Nurse (or doctor) stages a draft; a doctor reviews and signs it later. */
+/** A nurse (or doctor) stages a draft; the prescriber of record reviews and signs it later. */
 export function StageScriptDialog({
   open,
   onOpenChange,
@@ -98,96 +123,154 @@ function StageScriptForm({
   patientId?: string
   onClose: () => void
 }) {
-  const patients = useQuery({ ...patientsQuery, enabled: !patientId })
-  const products = useQuery(productsQuery)
-  const practitioners = useQuery(previewPractitionersQuery)
+  const prescribers = useQuery(prescribersQuery)
   const { data: me } = useQuery(currentUserQuery)
-  const failed = products.error ?? practitioners.error ?? patients.error
-  if (failed) return <ErrorState error={failed} />
-  if (
-    !products.data ||
-    !practitioners.data ||
-    !me ||
-    (!patientId && !patients.data)
-  )
+  if (prescribers.error) return <ErrorState error={prescribers.error} />
+  if (!prescribers.data || !me)
     return (
       <div className="flex justify-center py-10 text-stone">
-        <Loader2 className="animate-spin" />
+        <Loader2 className="animate-spin" aria-label="Loading" />
       </div>
     )
   return (
     <StageScriptFields
       patientId={patientId}
       onClose={onClose}
-      patients={patients.data?.data ?? []}
-      products={products.data}
-      doctors={practitioners.data.filter((p) => p.role === "DOCTOR")}
+      prescribers={prescribers.data}
       meId={me.id}
     />
+  )
+}
+
+/**
+ * The patient, found by the server's search (name, date of birth or PT- reference), so a practice
+ * of any size can stage for anyone, not only its first page of patients. The term travels in a
+ * request body, never a URL. The chosen patient stays shown while the search changes.
+ */
+function PatientPicker({
+  value,
+  onChange,
+  error,
+}: {
+  value: string
+  onChange: (id: string) => void
+  error?: string
+}) {
+  const [find, setFind] = useState("")
+  const [chosen, setChosen] = useState<PatientRead | null>(null)
+  const term = useSearchTerm(find)
+  const matches = useQuery(patientQuickFindQuery(term))
+  const options = [
+    ...(chosen && value === chosen.id ? [chosen] : []),
+    ...(matches.data?.data ?? []).filter((p) => p.id !== chosen?.id),
+  ]
+  return (
+    <fieldset className="grid gap-2 sm:col-span-2">
+      <Field label="Patient" htmlFor="sc-patient-find" error={error}>
+        <input
+          id="sc-patient-find"
+          type="search"
+          className="field-input"
+          autoComplete="off"
+          placeholder="Name, date of birth or PT- reference"
+          value={find}
+          onChange={(e) => setFind(e.target.value)}
+        />
+      </Field>
+      <div
+        role="radiogroup"
+        aria-label="Matching patients"
+        className="grid max-h-48 gap-1 overflow-y-auto rounded-inner border border-line p-1.5"
+      >
+        {matches.isError ? (
+          <p className="px-2 py-1.5 text-[13px] text-danger-deep">
+            {describeError(matches.error)}
+          </p>
+        ) : matches.isPending && options.length === 0 ? (
+          <p className="px-2 py-1.5 text-[13px] text-stone">Searching…</p>
+        ) : options.length === 0 ? (
+          <p className="px-2 py-1.5 text-[13px] text-stone">
+            No patient matches that.
+          </p>
+        ) : (
+          options.map((p) => (
+            <label
+              key={p.id}
+              className="flex cursor-pointer items-center gap-2.5 rounded-btn px-2 py-1.5 text-sm hover:bg-oat"
+            >
+              <input
+                type="radio"
+                name="patient_id"
+                value={p.id}
+                checked={value === p.id}
+                onChange={() => {
+                  setChosen(p)
+                  onChange(p.id)
+                }}
+              />
+              <span className="font-medium">{patientName(p)}</span>
+              <span className="text-stone">{formatDate(p.date_of_birth)}</span>
+              <Mono className="ml-auto text-[11.5px] text-stone">
+                {patientRef(p.id)}
+              </Mono>
+            </label>
+          ))
+        )}
+      </div>
+    </fieldset>
   )
 }
 
 function StageScriptFields({
   patientId,
   onClose,
-  patients,
-  products,
-  doctors,
+  prescribers,
   meId,
 }: {
   patientId?: string
   onClose: () => void
-  patients: PatientRead[]
-  products: Product[]
-  doctors: Practitioner[]
+  prescribers: PrescriberRead[]
   meId: string
 }) {
   const queryClient = useQueryClient()
-
-  const defaults: FormIn = {
-    patient_id: patientId ?? "",
-    product_id: "",
-    quantity: "",
-    repeats: "2",
-    directions: "",
-    triage_outcome: "",
-    conventional_therapy: "",
-    prescriber_id: doctors.some((d) => d.id === meId) ? meId : "",
-    date_of_service: clinicToday(),
-  }
   const form = useForm<FormIn, unknown, FormOut>({
     shouldFocusError: false,
     resolver: zodResolver(schema),
-    defaultValues: defaults,
+    defaultValues: {
+      patient_id: patientId ?? "",
+      medicine_name: "",
+      tga_category: "",
+      dosage_form: "",
+      quantity: "1",
+      repeats: "2",
+      dose_instruction: "",
+      triage_outcome: "",
+      conventional_therapy: "",
+      prescriber_id: prescribers.some((d) => d.id === meId) ? meId : "",
+      date_of_service: clinicToday(),
+    },
   })
   const { errors } = form.formState
 
-  const productId = form.watch("product_id")
-  const product = products.find((p) => p.id === productId)
-  useEffect(() => {
-    if (product && !form.getValues("quantity"))
-      form.setValue("quantity", product.pack)
-  }, [product, form])
-
   const stage = useMutation({
-    mutationFn: (v: FormOut) => {
-      const patient = patients.find((p) => p.id === v.patient_id)
-      return scriptsRepo.stage({
-        ...v,
-        patient_name: patient ? patientName(patient) : "",
-      })
-    },
+    mutationFn: (v: FormOut) =>
+      scriptsRepo.stage({ ...v, quantity: v.quantity }),
     onSuccess: async (script) => {
       await invalidateScripts(queryClient)
       if (script.gate?.matched)
-        toast.success(`Staged for ${script.prescriber_name} to review`)
+        toast.success(
+          `Staged for ${script.prescriber_name ?? "the prescriber"} to review`,
+        )
       else
         toast.warning(
-          "Staged, but no TGA approval covers it yet. It can't be sent until one does.",
+          "Staged, but no TGA approval covers it yet. It can't be signed until one does.",
         )
       onClose()
     },
   })
+  const serverFields = validationMessages(stage.error)
+  const fieldError = (name: keyof FormIn) =>
+    errors[name]?.message ?? serverFields[name]
 
   return (
     <form
@@ -200,74 +283,85 @@ function StageScriptFields({
         <DialogDescription>
           Draft it with the triage outcome and conventional therapy tried first.
           The doctor reviews and signs; the safety gate checks the TGA approval
-          before anything is sent.
+          for the date of service before it can be signed or sent.
         </DialogDescription>
       </DialogHeader>
 
       <div className="grid gap-4 sm:grid-cols-2">
         {!patientId ? (
-          <Field
-            label="Patient"
-            htmlFor="sc-patient"
-            error={errors.patient_id?.message}
-            className="sm:col-span-2"
-          >
-            <select
-              id="sc-patient"
-              className="field-input"
-              {...form.register("patient_id")}
-            >
-              <option value="">Choose a patient</option>
-              {patients.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {patientName(p)}
-                </option>
-              ))}
-            </select>
-          </Field>
+          <PatientPicker
+            value={form.watch("patient_id")}
+            onChange={(id) =>
+              form.setValue("patient_id", id, { shouldValidate: true })
+            }
+            error={fieldError("patient_id")}
+          />
         ) : null}
         <Field
           label="Product"
           htmlFor="sc-product"
-          error={errors.product_id?.message}
-          hint={
-            product
-              ? `${categoryShort(product.tga_category)} · ${formLabel(product.dosage_form)} · ${product.schedule}`
-              : undefined
-          }
+          error={fieldError("medicine_name")}
           className="sm:col-span-2"
         >
-          <select
+          <input
             id="sc-product"
             className="field-input"
-            {...form.register("product_id")}
+            autoComplete="off"
+            placeholder="As it will appear on the script"
+            {...form.register("medicine_name")}
+          />
+        </Field>
+        <Field
+          label="TGA category"
+          htmlFor="sc-cat"
+          error={fieldError("tga_category")}
+        >
+          <select
+            id="sc-cat"
+            className="field-input"
+            {...form.register("tga_category")}
           >
-            <option value="">Choose from the catalogue</option>
-            {products.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
+            <option value="">Choose</option>
+            {Object.entries(TGA_CATEGORIES).map(([code, label]) => (
+              <option key={code} value={code}>
+                {label}
               </option>
             ))}
           </select>
         </Field>
         <Field
-          label="Quantity"
-          htmlFor="sc-qty"
-          error={errors.quantity?.message}
+          label="Dosage form"
+          htmlFor="sc-form"
+          error={fieldError("dosage_form")}
         >
+          <select
+            id="sc-form"
+            className="field-input"
+            {...form.register("dosage_form")}
+          >
+            <option value="">Choose</option>
+            {Object.entries(DOSAGE_FORMS).map(([code, label]) => (
+              <option key={code} value={code}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Quantity" htmlFor="sc-qty" error={fieldError("quantity")}>
           <input
             id="sc-qty"
+            inputMode="decimal"
             className="field-input"
             autoComplete="off"
             {...form.register("quantity")}
           />
         </Field>
-        <Field label="Repeats" htmlFor="sc-rep" error={errors.repeats?.message}>
+        <Field label="Repeats" htmlFor="sc-rep" error={fieldError("repeats")}>
           <input
             id="sc-rep"
             type="number"
             min={0}
-            max={5}
+            max={12}
             className="field-input"
             {...form.register("repeats")}
           />
@@ -275,7 +369,7 @@ function StageScriptFields({
         <Field
           label="Directions / titration"
           htmlFor="sc-dir"
-          error={errors.directions?.message}
+          error={fieldError("dose_instruction")}
           className="sm:col-span-2"
         >
           <input
@@ -283,13 +377,13 @@ function StageScriptFields({
             className="field-input"
             placeholder="e.g. 0.5 mL nocte, titrate weekly"
             autoComplete="off"
-            {...form.register("directions")}
+            {...form.register("dose_instruction")}
           />
         </Field>
         <Field
           label="Triage outcome"
           htmlFor="sc-tri"
-          error={errors.triage_outcome?.message}
+          error={fieldError("triage_outcome")}
           className="sm:col-span-2"
         >
           <input
@@ -303,7 +397,7 @@ function StageScriptFields({
         <Field
           label="Conventional therapy first"
           htmlFor="sc-conv"
-          error={errors.conventional_therapy?.message}
+          error={fieldError("conventional_therapy")}
           className="sm:col-span-2"
         >
           <input
@@ -317,7 +411,12 @@ function StageScriptFields({
         <Field
           label="Reviewing doctor"
           htmlFor="sc-doc"
-          error={errors.prescriber_id?.message}
+          error={fieldError("prescriber_id")}
+          hint={
+            prescribers.length === 0
+              ? "Nobody in your practice can sign prescriptions yet."
+              : undefined
+          }
         >
           <select
             id="sc-doc"
@@ -325,14 +424,18 @@ function StageScriptFields({
             {...form.register("prescriber_id")}
           >
             <option value="">Choose</option>
-            {doctors.map((d) => (
+            {prescribers.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.name}
               </option>
             ))}
           </select>
         </Field>
-        <Field label="Date of service" htmlFor="sc-dos">
+        <Field
+          label="Date of service"
+          htmlFor="sc-dos"
+          error={fieldError("date_of_service")}
+        >
           <input
             id="sc-dos"
             type="date"
@@ -364,61 +467,66 @@ function StageScriptFields({
   )
 }
 
+/** The outcome a successful send shows: honest about what "queued" means while no transport exists. */
+const sentToast = (script: Prescription) => {
+  if (script.state === "DISPATCHED")
+    toast.success("Signed and sent to the pharmacy.")
+  else if (script.dispatch && !script.dispatch.transport_configured)
+    toast.warning(
+      "Signed and queued. Not sent: no pharmacy connection is configured yet.",
+    )
+  else toast.success("Signed and queued for the pharmacy.")
+}
+
 /**
- * Doctor review: the gate's answer for the date of service, a password re-entry (step-up), then sign
- * and send. The gate is evaluated again at sign time; this screen only shows what it will say.
+ * Review: the gate's answer from the server for the date of service, a password re-entry (the
+ * server-side step-up, ADR-F002 interim), then sign and queue - or, for a script that is already
+ * signed, queue it. The server evaluates the gate again inside each transaction; this screen only
+ * shows the answer it last gave.
  */
 export function ReviewSignDialog({
   script,
+  action,
   onOpenChange,
 }: {
-  script: Script | null
+  script: Prescription | null
+  action: ScriptAction
   onOpenChange: (open: boolean) => void
 }) {
   const queryClient = useQueryClient()
-  const { data: me } = useQuery(currentUserQuery)
   const [password, setPassword] = useState("")
-  // A different script starts with an empty password field.
+  // One intent per opening of the dialog: a retry of the same click reuses it (server idempotency).
+  const [intent, setIntent] = useState(() => uuid())
   const [forScript, setForScript] = useState(script?.id)
   if (script?.id !== forScript) {
     setForScript(script?.id)
     setPassword("")
+    setIntent(uuid())
   }
 
-  const gate = useQuery({
-    queryKey: ["gate", script?.id, script?.date_of_service],
-    queryFn: () => scriptsRepo.gate(script!),
-    enabled: script !== null,
-    staleTime: 0,
-  })
-
-  const sign = useMutation({
+  const submit = useMutation({
     mutationFn: async () => {
-      try {
-        await signIn(me!.email, password)
-      } catch (error) {
-        const status = httpStatus(error)
-        if (status === 400 || status === 401)
-          throw new Error("That password isn't right. Re-enter it to sign.")
-        throw error
-      }
-      return scriptsRepo.signAndSend(script!.id)
+      const s = script as Prescription
+      const signed =
+        s.state === "DRAFT" ? await scriptsRepo.sign(s.id, password) : s
+      return scriptsRepo.dispatch(signed.id, password, intent)
     },
     onSuccess: async (result) => {
       await invalidateScripts(queryClient)
-      if (result.state === "SENT") {
-        toast.success(`Signed and sent to ${result.pharmacy}`)
-        onOpenChange(false)
-      } else {
-        toast.error("Blocked by the safety gate. Nothing was sent.")
-        await gate.refetch()
-      }
+      sentToast(result)
+      onOpenChange(false)
+    },
+    onError: async () => {
+      // A refusal may have moved the script (signed, or blocked): show the server's current state.
+      await invalidateScripts(queryClient)
     },
   })
 
   const s = script
-  const allowed = gate.data?.matched === true
-  const mine = s && me && s.prescriber_id === me.id
+  const gate = s?.gate ?? null
+  const allowed = gate?.matched === true
+  const signing = s?.state === "DRAFT"
+  const errorCode = refusalCode(submit.error)
 
   return (
     <Dialog open={s !== null} onOpenChange={onOpenChange}>
@@ -428,29 +536,32 @@ export function ReviewSignDialog({
             className="grid gap-4"
             onSubmit={(e) => {
               e.preventDefault()
-              sign.mutate()
+              submit.mutate()
             }}
           >
             <DialogHeader>
-              <DialogTitle>Review & sign</DialogTitle>
+              <DialogTitle>
+                {signing ? "Review & sign" : "Review & send"}
+              </DialogTitle>
               <DialogDescription>
-                {s.patient_name} · drafted by {s.drafted_by_name}
+                {s.patient_name ?? "Patient"} · drafted by{" "}
+                {s.drafted_by_name ?? "a colleague"}
               </DialogDescription>
             </DialogHeader>
 
             <div className="rounded-inner border border-line bg-oat px-4 py-3.5 text-sm">
               <div className="text-[15px] font-semibold">
-                {s.product_name}{" "}
+                {s.medicine_name}{" "}
                 <span className="font-normal text-stone">
-                  · {s.quantity} · {s.repeats} repeats
+                  · qty {formatQuantity(s.quantity)} · {s.repeats} repeats
                 </span>
               </div>
-              <div className="mt-0.5 text-stone">{s.directions}</div>
-              <dl className="mt-3 grid grid-cols-[150px_minmax(0,1fr)] gap-y-1.5 text-[13px]">
+              <div className="mt-0.5 text-stone">{s.dose_instruction}</div>
+              <dl className="mt-3 grid grid-cols-[150px_minmax(0,1fr)] gap-y-1.5 text-[13px] max-sm:grid-cols-1">
                 <dt className="font-semibold">Triage outcome</dt>
-                <dd>{s.triage_outcome ?? "-"}</dd>
+                <dd>{s.triage_outcome}</dd>
                 <dt className="font-semibold">Conventional first</dt>
-                <dd>{s.conventional_therapy ?? "-"}</dd>
+                <dd>{s.conventional_therapy}</dd>
                 <dt className="font-semibold">Approval grain</dt>
                 <dd>
                   {categoryShort(s.tga_category)} · {formLabel(s.dosage_form)}
@@ -462,25 +573,13 @@ export function ReviewSignDialog({
 
             <div
               className={
-                gate.isPending
-                  ? "rounded-inner border border-line px-4 py-3 text-sm text-stone"
-                  : allowed
-                    ? "flex items-start gap-3 rounded-inner bg-ok-tint px-4 py-3 text-sm text-ok-deep"
-                    : "flex items-start gap-3 rounded-inner bg-danger-tint px-4 py-3 text-sm text-danger-deep"
+                allowed
+                  ? "flex items-start gap-3 rounded-inner bg-ok-tint px-4 py-3 text-sm text-ok-deep"
+                  : "flex items-start gap-3 rounded-inner bg-danger-tint px-4 py-3 text-sm text-danger-deep"
               }
               role="status"
             >
-              {gate.isPending ? (
-                "Checking the TGA approval…"
-              ) : gate.isError ? (
-                <>
-                  <ShieldAlert className="mt-0.5 size-4 shrink-0" />
-                  <span>
-                    The safety gate couldn't be reached, so this can't be
-                    signed. {describeError(gate.error)}
-                  </span>
-                </>
-              ) : allowed && gate.data?.validity_interval ? (
+              {allowed && gate?.validity_interval ? (
                 <>
                   <ShieldCheck className="mt-0.5 size-4 shrink-0" />
                   <span>
@@ -488,9 +587,9 @@ export function ReviewSignDialog({
                     An active approval covers {formatDate(s.date_of_service)}{" "}
                     (covered through{" "}
                     {formatDate(
-                      lastCoveredDay(gate.data.validity_interval.valid_to),
+                      lastCoveredDay(gate.validity_interval.valid_to),
                     )}
-                    ).
+                    ). The server checks it again when you sign and send.
                   </span>
                 </>
               ) : (
@@ -498,13 +597,13 @@ export function ReviewSignDialog({
                   <ShieldAlert className="mt-0.5 size-4 shrink-0" />
                   <span>
                     <span className="font-semibold">Safety gate: blocked.</span>{" "}
-                    {gate.data?.reason_code
-                      ? MATCH_REASONS[gate.data.reason_code]
+                    {gate?.reason_code
+                      ? MATCH_REASONS[gate.reason_code]
                       : "No covering approval"}
                     .{" "}
-                    <Mono className="text-[11.5px]">
-                      {gate.data?.reason_code}
-                    </Mono>
+                    {gate?.reason_code ? (
+                      <Mono className="text-[11.5px]">{gate.reason_code}</Mono>
+                    ) : null}
                     <br />
                     <Link
                       to="/patients/$patientId"
@@ -519,16 +618,19 @@ export function ReviewSignDialog({
               )}
             </div>
 
-            {!mine ? (
+            {action === null ? (
               <p className="rounded-btn bg-warn-tint px-3 py-2.5 text-[13px] text-warn-deep">
-                Assigned to {s.prescriber_name}. Only the assigned prescriber
-                can sign it.
+                {signing
+                  ? `Assigned to ${s.prescriber_name ?? "the prescriber"}. Only the assigned prescriber can sign it.`
+                  : "Your role can't send scripts to a pharmacy."}
               </p>
             ) : (
               <Field
-                label="Your password, to sign"
+                label={
+                  signing ? "Your password, to sign" : "Your password, to send"
+                }
                 htmlFor="sign-pw"
-                hint="Signing a prescription needs you to re-enter your password."
+                hint="Re-enter your password: the server checks it before signing or sending."
               >
                 <input
                   id="sign-pw"
@@ -542,14 +644,15 @@ export function ReviewSignDialog({
               </Field>
             )}
 
-            {sign.isError ? (
+            {submit.isError ? (
               <p
                 role="alert"
                 className="rounded-btn bg-danger-tint px-3 py-2.5 text-[13px] text-danger-deep"
               >
-                {sign.error instanceof Error && !httpStatus(sign.error)
-                  ? sign.error.message
-                  : describeError(sign.error)}
+                {describeError(submit.error)}
+                {errorCode && errorCode in MATCH_REASONS ? (
+                  <Mono className="ml-1 text-[11.5px]">{errorCode}</Mono>
+                ) : null}
               </p>
             ) : null}
 
@@ -563,10 +666,12 @@ export function ReviewSignDialog({
               </Button>
               <Button
                 type="submit"
-                disabled={!mine || !allowed || !password || sign.isPending}
+                disabled={
+                  action === null || !allowed || !password || submit.isPending
+                }
               >
-                {sign.isPending ? <Loader2 className="animate-spin" /> : null}
-                Sign & send to pharmacy
+                {submit.isPending ? <Loader2 className="animate-spin" /> : null}
+                {signing ? "Sign & queue for pharmacy" : "Queue for pharmacy"}
               </Button>
             </DialogFooter>
           </form>

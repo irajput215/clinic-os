@@ -1,138 +1,131 @@
 import { queryOptions } from "@tanstack/react-query"
-import { previewMatch } from "@/data/preview/gate"
-import { escriptToken, uuid } from "@/data/preview/seed"
-import { readPreview, writePreview } from "@/data/preview/store"
-import type { Script, ScriptDraft, ScriptState } from "@/data/types"
-import { Refusal } from "@/lib/http"
+import { AuthService, PrescriptionsService } from "@/client"
+import type { PrescriptionCreate, PrescriptionRead } from "@/client/types.gen"
+import type { TgaMatchResponse } from "@/data/types"
 
 /**
- * Prescriptions (the script queue): PREVIEW ONLY. No backend module exists. The proposed contract,
- * including the server-side safety gate on sign AND on dispatch, the transactional outbox and the
- * REQUIRES_RECONCILIATION outcome, is docs2/sdlc/07-script-queue/api.md.
+ * Prescriptions (the script queue), served by backend/app/modules/prescriptions/router.py
+ * (docs2/sdlc/07-script-queue/api.md, agreed 2026-10-07):
+ *   GET  /prescriptions?state=&prescriber_id=&patient_id=&cursor=   POST /prescriptions
+ *   POST /prescriptions/{id}/sign       POST /prescriptions/{id}/dispatch (Idempotency-Key)
+ *   GET  /prescriptions/prescribers     POST /auth/step-up (the interim password step-up)
  *
- * The preview reproduces the gate's fail-closed behaviour so the UI is designed around refusals: a
- * script whose approval does not cover the date of service is BLOCKED, with the reason code, and
- * cannot be sent.
+ * The safety gate's answer on every actionable script comes from the server, evaluated now. The
+ * server also decides at sign and at dispatch, inside the transaction, so nothing here is a control:
+ * the screens only show what the server said.
  *
- * The gate here reads the preview's own sample approvals, not the patient's real ones. The real
- * `POST /tga-approvals/match` exists, but a preview script is not a real script, and a clinic can't
- * make a real approval ACTIVE until a second clinician exists to verify it; mixing the two would let
- * one screen say "covered" while signing said "blocked". When the prescriptions module lands, the
- * server evaluates the gate inside the signing transaction and this goes away.
+ * No pharmacy transport exists: a dispatched script is `QUEUED` and the API says
+ * `transport_configured: false`. The UI says "queued, not sent", never "sent".
  */
-const PHARMACIES = [
-  "Leaf & Stone Pharmacy",
-  "Terra Dispensary Chemist",
-  "GreenLeaf Compounding",
+
+export const PRESCRIPTION_STATES = [
+  "DRAFT",
+  "SIGNED",
+  "BLOCKED",
+  "QUEUED",
+  "DISPATCHED",
+  "FAILED",
+  "REQUIRES_RECONCILIATION",
+  "CANCELLED",
+  "REVERSED",
+] as const
+export type PrescriptionState = (typeof PRESCRIPTION_STATES)[number]
+
+/** The generated read, with `state` and `gate` narrowed to the values the backend allows. */
+export type Prescription = Omit<PrescriptionRead, "state" | "gate"> & {
+  state: PrescriptionState
+  gate: TgaMatchResponse | null
+}
+
+/** States that still need a person: sign a draft, or send a signed/blocked/failed one. */
+export const ACTIONABLE: readonly PrescriptionState[] = [
+  "DRAFT",
+  "SIGNED",
+  "BLOCKED",
+  "FAILED",
 ]
+export const isActionable = (state: PrescriptionState) =>
+  ACTIONABLE.includes(state)
+
+export const PRESCRIPTION_STATE_LABEL: Record<PrescriptionState, string> = {
+  DRAFT: "Awaiting review",
+  SIGNED: "Signed, not sent",
+  BLOCKED: "Blocked by safety gate",
+  QUEUED: "Queued, not sent",
+  DISPATCHED: "Sent to pharmacy",
+  FAILED: "Send failed",
+  REQUIRES_RECONCILIATION: "Needs reconciliation",
+  CANCELLED: "Cancelled",
+  REVERSED: "Reversed",
+}
+
+/** The API sends a decimal string ("1.00"); show it as a clinician writes it ("1", "2.5"). */
+export const formatQuantity = (quantity: string) => {
+  const n = Number(quantity)
+  return Number.isFinite(n) ? String(n) : quantity
+}
+
+/** The API's largest page (prescriptions/service.py `MAX_PAGE_SIZE`). */
+const PAGE_SIZE = 100
+
+const listAll = async (query: {
+  patient_id?: string
+}): Promise<Prescription[]> => {
+  const all: Prescription[] = []
+  let cursor: string | undefined
+  do {
+    const { data: page } = await PrescriptionsService.listPrescriptions({
+      query: { limit: PAGE_SIZE, cursor, ...query },
+    })
+    all.push(...(page.data as Prescription[]))
+    cursor = page.next_cursor ?? undefined
+  } while (cursor)
+  return all
+}
+
+/** A fresh single-use step-up grant for one operation on one script (ADR-F002 interim). */
+const stepUp = async (
+  password: string,
+  operation: "prescription.sign" | "prescription.dispatch",
+  id: string,
+) =>
+  (
+    await AuthService.stepUp({
+      body: { password, operation, resource_id: id },
+    })
+  ).data.step_up_token
 
 export const scriptsRepo = {
+  list: () => listAll({}),
+  listForPatient: (patientId: string) => listAll({ patient_id: patientId }),
+  prescribers: async () =>
+    (await PrescriptionsService.listPrescribers()).data.data,
+  stage: async (body: PrescriptionCreate) =>
+    (await PrescriptionsService.stagePrescription({ body }))
+      .data as Prescription,
+  sign: async (id: string, password: string) =>
+    (
+      await PrescriptionsService.signPrescription({
+        path: { prescription_id: id },
+        body: {
+          step_up_token: await stepUp(password, "prescription.sign", id),
+        },
+      })
+    ).data as Prescription,
   /**
-   * The gate answer shown on a script that is still awaiting action is evaluated now, against the
-   * approvals as they are now, so recording or verifying an approval is reflected immediately. A
-   * sent script keeps the decision it was sent under.
+   * `intentKey` is one per send attempt from the dialog: a network retry of the same attempt reuses
+   * it and the server answers with the first result instead of queueing twice.
    */
-  list: async (): Promise<Script[]> => {
-    const s = await readPreview()
-    return s.scripts
-      .map((x) =>
-        isActionable(x.state)
-          ? { ...x, gate: previewMatch(s.approvals, x) }
-          : x,
-      )
-      .sort((a, b) => b.created_at.localeCompare(a.created_at))
-  },
-
-  /** The gate's answer for this script now, as the review dialog shows it before signing. */
-  gate: async (script: Script) =>
-    previewMatch((await readPreview()).approvals, script),
-
-  stage: (draft: ScriptDraft) =>
-    writePreview((s) => {
-      const product = s.products.find((p) => p.id === draft.product_id)
-      if (!product)
-        throw new Refusal(
-          "PRODUCT_UNKNOWN",
-          "Choose a product from the catalogue.",
-        )
-      const prescriber = s.practitioners.find(
-        (p) => p.id === draft.prescriber_id && p.role === "DOCTOR",
-      )
-      if (!prescriber)
-        throw new Refusal(
-          "PRESCRIBER_NOT_AUTHORIZED",
-          "Choose the doctor who will review this script.",
-        )
-      const me = s.practitioners.find((p) => p.id === s.me)
-      const script: Script = {
-        id: uuid(),
-        ...draft,
-        product_name: product.name,
-        tga_category: product.tga_category,
-        dosage_form: product.dosage_form,
-        state: "AWAITING_REVIEW",
-        drafted_by: s.me,
-        drafted_by_name: me?.name ?? "You",
-        prescriber_name: prescriber.name,
-        created_at: new Date().toISOString(),
-        signed_at: null,
-        sent_at: null,
-        escript_token: null,
-        pharmacy: null,
-        gate: null,
-      }
-      script.gate = previewMatch(s.approvals, script)
-      s.scripts.unshift(script)
-      return script
-    }),
-
-  /**
-   * Sign, then dispatch, with the gate evaluated at each step against the date of service. A refusal
-   * at either step leaves the script BLOCKED with the reason, and nothing is sent.
-   */
-  signAndSend: (id: string) =>
-    writePreview((s) => {
-      const script = s.scripts.find((x) => x.id === id)
-      if (!script)
-        throw new Refusal("NOT_FOUND", "That script isn't available.")
-      if (script.state !== "AWAITING_REVIEW" && script.state !== "BLOCKED")
-        throw new Refusal(
-          "STATE_INVALID",
-          "This script has already been actioned.",
-        )
-      if (script.prescriber_id !== s.me)
-        throw new Refusal(
-          "PRESCRIBER_NOT_AUTHORIZED",
-          `Only ${script.prescriber_name} can sign this script.`,
-        )
-      const gate = previewMatch(s.approvals, script)
-      script.gate = gate
-      if (!gate.matched) {
-        script.state = "BLOCKED"
-        return script
-      }
-      const now = new Date().toISOString()
-      script.state = "SENT"
-      script.signed_at = now
-      script.sent_at = now
-      script.escript_token = escriptToken()
-      script.pharmacy = PHARMACIES[s.scripts.length % PHARMACIES.length]
-      return script
-    }),
-
-  cancel: (id: string) =>
-    writePreview((s) => {
-      const script = s.scripts.find((x) => x.id === id)
-      if (!script)
-        throw new Refusal("NOT_FOUND", "That script isn't available.")
-      if (script.state === "SENT")
-        throw new Refusal(
-          "STATE_INVALID",
-          "A sent script is cancelled with the pharmacy, not here.",
-        )
-      script.state = "CANCELLED"
-      return script
-    }),
+  dispatch: async (id: string, password: string, intentKey: string) =>
+    (
+      await PrescriptionsService.dispatchPrescription({
+        path: { prescription_id: id },
+        headers: { "Idempotency-Key": intentKey },
+        body: {
+          step_up_token: await stepUp(password, "prescription.dispatch", id),
+        },
+      })
+    ).data as Prescription,
 }
 
 export const scriptsQuery = queryOptions({
@@ -141,20 +134,15 @@ export const scriptsQuery = queryOptions({
   staleTime: 10_000,
 })
 
-export const productsQuery = queryOptions({
-  queryKey: ["products"],
-  queryFn: async () => (await readPreview()).products,
+export const patientScriptsQuery = (patientId: string) =>
+  queryOptions({
+    queryKey: ["scripts", "patient", patientId],
+    queryFn: () => scriptsRepo.listForPatient(patientId),
+    staleTime: 10_000,
+  })
+
+export const prescribersQuery = queryOptions({
+  queryKey: ["prescribers"],
+  queryFn: scriptsRepo.prescribers,
   staleTime: 5 * 60_000,
 })
-
-export const isActionable = (state: ScriptState) =>
-  state === "AWAITING_REVIEW" || state === "BLOCKED"
-
-export const SCRIPT_STATE_LABEL: Record<ScriptState, string> = {
-  AWAITING_REVIEW: "Awaiting review",
-  SIGNED: "Signed",
-  SENT: "Sent to pharmacy",
-  BLOCKED: "Blocked by safety gate",
-  REQUIRES_RECONCILIATION: "Needs reconciliation",
-  CANCELLED: "Cancelled",
-}

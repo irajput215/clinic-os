@@ -31,8 +31,9 @@ const DEFAULTS: Record<Capability, Source> = {
   // backend/app/modules/appointments (docs2/sdlc/04-calendar-and-booking/api.md).
   appointments: "api",
   publicBooking: "api",
-  // No backend module yet; contracts proposed in docs2/sdlc.
-  prescriptions: "preview",
+  // Live: the script queue, signing and dispatch (the outbox; no pharmacy transport exists yet).
+  prescriptions: "api",
+  // No backend module yet; contract proposed in docs2/sdlc/08-today.
   dashboard: "preview",
 }
 

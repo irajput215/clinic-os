@@ -22,8 +22,9 @@ strict-schema rule still holds: every field is an unknown field, so a body carry
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
-from sqlmodel import SQLModel
+from sqlmodel import Field, SQLModel
 
 # PRIVATE API, deliberately, for the reason the other modules' schemas record: SQLModel annotates
 # `model_config` as `SQLModelConfig`, so a plain `ConfigDict` is rejected by mypy --strict and ty alike.
@@ -56,3 +57,29 @@ class TenantSettingsUpdate(SQLModel):
     """
 
     model_config = SQLModelConfig(extra="forbid")
+
+
+class StepUpRequest(SQLModel):
+    """`POST /api/v1/auth/step-up`: re-prove the session's factor for one operation on one resource.
+
+    The interim factor is the account password (ADR-F002; D-003 decides the real one). `operation`
+    is a closed vocabulary and `resource_id` is the record the operation will act on, so the grant
+    this returns cannot be spent on anything else. No `user_id` or `tenant_id`: both are the session.
+    """
+
+    model_config = SQLModelConfig(extra="forbid")
+
+    password: str = Field(min_length=1, max_length=128)
+    operation: Literal["prescription.sign", "prescription.dispatch"]
+    resource_id: uuid.UUID
+
+
+class StepUpGrantRead(SQLModel):
+    """The single-use proof. `step_up_token` is SECRET: held by the client for one call, never logged."""
+
+    model_config = SQLModelConfig(extra="forbid")
+
+    step_up_token: str
+    operation: str
+    resource_id: uuid.UUID
+    expires_at: datetime

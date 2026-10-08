@@ -150,9 +150,21 @@ PAYLOAD_KEYS: Final[frozenset[str]] = frozenset(
         "care_relationship_id",
         "change",
         "changed_fields",
+        # Feature 10/13 (prescription dispatch and its outbound transport): closed-vocabulary
+        # classes, never provider text (`10-prescription-safety-gate/05-data-and-audit.md`).
+        "error_class",
         "field_set",
         "from_state",
+        # The server-computed SHA-256 dispatch key (INTERNAL, `10/05` field table), never the
+        # client's raw `Idempotency-Key` header.
+        "idempotency_key",
+        "latency_ms",
+        # Feature 02's `STEP_UP_SUCCEEDED` fields: the factor class, never the factor.
+        "mfa_method",
+        "operation",
+        "outcome_class",
         "patient_id",
+        "provider",
         "purpose",
         "query_filters",
         "reason",
@@ -226,6 +238,25 @@ PAYLOAD_ALLOW_LIST: Final[MappingProxyType[str, frozenset[str]]] = MappingProxyT
         # and `result_count`; the practice-wide register carries `query_filters` (state codes and
         # a day count, never a value from a record) and `result_count`.
         "tga_approval.read": frozenset({"patient_id", "query_filters", "result_count"}),
+        # `02-authentication/05-data-and-audit.md` `STEP_UP_SUCCEEDED`: `operation`, `resource_id`
+        # (the envelope's) and `mfa_method`; the failure carries the attempted operation.
+        "auth.step_up": frozenset({"operation", "mfa_method"}),
+        "auth.step_up_failed": frozenset({"operation"}),
+        # `11-prescribing/05-data-and-audit.md` and `10-prescription-safety-gate/05-data-and-audit.md`:
+        # identifiers, codes and classes only - never medicine, dose, quantity or directions.
+        "prescription.create": frozenset({"patient_id"}),
+        "prescription.sign": frozenset(
+            {"patient_id", "step_up", "approval_id", "block_reason"}
+        ),
+        "prescription.dispatch": frozenset(
+            {"approval_id", "idempotency_key", "provider"}
+        ),
+        "prescription.dispatch_blocked": frozenset({"block_reason", "approval_id"}),
+        "prescription.dispatch_failed": frozenset(
+            {"error_class", "outcome_class", "provider", "block_reason"}
+        ),
+        # `13-integration-boundaries/05-data-and-audit.md`: one per outbound provider call.
+        "integration.request": frozenset({"provider", "outcome_class", "latency_ms"}),
     }
 )
 

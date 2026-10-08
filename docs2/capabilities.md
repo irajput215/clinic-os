@@ -9,10 +9,10 @@ The reasoning is in [ADR-F004](adr/ADR-F004-preview-store.md).
 | `patients` | api | merged | already |
 | `audit` | api | merged (#42) | already |
 | `clinicalRecords` | api | merged (#47) | already. Preview implementation deleted |
-| `tgaApprovals` | api | merged (#46); register `GET /tga-approvals` built in M2 phase 2A | Register, patient tab, Overview card and every write are `api`; preview implementation deleted ([sdlc/05 api](sdlc/05-approvals/api.md)). The preview store still seeds sample approvals, used **only** by the `prescriptions` safety-gate stand-in and the `dashboard`; they go with those previews |
-| `appointments` | api | merged (appointments module) | already. Preview implementation deleted. The preview store keeps its sample practitioners and appointments **only** for the `dashboard` (Today) and `prescriptions` (prescriber picker) previews, through `data/preview/practitioners.ts`; they go with those previews |
+| `tgaApprovals` | api | merged (#46); register `GET /tga-approvals` built in M2 phase 2A | Register, patient tab, Overview card and every write are `api`; preview implementation deleted ([sdlc/05 api](sdlc/05-approvals/api.md)). The preview store still seeds sample approvals, used **only** by the `dashboard` (Today) preview; they go with it |
+| `appointments` | api | merged (appointments module) | already. Preview implementation deleted. The preview store keeps its sample practitioners and appointments **only** for the `dashboard` (Today) preview, through `data/preview/practitioners.ts`; they go with it (the script queue's prescriber picker now reads `GET /prescriptions/prescribers`) |
 | `publicBooking` | api | merged (appointments module) | already. Preview implementation (session-storage hand-off) deleted |
-| `prescriptions` | preview | none | Build to [sdlc/07 api](sdlc/07-script-queue/api.md) |
+| `prescriptions` | api | built (phase 2D) | Queue, review and sign, patient Scripts tab read the API; dispatch queues in the outbox and is shown "Queued, not sent" (no pharmacy transport). Preview script code deleted except the sample scripts, `Product` and the preview gate the Today page still reads until `GET /dashboard/today` lands |
 | `dashboard` | preview | none | Build to [sdlc/08 api](sdlc/08-today/api.md) |
 
 You can also switch at build time without editing code: `VITE_API_FEATURES=appointments,dashboard`.

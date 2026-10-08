@@ -79,6 +79,16 @@ PERMISSION_CATALOGUE: Final[tuple[tuple[str, str], ...]] = (
     # limited to the two roles whose user stories name it (US-1 Practice Owner, US-7 Compliance /
     # Auditor) and the seed migration grants it to existing tenants.
     ("tenant:read", "Read the organisation's identity, status and data region."),
+    # Added by the prescriptions module (Milestone 2, phase 2D) for the script queue's read,
+    # `GET /api/v1/prescriptions`. `01-requirements.md` names it under "Candidate additions named
+    # elsewhere" (Prescribing: `prescription:read`, `prescription:stage`, `prescription:cancel`) and
+    # gives it no matrix row, and none of the 19 codes is a read of a prescription. Granted to exactly
+    # the four roles that hold any prescription code in the matrix - `PRACTICE_OWNER` (by construction),
+    # `AUTHORISED_PRESCRIBER`, `DOCTOR` and `NURSE` - so it widens nobody's reach beyond the scripts
+    # those roles already stage, sign or dispatch. `prescription:stage` is not added: the existing
+    # `prescription:create` is the stage permission (docs2 07 api.md), and `prescription:cancel` has no
+    # route yet. Owner-approved 2026-10-07; recorded under "Controls changed" in the PR.
+    ("prescription:read", "Read prescriptions and the script queue."),
 )
 
 # (code, display name, granted permission codes). Every permission in the catalogue appears in at
@@ -102,6 +112,7 @@ SYSTEM_ROLE_CATALOGUE: Final[tuple[tuple[str, str, frozenset[str]], ...]] = (
                 "clinical_record:write",
                 "prescription:create",
                 "prescription:modify",
+                "prescription:read",
                 "prescription:sign",
                 "prescription:dispatch",
                 "tga_approval:read",
@@ -122,6 +133,7 @@ SYSTEM_ROLE_CATALOGUE: Final[tuple[tuple[str, str, frozenset[str]], ...]] = (
                 "clinical_record:write",
                 "prescription:create",
                 "prescription:modify",
+                "prescription:read",
                 "prescription:sign",
                 "prescription:dispatch",
                 "tga_approval:read",
@@ -143,6 +155,7 @@ SYSTEM_ROLE_CATALOGUE: Final[tuple[tuple[str, str, frozenset[str]], ...]] = (
                 "clinical_record:write",
                 "prescription:create",
                 "prescription:modify",
+                "prescription:read",
                 "tga_approval:read",
             }
         ),
@@ -267,6 +280,17 @@ AUDIT_READ_PERMISSION: Final[str] = "audit:read"
 # patient routes. `tga_approval:read` is already in the catalogue above and is granted to every
 # clinical role plus `COMPLIANCE_AUDITOR` (US-7's read-only auditor).
 TGA_APPROVAL_READ: Final[str] = "tga_approval:read"
+
+# The permission each prescription route requires (`docs2/sdlc/07-script-queue/api.md`, agreed
+# 2026-10-07). Staging is the existing `prescription:create` (the matrix's `G draft` for a Nurse);
+# signing is `prescription:sign` (`G pr`: prescriber of record only, enforced by the service and by a
+# database check); dispatch is `prescription:dispatch`; the queue read is the added `prescription:read`.
+PRESCRIPTION_PERMISSIONS: Final[dict[str, str]] = {
+    "read": "prescription:read",
+    "stage": "prescription:create",
+    "sign": "prescription:sign",
+    "dispatch": "prescription:dispatch",
+}
 
 TGA_APPROVAL_PERMISSIONS: Final[dict[str, str]] = {
     "create": "tga_approval:create",

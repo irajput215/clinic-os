@@ -99,9 +99,12 @@ from sqlalchemy import select
 
 from app.api.deps import ActorDep
 from app.core.db import tenant_transaction
-from app.core.rate_limit import admin_rate_limit, read_rate_limit
+from app.core.rate_limit import admin_rate_limit, read_rate_limit, step_up_rate_limit
+from app.modules.identity_tenancy import service as identity_service
 from app.modules.identity_tenancy.models import Tenant
 from app.modules.identity_tenancy.schemas import (
+    StepUpGrantRead,
+    StepUpRequest,
     TenantCurrentRead,
     TenantSettingsUpdate,
 )
@@ -230,3 +233,47 @@ def update_current_tenant(
             ),
         },
     )
+
+
+# `/api/v1/auth/*` belongs to this module (`docs/reference/build-contract.md` §7).
+auth_router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@auth_router.post(
+    "/step-up",
+    response_model=StepUpGrantRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(step_up_rate_limit)],
+    responses={
+        status.HTTP_403_FORBIDDEN: {
+            "description": "`STEP_UP_FAILED`: the password did not verify. Audited; nothing issued."
+        }
+    },
+)
+def step_up(*, actor: ActorDep, body: StepUpRequest) -> StepUpGrantRead:
+    """Re-prove the factor (interim: the password, ADR-F002) for one operation on one resource.
+
+    `docs/features/02-authentication/03-design.md` names this route (`POST /api/v1/auth/step-up`,
+    *"issue a single-use resource-bound step-up token"*). The grant lives two minutes, is bound to this
+    account, the operation and the resource id, and is spent by the operation's own transaction. No
+    permission is checked here: the grant authorises nothing by itself, and the operation that spends
+    it checks its own permission first. A wrong password answers `403`, never `401`, so the client
+    does not sign the clinician out for a typo.
+    """
+    grant = identity_service.issue_step_up(
+        tenant_id=actor.tenant_id,
+        user_id=actor.user_id,
+        actor_role=actor.actor_role,
+        password=body.password,
+        operation=body.operation,
+        resource_id=body.resource_id,
+    )
+    if grant is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": identity_service.STEP_UP_FAILED,
+                "message": "That password isn't right.",
+            },
+        )
+    return grant

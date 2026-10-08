@@ -11,10 +11,14 @@
 | [public.clinical_record_versions](public.clinical_record_versions.md) | 12 |  | BASE TABLE |
 | [public.clinical_records](public.clinical_records.md) | 9 |  | BASE TABLE |
 | [public.clinics](public.clinics.md) | 7 |  | BASE TABLE |
+| [public.dispatch_attempts](public.dispatch_attempts.md) | 18 |  | BASE TABLE |
 | [public.patients](public.patients.md) | 23 |  | BASE TABLE |
 | [public.permissions](public.permissions.md) | 3 |  | BASE TABLE |
+| [public.prescription_events](public.prescription_events.md) | 8 |  | BASE TABLE |
+| [public.prescriptions](public.prescriptions.md) | 21 |  | BASE TABLE |
 | [public.role_permissions](public.role_permissions.md) | 3 |  | BASE TABLE |
 | [public.roles](public.roles.md) | 7 |  | BASE TABLE |
+| [public.step_up_grants](public.step_up_grants.md) | 9 |  | BASE TABLE |
 | [public.tenants](public.tenants.md) | 8 |  | BASE TABLE |
 | [public.tga_approval_events](public.tga_approval_events.md) | 9 |  | BASE TABLE |
 | [public.tga_approvals](public.tga_approvals.md) | 23 |  | BASE TABLE |
@@ -30,6 +34,7 @@
 | public.cash_dist | money | money, money | FUNCTION |
 | public.clinos_clinical_record_versions_immutable | trigger |  | FUNCTION |
 | public.date_dist | int4 | date, date | FUNCTION |
+| public.dispatch_attempts_guard | trigger |  | FUNCTION |
 | public.float4_dist | float4 | real, real | FUNCTION |
 | public.float8_dist | float8 | double precision, double precision | FUNCTION |
 | public.gbt_bit_compress | internal | internal | FUNCTION |
@@ -237,6 +242,7 @@
 | public.int8_dist | int8 | bigint, bigint | FUNCTION |
 | public.interval_dist | interval | interval, interval | FUNCTION |
 | public.oid_dist | oid | oid, oid | FUNCTION |
+| public.prescriptions_lock_signed | trigger |  | FUNCTION |
 | public.tga_approval_interval | trigger |  | FUNCTION |
 | public.tga_approval_lock_verified | trigger |  | FUNCTION |
 | public.time_dist | interval | time without time zone, time without time zone | FUNCTION |
@@ -272,12 +278,22 @@ erDiagram
 "public.clinical_records" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.clinical_records" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
 "public.clinics" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.dispatch_attempts" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.dispatch_attempts" }o--|| "public.tga_approvals" : "FOREIGN KEY (tenant_id, approval_id) REFERENCES tga_approvals(tenant_id, id) ON DELETE RESTRICT"
+"public.dispatch_attempts" }o--|| "public.prescriptions" : "FOREIGN KEY (tenant_id, prescription_id) REFERENCES prescriptions(tenant_id, id) ON DELETE RESTRICT"
 "public.patients" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.patients" }o--o| "public.patients" : "FOREIGN KEY (merged_into_patient_id) REFERENCES patients(id) ON DELETE RESTRICT"
+"public.prescription_events" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.prescription_events" }o--|| "public.prescriptions" : "FOREIGN KEY (tenant_id, prescription_id) REFERENCES prescriptions(tenant_id, id) ON DELETE RESTRICT"
+"public.prescriptions" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.prescriptions" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
+"public.prescriptions" }o--|| "public.tga_approvals" : "FOREIGN KEY (tenant_id, approval_id) REFERENCES tga_approvals(tenant_id, id) ON DELETE RESTRICT"
 "public.role_permissions" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.role_permissions" }o--|| "public.permissions" : "FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE RESTRICT"
 "public.role_permissions" }o--|| "public.roles" : "FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE RESTRICT"
 "public.roles" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.step_up_grants" }o--|| "public.user" : "FOREIGN KEY (user_id) REFERENCES #quot;user#quot;(id) ON DELETE CASCADE"
+"public.step_up_grants" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE"
 "public.tga_approval_events" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.tga_approval_events" }o--|| "public.tga_approvals" : "FOREIGN KEY (tenant_id, approval_id) REFERENCES tga_approvals(tenant_id, id) ON DELETE RESTRICT"
 "public.tga_approvals" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
@@ -376,6 +392,26 @@ erDiagram
   uuid tenant_id FK
   timestamp_with_time_zone updated_at
 }
+"public.dispatch_attempts" {
+  uuid approval_id FK
+  integer attempt_seq
+  timestamp_with_time_zone claimed_at
+  varchar error_class
+  uuid id
+  varchar idempotency_key
+  integer latency_ms
+  varchar outcome_class
+  uuid prescription_id FK
+  varchar provider
+  varchar provider_reference
+  varchar request_payload_hash
+  timestamp_with_time_zone requested_at
+  uuid requested_by
+  varchar resolution_reason
+  timestamp_with_time_zone resolved_at
+  varchar state
+  uuid tenant_id FK
+}
 "public.patients" {
   varchar address_line
   timestamp_with_time_zone created_at
@@ -406,6 +442,39 @@ erDiagram
   varchar description
   uuid id
 }
+"public.prescription_events" {
+  uuid actor_id
+  varchar from_state
+  uuid id
+  timestamp_with_time_zone occurred_at
+  uuid prescription_id FK
+  varchar reason
+  uuid tenant_id FK
+  varchar to_state
+}
+"public.prescriptions" {
+  uuid approval_id FK
+  varchar conventional_therapy
+  timestamp_with_time_zone created_at
+  date date_of_service
+  varchar dosage_form
+  varchar dose_instruction
+  uuid drafted_by
+  uuid id
+  varchar medicine_name
+  uuid patient_id FK
+  varchar payload_hash
+  uuid prescriber_id
+  numeric_10_2_ quantity
+  smallint repeats
+  timestamp_with_time_zone signed_at
+  uuid signed_by
+  varchar state
+  uuid tenant_id FK
+  varchar tga_category
+  varchar triage_outcome
+  timestamp_with_time_zone updated_at
+}
 "public.role_permissions" {
   uuid permission_id FK
   uuid role_id FK
@@ -419,6 +488,17 @@ erDiagram
   varchar name
   uuid tenant_id FK
   timestamp_with_time_zone updated_at
+}
+"public.step_up_grants" {
+  timestamp_with_time_zone consumed_at
+  timestamp_with_time_zone expires_at
+  uuid id
+  timestamp_with_time_zone issued_at
+  varchar operation
+  uuid resource_id
+  uuid tenant_id FK
+  varchar token_hash
+  uuid user_id FK
 }
 "public.tenants" {
   timestamp_with_time_zone created_at

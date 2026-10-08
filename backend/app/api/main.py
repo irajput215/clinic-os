@@ -11,8 +11,10 @@ from app.modules.appointments.router import public_router as public_booking_rout
 from app.modules.appointments.router import router as appointments_router
 from app.modules.audit.router import router as audit_router
 from app.modules.clinical_records.router import router as clinical_records_router
+from app.modules.identity_tenancy.router import auth_router
 from app.modules.identity_tenancy.router import router as tenants_router
 from app.modules.patients.router import router as patients_router
+from app.modules.prescriptions.router import router as prescriptions_router
 from app.modules.tga_approvals.router import (
     patient_router as tga_patient_router,
 )
@@ -56,3 +58,6 @@ api_router.include_router(practitioners_router)
 api_router.include_router(appointments_router)
 api_router.include_router(appointments_patient_router)
 api_router.include_router(public_booking_router)
+api_router.include_router(auth_router)
+# Phase 2D: the script queue, the safety gate on sign and dispatch, and the outbox.
+api_router.include_router(prescriptions_router)

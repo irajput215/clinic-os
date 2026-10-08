@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs"
 import { expect, test as setup } from "@playwright/test"
 import { signInWithApi, signUp } from "./accounts"
 import { CLINIC_FILE, type Clinic } from "./fixtures"
+import { emailedPath, waitForEmailHtml } from "./mail"
 import { previousRunWindowLeft } from "./pacing"
 
 /**
@@ -34,7 +35,7 @@ setup("sign up a clinic and add patients", async ({ request, baseURL }) => {
   // Deliberately not the reference design's sample clinic, so a screen still showing the sample
   // name cannot pass for showing this one.
   const clinicName = `Ironbark Medical ${run}`
-  const clinic: Omit<Clinic, "token" | "peer"> = {
+  const clinic: Omit<Clinic, "token" | "peer" | "verifier"> = {
     email: `owner-${run}@e2e.example.com`,
     password: `E2e-${randomBytes(9).toString("base64url")}`,
     fullName: "Dr Sarah Okafor",
@@ -94,6 +95,35 @@ setup("sign up a clinic and add patients", async ({ request, baseURL }) => {
   const peer = await signUp(request, { clinic: true })
   const peerToken = await signInWithApi(request, peer)
 
+  // A second clinician in this clinic, the four-eyes verifier of TGA approvals (`fixtures.ts`):
+  // invited by the owner, accepted through the emailed link's token, signed in once.
+  const verifier = {
+    email: `verifier-${run}@e2e.example.com`,
+    password: `E2e-${randomBytes(9).toString("base64url")}`,
+    fullName: "Dr Tom Verifier",
+  }
+  const invited = await request.post("/api/v1/users/staff", {
+    headers: auth,
+    data: {
+      email: verifier.email,
+      full_name: verifier.fullName,
+      role_ids: [doctor?.id],
+    },
+  })
+  expect(invited.ok(), await invited.text()).toBeTruthy()
+  const link = emailedPath(
+    await waitForEmailHtml(request, verifier.email),
+    "/accept-invite",
+  )
+  const accepted = await request.post("/api/v1/users/invitations/accept", {
+    data: {
+      token: new URL(link, "http://x").searchParams.get("token"),
+      new_password: verifier.password,
+    },
+  })
+  expect(accepted.ok(), await accepted.text()).toBeTruthy()
+  const verifierToken = await signInWithApi(request, verifier)
+
   mkdirSync("playwright/.auth", { recursive: true })
   writeFileSync(
     CLINIC_FILE,
@@ -101,6 +131,7 @@ setup("sign up a clinic and add patients", async ({ request, baseURL }) => {
       ...clinic,
       token: access_token,
       peer: { ...peer, token: peerToken },
+      verifier: { ...verifier, token: verifierToken },
     } satisfies Clinic),
   )
 })

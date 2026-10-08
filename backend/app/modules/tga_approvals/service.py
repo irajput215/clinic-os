@@ -115,6 +115,7 @@ __all__ = [
     "Refusal",
     "audit_denial",
     "create_approval",
+    "evaluate_match",
     "evaluated_timezone",
     "expire_due_approvals",
     "get_approval",
@@ -1317,39 +1318,87 @@ def match_approval(
     with tenant_transaction(
         tenant_id=tenant_id, actor_id=actor_id, actor_role=actor_role
     ) as session:
-        rows: Sequence[TgaApproval] = session.exec(
-            select(TgaApproval)
-            .where(
-                TgaApproval.tenant_id == tenant_id,
-                TgaApproval.patient_id == patient_id,
-            )
-            .order_by(col(TgaApproval.created_at).desc())
-        ).all()
-
-        answer = _decide(
-            rows,
+        answer = evaluate_match(
+            session,
+            tenant_id=tenant_id,
+            patient_id=patient_id,
             tga_category=tga_category,
             dosage_form=dosage_form,
             date_of_service=date_of_service,
         )
-        row = answer.row
         _record(
             session,
             action=APPROVAL_MATCH,
-            resource_id=None if row is None else row.id,
-            reason=None if answer.reason is None else answer.reason.value,
+            resource_id=answer.approval_id,
+            reason=answer.reason_code,
         )
-        return TgaMatchResponse(
-            matched=answer.reason is None,
-            reason_code=None if answer.reason is None else answer.reason.value,
-            state=None if row is None else row.state,
-            approval_id=None if row is None else row.id,
-            validity_interval=None
-            if row is None
-            else ValidityInterval(valid_from=row.valid_from, valid_to=row.valid_to),
-            date_of_service=date_of_service,
-            evaluated_timezone=evaluated_timezone(),
+        return answer
+
+
+def evaluate_match(
+    session: Session,
+    *,
+    tenant_id: uuid.UUID,
+    patient_id: uuid.UUID,
+    tga_category: str,
+    dosage_form: str,
+    date_of_service: date,
+    lock: bool = False,
+) -> TgaMatchResponse:
+    """The match, on the **caller's** transaction, with no audit event of its own.
+
+    This is the facade the prescription safety gate reaches the approvals through
+    (`app.modules.prescriptions.gate`): the gate's decision has to be taken inside the signing and
+    dispatch transactions, against the approval rows as they are at that instant, so it cannot open a
+    transaction of its own the way `match_approval` does. The caller records the decision in its own
+    vocabulary (`prescription.sign`, `prescription.dispatch_blocked`), on the same transaction.
+
+    `lock=True` reads every approval row of the patient `FOR UPDATE`
+    (`docs/features/10-prescription-safety-gate/01-requirements.md` R16, T-10.13): a revocation,
+    supersede or expiry that is updating one of those rows either commits **before** this read - and
+    the read waits for it and then sees the new state, because PostgreSQL re-evaluates a locked row
+    after the blocking transaction commits - or it waits until the caller's transaction ends. There is
+    no third interleaving in which the caller decides on a row state that a concurrent revocation has
+    already replaced. The lock is held until the caller's transaction ends, so the decision and the
+    state change it authorises commit together. `FOR UPDATE` rather than the `FOR SHARE` the gate
+    document names: it is the stronger lock (it conflicts with everything `FOR SHARE` conflicts with),
+    and it also serialises two gate decisions on one patient, which costs nothing at clinic scale.
+
+    `populate_existing` makes the locked read refresh any copy the session already holds, so the
+    decision can never be taken on a stale in-memory row.
+    """
+    statement = (
+        select(TgaApproval)
+        .where(
+            TgaApproval.tenant_id == tenant_id,
+            TgaApproval.patient_id == patient_id,
         )
+        .order_by(col(TgaApproval.created_at).desc(), col(TgaApproval.id).desc())
+    )
+    if lock:
+        statement = statement.with_for_update().execution_options(
+            populate_existing=True
+        )
+    rows: Sequence[TgaApproval] = session.exec(statement).all()
+
+    answer = _decide(
+        rows,
+        tga_category=tga_category,
+        dosage_form=dosage_form,
+        date_of_service=date_of_service,
+    )
+    row = answer.row
+    return TgaMatchResponse(
+        matched=answer.reason is None,
+        reason_code=None if answer.reason is None else answer.reason.value,
+        state=None if row is None else row.state,
+        approval_id=None if row is None else row.id,
+        validity_interval=None
+        if row is None
+        else ValidityInterval(valid_from=row.valid_from, valid_to=row.valid_to),
+        date_of_service=date_of_service,
+        evaluated_timezone=evaluated_timezone(),
+    )
 
 
 @dataclass(frozen=True)

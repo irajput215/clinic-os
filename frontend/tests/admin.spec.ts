@@ -11,7 +11,7 @@ import { expect, openSignedIn, test } from "./fixtures"
  * none of it.
  */
 
-test("a practice owner sees every role against the 21-permission catalogue", async ({
+test("a practice owner sees every role against the 22-permission catalogue", async ({
   signedIn: page,
 }) => {
   await page.goto("/")
@@ -35,7 +35,7 @@ test("a practice owner sees every role against the 21-permission catalogue", asy
 
   const matrix = page.getByTestId("permission-matrix")
   await expect(matrix).toBeVisible()
-  await expect(matrix.locator("tbody tr[data-testid^='perm-']")).toHaveCount(21)
+  await expect(matrix.locator("tbody tr[data-testid^='perm-']")).toHaveCount(22)
   await expect(matrix.getByRole("columnheader")).toContainText([
     "Permission",
     "Administrator",

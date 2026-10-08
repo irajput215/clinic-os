@@ -1,11 +1,13 @@
 import { STATUS_LABEL } from "@/data/appointments"
-import { SCRIPT_STATE_LABEL } from "@/data/scripts"
+import {
+  PRESCRIPTION_STATE_LABEL,
+  type PrescriptionState,
+} from "@/data/scripts"
 import {
   type AppointmentStatus,
   type ApprovalState,
   MATCH_REASONS,
   MATCH_REASONS_SHORT,
-  type ScriptState,
   type TgaMatchResponse,
 } from "@/data/types"
 import { Pill, type Tone } from "@/design/primitives"
@@ -26,17 +28,25 @@ export const AppointmentStatusPill = ({
   status: AppointmentStatus
 }) => <Pill tone={APPT_TONE[status]}>{STATUS_LABEL[status]}</Pill>
 
-const SCRIPT_TONE: Record<ScriptState, Tone> = {
-  AWAITING_REVIEW: "warn",
+const PRESCRIPTION_TONE: Record<PrescriptionState, Tone> = {
+  DRAFT: "warn",
   SIGNED: "info",
-  SENT: "info",
   BLOCKED: "danger",
+  // Queued is not sent: no pharmacy transport exists, so it never wears the "done" colour.
+  QUEUED: "purple",
+  DISPATCHED: "ok",
+  FAILED: "danger",
   REQUIRES_RECONCILIATION: "purple",
   CANCELLED: "neutral",
+  REVERSED: "neutral",
 }
 
-export const ScriptStatePill = ({ state }: { state: ScriptState }) => (
-  <Pill tone={SCRIPT_TONE[state]}>{SCRIPT_STATE_LABEL[state]}</Pill>
+export const PrescriptionStatePill = ({
+  state,
+}: {
+  state: PrescriptionState
+}) => (
+  <Pill tone={PRESCRIPTION_TONE[state]}>{PRESCRIPTION_STATE_LABEL[state]}</Pill>
 )
 
 const APPROVAL_TONE: Record<ApprovalState, Tone> = {

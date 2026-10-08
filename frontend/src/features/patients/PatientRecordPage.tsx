@@ -10,14 +10,13 @@ import {
 import { patientApprovalsQuery } from "@/data/approvals"
 import { actionLabel, resourceAuditQuery } from "@/data/audit"
 import { patientName, patientQuery } from "@/data/patients"
-import { isActionable, scriptsQuery } from "@/data/scripts"
-import { APPOINTMENT_TYPES, type Script } from "@/data/types"
+import { isActionable, patientScriptsQuery } from "@/data/scripts"
+import { APPOINTMENT_TYPES } from "@/data/types"
 import {
   Card,
   EmptyState,
   ErrorState,
   Mono,
-  PreviewBanner,
   SkeletonRows,
 } from "@/design/primitives"
 import { RecordApprovalDialog } from "@/features/approvals/ApprovalDialogs"
@@ -27,7 +26,11 @@ import {
   ReviewSignDialog,
   StageScriptDialog,
 } from "@/features/scripts/ScriptDialogs"
-import { AppointmentStatusPill, ScriptStatePill } from "@/features/shared/pills"
+import { useScriptActions } from "@/features/scripts/useScriptAction"
+import {
+  AppointmentStatusPill,
+  PrescriptionStatePill,
+} from "@/features/shared/pills"
 import {
   age,
   formatDate,
@@ -36,7 +39,6 @@ import {
   formatTime,
   patientRef,
 } from "@/lib/format"
-import { currentUserQuery } from "@/lib/session"
 import { cn } from "@/lib/utils"
 import { NotesTab } from "./NotesTab"
 import { PatientFormDialog } from "./PatientFormDialog"
@@ -286,25 +288,31 @@ function ApprovalsTab({ patientId }: { patientId: string }) {
 }
 
 function ScriptsTab({ patientId }: { patientId: string }) {
-  const scripts = useQuery(scriptsQuery)
-  const { data: me } = useQuery(currentUserQuery)
+  const scripts = useQuery(patientScriptsQuery(patientId))
+  const { actionFor, canStage } = useScriptActions()
   const [staging, setStaging] = useState(false)
-  const [reviewing, setReviewing] = useState<Script | null>(null)
-  const mine = (scripts.data ?? []).filter((s) => s.patient_id === patientId)
+  const [reviewingId, setReviewingId] = useState<string | null>(null)
+  const mine = scripts.data ?? []
   const open = mine.filter((s) => isActionable(s.state))
   const done = mine.filter((s) => !isActionable(s.state))
+  const reviewing = mine.find((s) => s.id === reviewingId) ?? null
   return (
     <>
-      <PreviewBanner what="Scripts are sample drafts; nothing is sent to a pharmacy." />
       <Card
         title="Scripts"
         action={
-          <Button size="sm" onClick={() => setStaging(true)}>
-            <Plus /> Stage a script
-          </Button>
+          canStage ? (
+            <Button size="sm" onClick={() => setStaging(true)}>
+              <Plus /> Stage a script
+            </Button>
+          ) : undefined
         }
       >
-        {mine.length === 0 ? (
+        {scripts.isPending ? (
+          <SkeletonRows rows={2} />
+        ) : scripts.isError ? (
+          <ErrorState error={scripts.error} onRetry={() => scripts.refetch()} />
+        ) : mine.length === 0 ? (
           <EmptyState title="No scripts for this patient." />
         ) : (
           <div className="space-y-3">
@@ -312,8 +320,8 @@ function ScriptsTab({ patientId }: { patientId: string }) {
               <ScriptCard
                 key={s.id}
                 script={s}
-                canSign={s.prescriber_id === me?.id}
-                onReview={() => setReviewing(s)}
+                action={actionFor(s)}
+                onReview={() => setReviewingId(s.id)}
                 showPatientLink={false}
               />
             ))}
@@ -325,17 +333,19 @@ function ScriptsTab({ patientId }: { patientId: string }) {
                     className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm"
                   >
                     <Mono className="text-stone">
-                      {formatDayMonth(s.sent_at ?? s.created_at)}
+                      {formatDayMonth(
+                        s.dispatch?.requested_at ?? s.signed_at ?? s.created_at,
+                      )}
                     </Mono>
-                    <span className="font-medium">{s.product_name}</span>
+                    <span className="font-medium">{s.medicine_name}</span>
                     <span className="text-stone">{s.prescriber_name}</span>
                     <span className="ml-auto flex items-center gap-2">
-                      {s.escript_token ? (
+                      {s.dispatch?.provider_reference ? (
                         <Mono className="text-[11.5px] text-stone">
-                          {s.escript_token}
+                          {s.dispatch.provider_reference}
                         </Mono>
                       ) : null}
-                      <ScriptStatePill state={s.state} />
+                      <PrescriptionStatePill state={s.state} />
                     </span>
                   </li>
                 ))}
@@ -351,7 +361,8 @@ function ScriptsTab({ patientId }: { patientId: string }) {
       />
       <ReviewSignDialog
         script={reviewing}
-        onOpenChange={(o) => !o && setReviewing(null)}
+        action={reviewing ? actionFor(reviewing) : null}
+        onOpenChange={(o) => !o && setReviewingId(null)}
       />
     </>
   )

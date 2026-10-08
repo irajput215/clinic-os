@@ -182,8 +182,9 @@ export const APPOINTMENT_TRANSITIONS: Record<
   NO_SHOW: [],
 }
 
-// PROPOSED: products module (drug catalogue). The approval grain is category + dosage form,
-// never brand, so a product is only ever matched to an approval through these two fields.
+// PREVIEW ONLY, kept for the Today page (src/data/dashboard.ts) until GET /dashboard/today lands.
+// The script queue itself reads the real API (`Prescription` in src/data/scripts.ts); `Product`,
+// `Script` and `ScriptState` below exist only for Today's preview sample and are deleted with it.
 export interface Product {
   id: string
   name: string
@@ -193,7 +194,7 @@ export interface Product {
   schedule: "S4" | "S8"
 }
 
-// PROPOSED: prescriptions module (docs2/sdlc/07-script-queue/api.md)
+// PREVIEW ONLY (Today page sample, see above).
 export const SCRIPT_STATES = [
   "AWAITING_REVIEW",
   "SIGNED",
@@ -230,19 +231,6 @@ export interface Script {
   pharmacy: string | null
   /** The latest gate decision, when one was made. */
   gate: TgaMatchResponse | null
-}
-
-export interface ScriptDraft {
-  patient_id: string
-  patient_name: string
-  product_id: string
-  quantity: string
-  repeats: number
-  directions: string
-  triage_outcome: string
-  conventional_therapy: string
-  prescriber_id: string
-  date_of_service: string
 }
 
 // PROPOSED: dashboard module, one round trip for the Today page.

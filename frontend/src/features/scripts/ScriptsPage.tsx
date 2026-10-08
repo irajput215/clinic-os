@@ -4,45 +4,42 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { isActionable, scriptsQuery } from "@/data/scripts"
-import type { Script } from "@/data/types"
-import {
-  Card,
-  EmptyState,
-  Mono,
-  PageHeader,
-  Pill,
-  PreviewBanner,
-} from "@/design/primitives"
-import { ScriptStatePill } from "@/features/shared/pills"
+import { Card, EmptyState, Mono, PageHeader } from "@/design/primitives"
+import { PrescriptionStatePill } from "@/features/shared/pills"
 import { formatDayMonth } from "@/lib/format"
 import { currentUserQuery } from "@/lib/session"
 import { ScriptCard } from "./ScriptCard"
 import { ReviewSignDialog, StageScriptDialog } from "./ScriptDialogs"
+import { useScriptActions } from "./useScriptAction"
 
 export function ScriptsPage() {
   const { data: scripts } = useSuspenseQuery(scriptsQuery)
   const { data: me } = useQuery(currentUserQuery)
+  const { actionFor, canStage } = useScriptActions()
   const [staging, setStaging] = useState(false)
-  const [reviewing, setReviewing] = useState<Script | null>(null)
+  // The id, not a copy: the dialog always shows the server's latest answer for the script.
+  const [reviewingId, setReviewingId] = useState<string | null>(null)
   const [justMine, setJustMine] = useState(false)
 
   const queue = scripts.filter((s) => isActionable(s.state))
   const history = scripts
     .filter((s) => !isActionable(s.state))
     .filter((s) => !justMine || s.prescriber_id === me?.id)
+  const reviewing = scripts.find((s) => s.id === reviewingId) ?? null
 
   return (
     <>
       <PageHeader
         title="Script staging queue"
-        subtitle="Nurse drafts → doctor reviews & signs. Eligibility and conventional-therapy-first are captured on every draft, and the safety gate checks the TGA approval at the date of service before anything reaches a pharmacy."
+        subtitle="Nurse drafts → doctor reviews & signs. Eligibility and conventional-therapy-first are captured on every draft, and the safety gate checks the TGA approval at the date of service before anything is signed or queued for a pharmacy."
         actions={
-          <Button onClick={() => setStaging(true)}>
-            <Plus /> Stage a draft
-          </Button>
+          canStage ? (
+            <Button onClick={() => setStaging(true)}>
+              <Plus /> Stage a draft
+            </Button>
+          ) : undefined
         }
       />
-      <PreviewBanner what="Scripts are sample drafts for your real patients; eScript tokens are simulated and nothing is sent." />
 
       <Card title={`Awaiting action (${queue.length})`}>
         {queue.length === 0 ? (
@@ -56,8 +53,8 @@ export function ScriptsPage() {
               <ScriptCard
                 key={s.id}
                 script={s}
-                canSign={s.prescriber_id === me?.id}
-                onReview={() => setReviewing(s)}
+                action={actionFor(s)}
+                onReview={() => setReviewingId(s.id)}
               />
             ))}
           </div>
@@ -83,7 +80,7 @@ export function ScriptsPage() {
         bodyClassName="-mx-5 -mb-[18px]"
       >
         {history.length === 0 ? (
-          <EmptyState title="No signed scripts yet." />
+          <EmptyState title="Nothing signed and queued yet." />
         ) : (
           <div className="overflow-x-auto">
             <table className="data-table">
@@ -93,38 +90,41 @@ export function ScriptsPage() {
                   <th>Product</th>
                   <th className="max-md:hidden">Prescriber</th>
                   <th className="max-md:pr-5">Status</th>
-                  <th className="max-lg:hidden">Token</th>
-                  <th className="pr-5 max-md:hidden">Routed to</th>
+                  <th className="pr-5 max-lg:hidden">Pharmacy reference</th>
                 </tr>
               </thead>
               <tbody>
                 {history.map((s) => (
                   <tr key={s.id}>
                     <td className="pl-5">
-                      <div className="font-semibold">{s.patient_name}</div>
+                      <div className="font-semibold">
+                        {s.patient_name ?? "Patient"}
+                      </div>
                       <div className="text-xs text-stone">
-                        {formatDayMonth(s.sent_at ?? s.created_at)}
+                        {formatDayMonth(
+                          s.dispatch?.requested_at ??
+                            s.signed_at ??
+                            s.created_at,
+                        )}
                       </div>
                     </td>
-                    <td>{s.product_name}</td>
-                    <td className="max-md:hidden">{s.prescriber_name}</td>
-                    <td className="max-md:pr-5">
-                      <ScriptStatePill state={s.state} />
+                    <td>{s.medicine_name}</td>
+                    <td className="max-md:hidden">
+                      {s.prescriber_name ?? "-"}
                     </td>
-                    <td className="max-lg:hidden">
-                      {s.escript_token ? (
-                        <span className="inline-flex items-center gap-2">
-                          <Mono className="text-[11.5px]">
-                            {s.escript_token}
-                          </Mono>
-                          <Pill tone="ok">RTPM clear</Pill>
+                    <td className="max-md:pr-5">
+                      <PrescriptionStatePill state={s.state} />
+                    </td>
+                    <td className="pr-5 max-lg:hidden">
+                      {s.dispatch?.provider_reference ? (
+                        <Mono className="text-[11.5px]">
+                          {s.dispatch.provider_reference}
+                        </Mono>
+                      ) : s.state === "QUEUED" ? (
+                        <span className="text-[13px] text-stone">
+                          Not sent: no pharmacy connection
                         </span>
                       ) : (
-                        <span className="text-stone-faint">-</span>
-                      )}
-                    </td>
-                    <td className="pr-5 max-md:hidden">
-                      {s.pharmacy ?? (
                         <span className="text-stone-faint">-</span>
                       )}
                     </td>
@@ -139,7 +139,8 @@ export function ScriptsPage() {
       <StageScriptDialog open={staging} onOpenChange={setStaging} />
       <ReviewSignDialog
         script={reviewing}
-        onOpenChange={(o) => !o && setReviewing(null)}
+        action={reviewing ? actionFor(reviewing) : null}
+        onOpenChange={(o) => !o && setReviewingId(null)}
       />
     </>
   )

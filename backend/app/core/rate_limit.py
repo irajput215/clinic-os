@@ -200,3 +200,11 @@ public_booking_rate_limit = rate_limit(
 )
 PUBLIC_BOOKING_EMAIL_LIMIT = 5
 PUBLIC_BOOKING_EMAIL_WINDOW_SECONDS = 3600
+# The clinical write class for prescriptions: `10-prescription-safety-gate/03-design.md` gives dispatch
+# 30/min per session; staging and signing share the budget, so one session cannot flood the queue.
+prescription_write_rate_limit = rate_limit(
+    scope="prescription-write", limit=30, window_seconds=60
+)
+# Step-up: every attempt verifies a password, so it is limited like login (per session, 20/min) and
+# a guessing run against a stolen session is bounded and audited (`auth.step_up_failed`).
+step_up_rate_limit = rate_limit(scope="step-up", limit=20, window_seconds=60)

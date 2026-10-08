@@ -118,6 +118,35 @@ const REFUSAL_SENTENCES: Record<string, string> = {
   AMENDMENT_REASON_REQUIRED: "Say why the note is being amended.",
   VERSION_CONFLICT:
     "Someone else amended this note at the same time. Refresh and try again.",
+  // prescriptions and step-up (docs2/sdlc/07-script-queue)
+  STEP_UP_FAILED: "That password isn't right. Re-enter it to continue.",
+  STEP_UP_REQUIRED:
+    "Your re-entered password expired before it was used. Enter it again.",
+  NOT_PRESCRIBER_OF_RECORD:
+    "Only the assigned prescriber can sign this script.",
+  PRESCRIBER_NOT_AUTHORIZED:
+    "Choose a doctor in your practice who can sign prescriptions.",
+  INVALID_STATE_TRANSITION:
+    "This script has already moved on. Refresh to see where it is now.",
+  PATIENT_NOT_FOUND: "That patient isn't available.",
+  TGA_APPROVAL_NOT_FOUND:
+    "Blocked by the safety gate: no TGA approval on file for this patient. Nothing was signed or sent.",
+  TGA_CATEGORY_MISMATCH:
+    "Blocked by the safety gate: the approval is for a different TGA category. Nothing was signed or sent.",
+  TGA_DOSAGE_FORM_MISMATCH:
+    "Blocked by the safety gate: the approval is for a different dosage form. Nothing was signed or sent.",
+  TGA_APPROVAL_EXPIRED:
+    "Blocked by the safety gate: the approval had expired on the date of service. Nothing was signed or sent.",
+  TGA_APPROVAL_NOT_YET_EFFECTIVE:
+    "Blocked by the safety gate: the approval had not started on the date of service. Nothing was signed or sent.",
+  TGA_APPROVAL_REVOKED:
+    "Blocked by the safety gate: the approval was revoked. Nothing was signed or sent.",
+  TGA_APPROVAL_PENDING_VERIFICATION:
+    "Blocked by the safety gate: the approval still needs a second clinician to verify it. Nothing was signed or sent.",
+  TGA_APPROVAL_SUPERSEDED:
+    "Blocked by the safety gate: the approval was replaced by a newer grant. Nothing was signed or sent.",
+  TGA_APPROVAL_REJECTED:
+    "Blocked by the safety gate: the approval was rejected at verification. Nothing was signed or sent.",
 }
 
 /**

@@ -9,7 +9,7 @@
 | created_by | uuid |  | false |  |  |  |
 | creation_reason | varchar |  | false |  |  |  |
 | dosage_form | varchar |  | false |  |  |  |
-| id | uuid | gen_random_uuid() | false | [public.tga_approval_events](public.tga_approval_events.md) [public.tga_approvals](public.tga_approvals.md) |  |  |
+| id | uuid | gen_random_uuid() | false | [public.dispatch_attempts](public.dispatch_attempts.md) [public.prescriptions](public.prescriptions.md) [public.tga_approval_events](public.tga_approval_events.md) [public.tga_approvals](public.tga_approvals.md) |  |  |
 | patient_id | uuid |  | false |  | [public.patients](public.patients.md) |  |
 | revoked_at | timestamp with time zone |  | true |  |  |  |
 | revoked_by | uuid |  | true |  |  |  |
@@ -19,7 +19,7 @@
 | state | varchar |  | false |  |  |  |
 | superseded_by_id | uuid |  | true |  |  |  |
 | supersedes_id | uuid |  | true |  | [public.tga_approvals](public.tga_approvals.md) |  |
-| tenant_id | uuid |  | false | [public.tga_approval_events](public.tga_approval_events.md) | [public.tenants](public.tenants.md) [public.patients](public.patients.md) |  |
+| tenant_id | uuid |  | false | [public.dispatch_attempts](public.dispatch_attempts.md) [public.prescriptions](public.prescriptions.md) [public.tga_approval_events](public.tga_approval_events.md) | [public.tenants](public.tenants.md) [public.patients](public.patients.md) |  |
 | tga_category | varchar |  | false |  |  |  |
 | updated_at | timestamp with time zone |  | false |  |  |  |
 | valid_from | date |  | false |  |  |  |
@@ -92,6 +92,8 @@
 ```mermaid
 erDiagram
 
+"public.dispatch_attempts" }o--|| "public.tga_approvals" : "FOREIGN KEY (tenant_id, approval_id) REFERENCES tga_approvals(tenant_id, id) ON DELETE RESTRICT"
+"public.prescriptions" }o--|| "public.tga_approvals" : "FOREIGN KEY (tenant_id, approval_id) REFERENCES tga_approvals(tenant_id, id) ON DELETE RESTRICT"
 "public.tga_approval_events" }o--|| "public.tga_approvals" : "FOREIGN KEY (tenant_id, approval_id) REFERENCES tga_approvals(tenant_id, id) ON DELETE RESTRICT"
 "public.tga_approvals" }o--o| "public.tga_approvals" : "FOREIGN KEY (supersedes_id) REFERENCES tga_approvals(id) ON DELETE RESTRICT"
 "public.tga_approvals" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
@@ -121,6 +123,49 @@ erDiagram
   daterange validity_interval
   timestamp_with_time_zone verified_at
   uuid verified_by
+}
+"public.dispatch_attempts" {
+  uuid approval_id FK
+  integer attempt_seq
+  timestamp_with_time_zone claimed_at
+  varchar error_class
+  uuid id
+  varchar idempotency_key
+  integer latency_ms
+  varchar outcome_class
+  uuid prescription_id FK
+  varchar provider
+  varchar provider_reference
+  varchar request_payload_hash
+  timestamp_with_time_zone requested_at
+  uuid requested_by
+  varchar resolution_reason
+  timestamp_with_time_zone resolved_at
+  varchar state
+  uuid tenant_id FK
+}
+"public.prescriptions" {
+  uuid approval_id FK
+  varchar conventional_therapy
+  timestamp_with_time_zone created_at
+  date date_of_service
+  varchar dosage_form
+  varchar dose_instruction
+  uuid drafted_by
+  uuid id
+  varchar medicine_name
+  uuid patient_id FK
+  varchar payload_hash
+  uuid prescriber_id
+  numeric_10_2_ quantity
+  smallint repeats
+  timestamp_with_time_zone signed_at
+  uuid signed_by
+  varchar state
+  uuid tenant_id FK
+  varchar tga_category
+  varchar triage_outcome
+  timestamp_with_time_zone updated_at
 }
 "public.tga_approval_events" {
   uuid actor_id

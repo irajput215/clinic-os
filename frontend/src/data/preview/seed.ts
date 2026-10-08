@@ -12,6 +12,7 @@ import { APPOINTMENT_TYPES } from "@/data/types"
 import { clinicInstant, plusMinutes } from "@/lib/clinic-time"
 import { addDays, clinicToday } from "@/lib/format"
 import { displayName } from "@/lib/session"
+import { uuid } from "@/lib/uuid"
 import { previewMatch } from "./gate"
 
 export interface PreviewState {
@@ -24,24 +25,11 @@ export interface PreviewState {
   appointments: Appointment[]
   scripts: Script[]
   /**
-   * Sample approvals for the script queue's safety gate and the Today page ONLY. The approvals
-   * screens themselves read the API (`tgaApprovals: "api"`); these never appear there. They go when
-   * the prescriptions and dashboard modules land and the server evaluates the gate.
+   * Sample approvals and scripts for the Today page ONLY. The approvals screens and the script queue
+   * read the API (`tgaApprovals`, `prescriptions`); these never appear there. They go when the
+   * dashboard module lands.
    */
   approvals: TgaApproval[]
-}
-
-/**
- * A UUID v4, from the platform's CSPRNG. Built from `getRandomValues`, not `crypto.randomUUID`:
- * the latter exists only in a secure context, so on a plain-HTTP origin other than localhost (CI's
- * `http://backend:8000`, an internal host) it is undefined and every preview screen failed to load.
- */
-export const uuid = () => {
-  const b = crypto.getRandomValues(new Uint8Array(16))
-  b[6] = (b[6] & 0x0f) | 0x40
-  b[8] = (b[8] & 0x3f) | 0x80
-  const h = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("")
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`
 }
 
 export const PRODUCTS: Product[] = [

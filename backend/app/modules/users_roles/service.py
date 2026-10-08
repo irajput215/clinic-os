@@ -100,8 +100,10 @@ __all__ = [
     "authorize_grant",
     "can",
     "can_grant",
+    "display_names",
     "effective_permissions",
     "enforce",
+    "holders_of",
     "invite_staff",
     "list_permissions",
     "list_roles",
@@ -1149,3 +1151,74 @@ def accept_invitation(*, token: str, new_password: str) -> InvitationAccepted | 
         user.hashed_password = get_password_hash(new_password)
         session.add(user)
         return InvitationAccepted(email=user.email)
+
+
+# --------------------------------------------------------------------------------------------
+# Who holds a permission, and what to call them - read facades for other modules
+# --------------------------------------------------------------------------------------------
+
+
+def _display_name(user: User) -> str:
+    """How a colleague is named on a clinical screen: the full name, else the sign-in address."""
+    return user.full_name or user.email
+
+
+def holders_of(*, tenant_id: uuid.UUID, permission: str) -> dict[uuid.UUID, str]:
+    """The active accounts of this organisation whose roles grant `permission`, with display names.
+
+    The prescriptions module asks it *"who may sign?"* to offer the reviewing-doctor list and to
+    refuse a draft addressed to someone who cannot sign it. The answer is decided from the permission,
+    never from a role name, so a tenant whose bundles change gets the right list without a code change
+    (`01-requirements.md`: *"a route handler never branches on a role name"*).
+
+    The legacy `user` table carries no RLS (T1-03, blocked by D-003), so the explicit `tenant_id`
+    predicate is the isolation control for the accounts, as in `list_staff`; the RBAC reads run under
+    forced RLS as well. An unknown permission code is held by nobody.
+    """
+    with tenant_transaction(tenant_id=tenant_id) as session:
+        granting_role_ids = set(
+            session.exec(
+                select(RolePermission.role_id)
+                .join(
+                    Permission, col(Permission.id) == col(RolePermission.permission_id)
+                )
+                .where(
+                    RolePermission.tenant_id == tenant_id,
+                    Permission.code == permission,
+                )
+            ).all()
+        )
+        if not granting_role_ids:
+            return {}
+        holder_ids = set(
+            session.exec(
+                select(UserRole.user_id).where(
+                    UserRole.tenant_id == tenant_id,
+                    col(UserRole.role_id).in_(granting_role_ids),
+                )
+            ).all()
+        )
+        if not holder_ids:
+            return {}
+        users: Sequence[User] = session.exec(
+            select(User).where(
+                User.tenant_id == tenant_id,
+                col(User.is_active).is_(True),
+                col(User.id).in_(holder_ids),
+            )
+        ).all()
+        return {user.id: _display_name(user) for user in users}
+
+
+def display_names(
+    *, tenant_id: uuid.UUID, user_ids: Iterable[uuid.UUID]
+) -> dict[uuid.UUID, str]:
+    """Display names for accounts of **this** organisation; another tenant's id is simply absent."""
+    wanted = set(user_ids)
+    if not wanted:
+        return {}
+    with tenant_transaction(tenant_id=tenant_id) as session:
+        users: Sequence[User] = session.exec(
+            select(User).where(User.tenant_id == tenant_id, col(User.id).in_(wanted))
+        ).all()
+        return {user.id: _display_name(user) for user in users}
