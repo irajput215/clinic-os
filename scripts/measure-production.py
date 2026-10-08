@@ -244,6 +244,21 @@ def main() -> int:
             "_No probe account configured: authenticated reads not measured._",
         ]
 
+    # Where the origin is: the response headers name the platform's edge and proxies, which is
+    # evidence for the app's region when it cannot be read from the platform itself. Header names
+    # and values only; nothing here is user data.
+    probe = fetch(f"{base}{API}/utils/health-check/")
+    lines += [
+        "",
+        "### Liveness response headers",
+        "",
+        "| Header | Value |",
+        "|---|---|",
+    ]
+    for name in sorted(probe.headers):
+        if name not in ("date", "content-length"):
+            lines.append(f"| `{name}` | `{probe.headers[name]}` |")
+
     lines += [
         "",
         "### Static files",
