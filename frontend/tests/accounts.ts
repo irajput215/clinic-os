@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto"
 import { existsSync, readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { type APIRequestContext, expect, type Page } from "@playwright/test"
+import { emailedPath, waitForEmailHtml } from "./mail"
 
 export interface Account {
   email: string
@@ -12,9 +13,32 @@ export interface Account {
 const run = () => randomBytes(4).toString("hex")
 
 /**
+ * Spend the verification link a signup emailed to `email` (read from Mailpit), which creates the
+ * account (and its organisation) and answers a session for it
+ * (`docs/reference/decisions/D-007-signup-email-verification.md`). Uses the newest email, so call
+ * it after the last resend.
+ */
+export async function verifySignupByEmail(
+  request: APIRequestContext,
+  email: string,
+): Promise<string> {
+  const link = emailedPath(
+    await waitForEmailHtml(request, email),
+    "/verify-email",
+  )
+  const verified = await request.post("/api/v1/users/signup/verify", {
+    data: { token: new URL(link, "http://x").searchParams.get("token") },
+  })
+  expect(verified.ok(), await verified.text()).toBeTruthy()
+  return ((await verified.json()) as { access_token: string }).access_token
+}
+
+/**
  * A fresh account of its own, so a test that changes a password, a name or a role never touches the
  * shared clinic other specs sign in as. `clinic: true` registers an organisation and makes the
- * account its practice owner; `clinic: false` is an account that belongs to no organisation.
+ * account its practice owner; `clinic: false` is an account that belongs to no organisation. The
+ * signup is completed through its emailed link, as a person would; the session verification answers
+ * is not kept (callers that need one sign in, which is what they test).
  */
 export async function signUp(
   request: APIRequestContext,
@@ -34,7 +58,8 @@ export async function signUp(
       ...(clinic ? { clinic_name: `Wattle Clinic ${id}` } : {}),
     },
   })
-  expect(res.ok(), await res.text()).toBeTruthy()
+  expect(res.status(), await res.text()).toBe(202)
+  await verifySignupByEmail(request, account.email)
   return account
 }
 

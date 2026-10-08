@@ -336,6 +336,11 @@ test("the public screens fit every width", async ({ page }, testInfo) => {
       (p) => [h1(p, "Join your clinic"), button(p, "Set password and sign in")],
     ],
     [
+      "verify-email",
+      "/verify-email?token=layout-check",
+      (p) => [h1(p, "Confirm your email"), button(p, "Confirm and sign in")],
+    ],
+    [
       "book",
       `/book/${slug}`,
       (p) => [h1(p, "What kind of visit?"), button(p, "Continue")],
@@ -345,6 +350,34 @@ test("the public screens fit every width", async ({ page }, testInfo) => {
     await page.goto(path)
     await checkEveryWidth(page, testInfo, name, ready(page))
   }
+
+  // Signup's "Check your email" state, with the answer stubbed: nothing is registered or mailed.
+  await page.route("**/api/v1/users/signup", (route) =>
+    route.fulfill({
+      status: 202,
+      contentType: "application/json",
+      body: JSON.stringify({
+        request_id: "00000000-0000-4000-8000-000000000000",
+        expires_in_hours: 24,
+      }),
+    }),
+  )
+  await page.goto("/signup")
+  await page.getByLabel("Clinic or practice name").fill("Layout Clinic")
+  await page.getByLabel("Your full name").fill("Dr Layout")
+  await page
+    .getByLabel("Email")
+    .fill("a-rather-long-address-for-layout@e2e.example.com")
+  await page.getByLabel("Password", { exact: true }).fill("layout-check-1")
+  await page.getByLabel("Confirm password").fill("layout-check-1")
+  await button(page, "Register clinic").click()
+  await checkEveryWidth(page, testInfo, "signup-check-email", [
+    h1(page, "Check your email"),
+    button(page, "Send the email again"),
+  ])
+  await page.unroute("**/api/v1/users/signup")
+
+  await page.goto(`/book/${slug}`)
   await button(page, "Continue").click()
   await checkEveryWidth(page, testInfo, "book-details", [
     h1(page, "A little about you"),

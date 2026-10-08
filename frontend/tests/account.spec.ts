@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto"
+import { verifySignupByEmail } from "./accounts"
 import { expect, test } from "./fixtures"
 import { emailedPath, waitForEmailHtml } from "./mail"
 
@@ -7,8 +8,9 @@ import { emailedPath, waitForEmailHtml } from "./mail"
  *
  * Budget note: `POST /password-recovery/{email}` and `POST /reset-password/` share one 5/min window
  * per client address (`backend/app/core/rate_limit.py`), and sign-in is 20/min. This file spends 4
- * recovery calls and 2 sign-ins against one backend per run (CI gives every shard its own backend);
- * keep it that way, or the suite starts failing on `429` instead of on behaviour. The recovery tests
+ * recovery calls, 1 sign-in, 3 signups and 4 signup verifications (each 20/min) against one
+ * backend per run (CI gives every shard its own backend); keep it that way, or the suite starts
+ * failing on `429` instead of on behaviour. The recovery tests
  * are never retried: a retry would spend the same window again and fail on `429`, hiding the real
  * failure, and CI fails a run on any flaky test (`--fail-on-flaky-tests`), so a retry could never
  * rescue it anyway. A run started straight after another against the same backend first waits out
@@ -20,8 +22,10 @@ const newEmail = (prefix: string) => `${prefix}-${run()}@e2e.example.com`
 const newPassword = () => `E2e-${randomBytes(9).toString("base64url")}`
 
 test.describe("organisation signup", () => {
-  test("registering a clinic creates the organisation and signs its owner in", async ({
+  test("registering a clinic emails a link that creates it and signs its owner in, once", async ({
     page,
+    request,
+    browser,
   }) => {
     await page.goto("/login")
     await page.getByRole("link", { name: "Create an organisation" }).click()
@@ -31,18 +35,57 @@ test.describe("organisation signup", () => {
     ).toBeVisible()
 
     const password = newPassword()
+    const email = newEmail("signup")
     await page.getByLabel("Clinic or practice name").fill(`Wattle GP ${run()}`)
     await page.getByLabel("Your full name").fill("Dr Lena Moss")
-    await page.getByLabel("Email").fill(newEmail("signup"))
+    await page.getByLabel("Email").fill(email)
     await page.getByLabel("Password", { exact: true }).fill(password)
     await page.getByLabel("Confirm password").fill(password)
     await page.getByRole("button", { name: "Register clinic" }).click()
+
+    // Nothing exists yet: the page asks the person to open the emailed link.
+    await expect(
+      page.getByRole("heading", { name: "Check your email" }),
+    ).toBeVisible()
+    await expect(page.getByRole("status")).toContainText(email)
+
+    // "Send the email again" mails a fresh link; the first one stops working.
+    const first = emailedPath(
+      await waitForEmailHtml(request, email),
+      "/verify-email",
+    )
+    await page.getByRole("button", { name: "Send the email again" }).click()
+    await expect(page.getByText("Sent again.")).toBeVisible()
+    const link = emailedPath(
+      await waitForEmailHtml(request, email, 2),
+      "/verify-email",
+    )
+    expect(link).not.toBe(first)
+
+    await page.goto(link)
+    await page.getByRole("button", { name: "Confirm and sign in" }).click()
 
     // The new owner lands in their own, empty clinic, signed in.
     await expect(
       page.getByRole("heading", { name: "Today's clinic" }),
     ).toBeVisible()
     await expect(page.getByText("Dr Lena Moss", { exact: true })).toBeVisible()
+
+    // The link is spent, and the one the resend replaced never worked again.
+    for (const used of [link, first]) {
+      const context = await browser.newContext()
+      const other = await context.newPage()
+      await other.goto(used)
+      await other.getByRole("button", { name: "Confirm and sign in" }).click()
+      await expect(other.getByRole("alert")).toContainText(
+        "has already been used",
+      )
+      await expect(other.getByRole("link", { name: "Sign in" })).toBeVisible()
+      await expect(
+        other.getByRole("link", { name: "Register again" }),
+      ).toBeVisible()
+      await context.close()
+    }
   })
 
   test("every field is checked before anything is sent", async ({ page }) => {
@@ -75,9 +118,10 @@ test.describe("organisation signup", () => {
     expect(calls).toBe(0)
   })
 
-  test("an email that already has an account is refused at the email field", async ({
+  test("an email that already has an account gets the same page, and its owner a notice", async ({
     page,
     clinic,
+    request,
   }) => {
     const password = newPassword()
     await page.goto("/signup")
@@ -87,14 +131,26 @@ test.describe("organisation signup", () => {
     await page.getByLabel("Password", { exact: true }).fill(password)
     await page.getByLabel("Confirm password").fill(password)
     await page.getByRole("button", { name: "Register clinic" }).click()
+    // Exactly what a new address sees: nothing says the address has an account.
     await expect(
-      page.getByText("An account already uses this email. Sign in instead."),
+      page.getByRole("heading", { name: "Check your email" }),
     ).toBeVisible()
-    await expect(page.getByLabel("Email")).toHaveAttribute(
-      "aria-invalid",
-      "true",
+    await expect(page.getByRole("status")).toContainText(clinic.email)
+    await expect(page.getByText("already uses this email")).toHaveCount(0)
+
+    // The owner of the address is told, and gets no link (the setup's verification email was the
+    // first message to this address).
+    const notice = await waitForEmailHtml(request, clinic.email, 2)
+    expect(notice).toContain("You already have an account")
+    expect(notice).not.toContain("/verify-email")
+    expect(notice).not.toContain("Another clinic")
+
+    // "Use a different email" goes back to the filled form to correct the address.
+    await page.getByRole("button", { name: "Use a different email" }).click()
+    await expect(page.getByLabel("Email")).toBeFocused()
+    await expect(page.getByLabel("Clinic or practice name")).toHaveValue(
+      "Another clinic",
     )
-    await expect(page).toHaveURL(/\/signup$/)
   })
 
   test("a server failure is explained, with its reference, and nothing moves", async ({
@@ -159,7 +215,8 @@ test.describe("password recovery", () => {
         clinic_name: `Recovery clinic ${run()}`,
       },
     })
-    expect(signup.ok(), await signup.text()).toBeTruthy()
+    expect(signup.status(), await signup.text()).toBe(202)
+    await verifySignupByEmail(request, email)
 
     await page.goto("/login")
     await page.getByRole("link", { name: "Forgot password?" }).click()
@@ -177,7 +234,8 @@ test.describe("password recovery", () => {
 
     // The backend builds `{FRONTEND_HOST}/reset-password?token=...`; follow its path here so the
     // test holds wherever FRONTEND_HOST points.
-    const html = await waitForEmailHtml(request, email)
+    // The second email to this address: the first was the signup's verification link.
+    const html = await waitForEmailHtml(request, email, 2)
     await page.goto(emailedPath(html, "/reset-password"))
 
     const fresh = newPassword()

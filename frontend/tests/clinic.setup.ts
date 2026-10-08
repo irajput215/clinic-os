@@ -1,14 +1,15 @@
 import { randomBytes } from "node:crypto"
 import { mkdirSync, writeFileSync } from "node:fs"
 import { expect, test as setup } from "@playwright/test"
-import { signInWithApi, signUp } from "./accounts"
+import { signInWithApi, signUp, verifySignupByEmail } from "./accounts"
 import { CLINIC_FILE, type Clinic } from "./fixtures"
 import { emailedPath, waitForEmailHtml } from "./mail"
 import { previousRunWindowLeft } from "./pacing"
 
 /**
  * One fresh clinic per run, created the way a real practice is: `POST /users/signup` with a clinic
- * name makes a new organisation and its practice owner. Patients are then added through the API.
+ * name, then the emailed link (read from Mailpit), makes a new organisation and its practice
+ * owner. Patients are then added through the API.
  */
 const PATIENTS = [
   ["Marcus", "Webb", "1979-04-12", "MALE"],
@@ -51,9 +52,10 @@ setup("sign up a clinic and add patients", async ({ request, baseURL }) => {
       clinic_name: clinicName,
     },
   })
-  expect(signup.ok(), await signup.text()).toBeTruthy()
-
-  const access_token = await signInWithApi(request, clinic)
+  expect(signup.status(), await signup.text()).toBe(202)
+  // Nothing exists until the emailed link is used (D-007); using it signs the owner in, so the
+  // setup spends no sign-in of its own on the owner.
+  const access_token = await verifySignupByEmail(request, clinic.email)
   const auth = { authorization: `Bearer ${access_token}` }
 
   // The owner also consults: granting the Doctor role makes them a bookable practitioner, so the
@@ -65,7 +67,9 @@ setup("sign up a clinic and add patients", async ({ request, baseURL }) => {
     (await roles.json()) as { data: { id: string; code: string }[] }
   ).data.find((role) => role.code === "DOCTOR")
   expect(doctor).toBeDefined()
-  const ownerId = ((await signup.json()) as { id: string }).id
+  const me = await request.get("/api/v1/users/me", { headers: auth })
+  expect(me.ok(), await me.text()).toBeTruthy()
+  const ownerId = ((await me.json()) as { id: string }).id
   const granted = await request.post(`/api/v1/users/${ownerId}/roles`, {
     headers: auth,
     data: { role_id: doctor?.id },

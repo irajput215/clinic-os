@@ -1,15 +1,14 @@
 import { zodResolver } from "@hookform/resolvers/zod"
-import { useQueryClient } from "@tanstack/react-query"
-import { Link, useRouter } from "@tanstack/react-router"
+import { Link } from "@tanstack/react-router"
 import { Loader2 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useForm } from "react-hook-form"
+import type { SignupAccepted } from "@/client/types.gen"
 import { Button } from "@/components/ui/button"
-import { registerOrganisation } from "@/data/account"
+import { registerOrganisation, resendSignupEmail } from "@/data/account"
 import { Field } from "@/design/primitives"
 import { focusFirstError } from "@/lib/form"
 import { describeError, httpStatus, validationMessages } from "@/lib/http"
-import { signIn } from "@/lib/session"
 import { z } from "@/lib/zod"
 import {
   AuthAside,
@@ -70,16 +69,21 @@ const FIELDS: readonly FieldName[] = [
 /**
  * Registering here registers an organisation: the clinic name becomes the tenant and the signer its
  * Practice Owner (`docs/reference/business-flow.md` step 1). Staff are invited afterwards.
+ *
+ * Nothing is created until the person opens the link the server emails
+ * (`docs/reference/decisions/D-007-signup-email-verification.md`). The server answers every address
+ * the same way, so this page never says whether the address already has an account: "Check your
+ * email" covers both the link and the notice an existing account's owner receives instead.
  */
 export function SignupPage() {
-  const router = useRouter()
-  const queryClient = useQueryClient()
   const [failure, setFailure] = useState<{
     message: string
     error: unknown
   } | null>(null)
-  const [registered, setRegistered] = useState(false)
-  const titleRef = useRef<HTMLHeadingElement>(null)
+  const [requested, setRequested] = useState<{
+    email: string
+    accepted: SignupAccepted
+  } | null>(null)
   const form = useForm<Values>({
     shouldFocusError: false,
     resolver: zodResolver(schema),
@@ -92,42 +96,23 @@ export function SignupPage() {
     },
   })
   const { errors, isSubmitting } = form.formState
-  useEffect(() => form.setFocus("clinic_name"), [form])
   useEffect(() => {
-    if (registered) titleRef.current?.focus()
-  }, [registered])
+    if (!requested) form.setFocus("clinic_name")
+  }, [form, requested])
 
   const onSubmit = form.handleSubmit(async (values) => {
     setFailure(null)
     const { confirm_password: _confirm, ...body } = values
     try {
-      await registerOrganisation(body)
+      const accepted = await registerOrganisation(body)
+      setRequested({ email: body.email, accepted })
     } catch (error) {
       refuse(error)
-      return
-    }
-    // The organisation exists now. Signing in is a convenience: if it fails (rate limit, network),
-    // the account is still there and the person signs in from the sign-in page.
-    try {
-      await signIn(body.email, body.password)
-      queryClient.clear()
-      await router.navigate({ to: "/" })
-    } catch {
-      setRegistered(true)
     }
   }, focusFirstError)
 
   const refuse = (error: unknown) => {
     const status = httpStatus(error)
-    if (status === 400) {
-      // The only 400 signup raises: the email already has an account.
-      form.setError(
-        "email",
-        { message: "An account already uses this email. Sign in instead." },
-        { shouldFocus: true },
-      )
-      return
-    }
     if (status === 422) {
       const messages = validationMessages(error)
       const named = FIELDS.filter((f) => messages[f])
@@ -142,26 +127,29 @@ export function SignupPage() {
       message:
         status === 403
           ? "New organisations can't be registered on this server. Ask your Clinic OS administrator for an account."
-          : describeError(error),
+          : status === 503
+            ? "New organisations can't be registered right now: this server can't send email. Nothing was created."
+            : describeError(error),
       error,
     })
   }
 
-  if (registered)
+  if (requested)
     return (
-      <AuthLayout>
-        <AuthTitle titleRef={titleRef}>Your clinic is ready</AuthTitle>
-        <AuthLead>
-          You're its administrator. Add your staff once you're in.
-        </AuthLead>
-        <AuthConfirmation>
-          {form.getValues("clinic_name")} is registered. Sign in with the email
-          and password you just chose.
-        </AuthConfirmation>
-        <Button asChild size="lg" className="mt-5 w-full">
-          <Link to="/login">Go to sign in</Link>
-        </Button>
-      </AuthLayout>
+      <CheckYourEmail
+        email={requested.email}
+        accepted={requested.accepted}
+        onChangeEmail={() => {
+          // Back to the filled form, minus the passwords, to correct the address.
+          form.reset({
+            ...form.getValues(),
+            password: "",
+            confirm_password: "",
+          })
+          setRequested(null)
+          setTimeout(() => form.setFocus("email"))
+        }}
+      />
     )
 
   return (
@@ -264,6 +252,85 @@ export function SignupPage() {
         <Link to="/login" className={authLinkClass}>
           Sign in
         </Link>
+      </AuthAside>
+    </AuthLayout>
+  )
+}
+
+/**
+ * After a signup: the email is on its way. The words hold for both answers the server may have
+ * mailed (the link, or a notice to an address that already has an account), so the page discloses
+ * nothing about the address.
+ */
+function CheckYourEmail({
+  email,
+  accepted,
+  onChangeEmail,
+}: {
+  email: string
+  accepted: SignupAccepted
+  onChangeEmail: () => void
+}) {
+  const titleRef = useRef<HTMLHeadingElement>(null)
+  const [resend, setResend] = useState<
+    | { state: "idle" }
+    | { state: "sending" }
+    | { state: "sent" }
+    | { state: "failed"; error: unknown }
+  >({ state: "idle" })
+  useEffect(() => titleRef.current?.focus(), [])
+
+  const sendAgain = async () => {
+    setResend({ state: "sending" })
+    try {
+      await resendSignupEmail(accepted.request_id)
+      setResend({ state: "sent" })
+    } catch (error) {
+      setResend({ state: "failed", error })
+    }
+  }
+
+  return (
+    <AuthLayout>
+      <AuthTitle titleRef={titleRef}>Check your email</AuthTitle>
+      <AuthLead>One more step and your clinic is ready.</AuthLead>
+      <AuthConfirmation>
+        We've sent a message to{" "}
+        <span className="font-mono text-[12.5px] wrap-anywhere">{email}</span>.
+        Open the link in it within {accepted.expires_in_hours} hours to finish
+        registering and sign in. If this address already has an account, the
+        message explains how to sign in instead.
+      </AuthConfirmation>
+      <p className="mt-4 text-[13px] leading-relaxed text-pretty text-stone">
+        It can take a minute to arrive; check your spam folder too.
+      </p>
+      <Button
+        type="button"
+        variant="outline"
+        size="lg"
+        className="mt-5 w-full"
+        disabled={resend.state === "sending"}
+        onClick={sendAgain}
+      >
+        {resend.state === "sending" ? (
+          <Loader2 className="animate-spin" />
+        ) : null}
+        Send the email again
+      </Button>
+      {resend.state === "sent" ? (
+        <p role="status" className="mt-3 text-center text-[13px] text-ok-deep">
+          Sent again. Use the newest email: earlier links no longer work.
+        </p>
+      ) : null}
+      <AuthFailure
+        message={resend.state === "failed" ? describeError(resend.error) : null}
+        error={resend.state === "failed" ? resend.error : undefined}
+      />
+      <AuthAside>
+        Wrong address?{" "}
+        <button type="button" className={authLinkClass} onClick={onChangeEmail}>
+          Use a different email
+        </button>
       </AuthAside>
     </AuthLayout>
   )

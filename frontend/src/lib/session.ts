@@ -44,6 +44,11 @@ export const signIn = async (username: string, password: string) => {
   writeToken(data.access_token)
 }
 
+/** Keep a session the server handed over directly (verifying a signup signs the owner in). */
+export const adoptToken = (token: string) => {
+  writeToken(token)
+}
+
 export const signOut = () => {
   writeToken(null)
 }

@@ -1,5 +1,6 @@
 import { LoginService, UsersService } from "@/client"
 import type { UpdatePassword, UserUpdateMe } from "@/client/types.gen"
+import { adoptToken } from "@/lib/session"
 
 /**
  * A person's own account: the signed-out flows (registering an organisation, recovering a password)
@@ -15,11 +16,25 @@ export interface OrganisationSignup {
 }
 
 /**
- * `POST /users/signup` with a `clinic_name`: one transaction creates the organisation, the account
- * and its Practice Owner grant. The tenant is created by the server; nothing here names one.
+ * `POST /users/signup` with a `clinic_name` (D-007): the server emails a link and creates nothing
+ * yet. It answers every address the same way (a taken one is emailed a notice instead), so the
+ * answer says only which attempt this was, for "Send the email again".
  */
-export const registerOrganisation = async (body: OrganisationSignup) => {
-  await UsersService.registerUser({ body })
+export const registerOrganisation = async (body: OrganisationSignup) =>
+  (await UsersService.registerUser({ body })).data
+
+/** `POST /users/signup/resend`: that attempt's email again, with a fresh link. Always `202`. */
+export const resendSignupEmail = async (requestId: string) => {
+  await UsersService.resendSignupEmail({ body: { request_id: requestId } })
+}
+
+/**
+ * `POST /users/signup/verify`: spends the emailed link, which creates the organisation and its
+ * owner, and keeps the session the server answers with, so the person is signed in.
+ */
+export const verifySignup = async (token: string) => {
+  const { data } = await UsersService.verifySignup({ body: { token } })
+  adoptToken(data.access_token)
 }
 
 /**
