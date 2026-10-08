@@ -154,7 +154,7 @@ Twenty-two routes across public intake, probes, user management, patient records
 | `POST` | `/api/v1/login/access-token` | Open | Rate-limited (20/min) |
 | `POST` | `/api/v1/password-recovery/{email}` | Open | Rate-limited (5/min) |
 | `POST` | `/api/v1/reset-password/` | Open | Rate-limited (shares the 5/min recovery window) |
-| `POST` | `/api/v1/users/signup` | Open | Organisation registration; creates tenant & assigns Practice Owner; rate-limited (20/min). A taken email is answered `400`, which discloses that the address has an account: a recorded residual risk (see `register_user` in `backend/app/api/routes/users.py`) |
+| `POST` | `/api/v1/users/signup` | Open | Organisation registration, verified by email ([D-007](reference/decisions/D-007-signup-email-verification.md)): one answer for every address; `POST /users/signup/verify` creates the tenant and the Practice Owner and signs in; `POST /users/signup/resend`; each 20/min per address. The `400` that disclosed a taken address is gone |
 | `GET` | `/api/v1/utils/health-check/` | Open | Liveness probe (does not touch database) |
 | `GET` | `/api/v1/health/ready/` | Open | Readiness probe (verifies database connectivity) |
 | `POST` | `/api/v1/login/test-token` | Session | Validates token payload |

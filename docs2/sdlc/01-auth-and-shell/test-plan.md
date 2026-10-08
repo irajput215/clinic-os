@@ -6,8 +6,9 @@
 | e2e | Wrong password: generic message, stays on `/login` | `tests/auth.spec.ts` |
 | e2e | `redirect=//evil.example` is ignored | `tests/auth.spec.ts` |
 | e2e | Sign-out, then a staff URL goes back to `/login` | `tests/auth.spec.ts` |
-| e2e | Signup from the sign-in page creates a clinic and lands its owner signed in on Today | `tests/account.spec.ts` |
-| e2e | Signup validates every field before calling the API; a taken email is refused at the field; a `5xx` shows its reference | `tests/account.spec.ts` |
+| e2e | Signup from the sign-in page says "Check your email"; the emailed link (Mailpit) confirms and lands the owner signed in on Today; the used link is refused | `tests/account.spec.ts` |
+| e2e | Signup validates every field before calling the API; a taken email gets the same "Check your email" page and its owner a notice email, never a link; resend sends the message again; a `5xx` shows its reference | `tests/account.spec.ts` |
+| api | Signup verification, deny path first: no open registration `403`, no mail `503` with nothing written, unknown keys `422`; a taken address answered exactly like a new one (status, body, statements executed) with a notice and no link; a notice request never verifies; tampered, expired, wrong-purpose, replaced and used links one `400`; a second signup never changes the first, and the first verified wins; rate limits on all three routes. Then: verification creates the organisation, owner and grant, audits `user.create`, signs in; expired requests are purged | `backend/tests/users/test_signup.py` |
 | e2e | Recovery email (Mailpit) link sets a new password that then signs in | `tests/account.spec.ts` |
 | e2e | Unknown email gets the same confirmation; missing or invalid token offers a new link | `tests/account.spec.ts` |
 | e2e | Administration: a practice owner sees every role against the 21-permission catalogue; no Accounts tab | `tests/admin.spec.ts` |

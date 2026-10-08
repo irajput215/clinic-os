@@ -10,6 +10,10 @@ Centred card on the tiled-mark backdrop: brand mark, serif title, italic tagline
 
 The same card as sign in (`features/auth/AuthLayout.tsx`): serif title, italic lead, fields, one clay action, a link back to sign in. Each has a confirmation state (green, `role=status`, focus moves to the title) and one `role=alert` refusal carrying the API's `request_id` as a Reference. Sign in links to "Forgot password?" and "Create an organisation".
 
+### Email verification (`/signup` then `/verify-email`)
+
+After "Register clinic" the signup card becomes "Check your email": the address in mono, a green confirmation that a message is on its way (with a link to finish registering, or, if the address already has an account, how to sign in), the 24-hour window, a secondary "Send the email again" (one toast-free `role=status` line confirms it) and "Use a different email", which returns to the filled form. `/verify-email` is the same card: "Confirm your email", one clay "Confirm and sign in"; success lands on Today, a dead link is one `role=alert` with "Register again" and "Sign in".
+
 ### Invitation acceptance (`/accept-invite`)
 
 The same card: "Join your clinic", password and confirmation, one clay "Set password and sign in". Success signs the person in and lands on Today; if only the automatic sign-in fails, a green confirmation offers Sign in. A spent or expired link is one `role=alert` with a "Get a new link" action to password recovery.
