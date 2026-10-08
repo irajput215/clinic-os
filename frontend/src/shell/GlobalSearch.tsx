@@ -41,7 +41,7 @@ export function GlobalSearch() {
   }
 
   return (
-    <div className="relative">
+    <div className="relative w-full sm:w-auto">
       <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-stone-faint" />
       <input
         ref={inputRef}
@@ -76,13 +76,13 @@ export function GlobalSearch() {
             setOpen(false)
           }
         }}
-        className="h-[38px] w-[150px] rounded-full border border-line bg-paper pr-3 pl-[34px] text-[14px] outline-none transition-[width,border-color] placeholder:text-stone-faint focus:w-[240px] focus:border-clay sm:w-[214px] sm:focus:w-[280px]"
+        className="h-[38px] w-full rounded-full border border-line bg-paper pr-3 pl-[34px] text-[14px] outline-none transition-[width,border-color] placeholder:text-stone-faint focus:border-clay max-lg:h-11 max-lg:text-[16px] sm:w-[214px] sm:focus:w-[280px]"
       />
       {open && term.trim() ? (
         <div
           id={listId}
           role="listbox"
-          className="absolute top-[calc(100%+6px)] right-0 z-30 w-[300px] overflow-hidden rounded-inner border border-line bg-paper shadow-pop"
+          className="absolute top-[calc(100%+6px)] right-0 z-30 w-[300px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-inner border border-line bg-paper shadow-pop"
         >
           {search.isError && settled ? (
             <p className="px-3.5 py-3 text-sm text-stone" role="status">
@@ -105,7 +105,7 @@ export function GlobalSearch() {
                 onClick={() => go(p.id)}
                 onMouseEnter={() => setActive(i)}
                 className={cn(
-                  "flex w-full items-baseline justify-between gap-3 px-3.5 py-2.5 text-left text-sm",
+                  "flex w-full items-baseline justify-between gap-3 px-3.5 py-2.5 text-left text-sm max-lg:min-h-11 max-lg:items-center",
                   i === active && "bg-oat",
                 )}
               >

@@ -1,3 +1,4 @@
+import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   Link,
@@ -47,7 +48,11 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       <Link
         to="/"
         onClick={onNavigate}
-        className="flex items-center gap-2.5 px-[18px] pt-[18px] pb-3.5"
+        // In the drawer, the brand stops short of the close button.
+        className={cn(
+          "flex items-center gap-2.5 px-[18px] pt-[18px] pb-3.5",
+          onNavigate && "mr-14",
+        )}
       >
         <BrandMark size={30} />
         <span className="min-w-0">
@@ -91,7 +96,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                   </>
                 )
                 const base =
-                  "group flex w-full items-center gap-2.5 rounded-btn px-2.5 py-[7px] text-sm font-medium transition-colors"
+                  "group flex w-full items-center gap-2.5 rounded-btn px-2.5 py-[7px] text-sm font-medium transition-colors max-lg:min-h-11"
                 if (item.to)
                   return (
                     <li key={item.label}>
@@ -147,7 +152,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             to="/settings"
             onClick={onNavigate}
             title="Your settings"
-            className="-mx-2 -my-1 block rounded-btn px-2 py-1 hover:bg-fill"
+            className="-mx-2 -my-1 block rounded-btn px-2 py-1 hover:bg-fill max-lg:min-h-11"
           >
             <div className="truncate font-semibold">{displayName(me)}</div>
             <div className="truncate text-xs text-stone">{me.email}</div>
@@ -163,7 +168,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           <button
             type="button"
             onClick={handleSignOut}
-            className="font-medium text-clay hover:text-clay-hover hover:underline"
+            className="font-medium text-clay hover:text-clay-hover hover:underline max-lg:-my-3 max-lg:min-h-11 max-lg:px-2 max-lg:-mr-2"
           >
             Sign out
           </button>
@@ -173,7 +178,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   )
 }
 
-function TopBar({ onMenu }: { onMenu: () => void }) {
+function TopBar() {
   const router = useRouter()
   const matches = useMatches()
   const title =
@@ -181,16 +186,19 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
       ?.title ?? "Clinic OS"
 
   return (
-    <header className="sticky top-0 z-20 flex items-center gap-3 border-line border-b bg-oat/90 px-4 py-3.5 backdrop-blur-md md:px-8">
-      <button
-        type="button"
-        onClick={onMenu}
-        className="-ml-1 rounded-btn p-1.5 text-stone hover:bg-fill lg:hidden"
-        aria-label="Open navigation"
-      >
-        <Menu className="size-5" />
-      </button>
-      <div className="hidden items-center gap-1 md:flex">
+    <header className="sticky top-0 z-20 flex items-center gap-3 border-line border-b bg-oat/90 px-4 py-3.5 backdrop-blur-md max-lg:py-2 md:px-8">
+      {/* The drawer's trigger, so closing the drawer returns focus here. */}
+      <DialogPrimitive.Trigger asChild>
+        <button
+          type="button"
+          className="-ml-2.5 grid size-11 shrink-0 place-items-center rounded-btn text-stone hover:bg-fill lg:hidden"
+          aria-label="Open navigation"
+        >
+          <Menu className="size-5" />
+        </button>
+      </DialogPrimitive.Trigger>
+      {/* History buttons are a desktop convenience; a touch screen has the system's own back. */}
+      <div className="hidden items-center gap-1 lg:flex">
         <button
           type="button"
           onClick={() => router.history.back()}
@@ -208,10 +216,10 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
           <ArrowRight className="size-3.5" />
         </button>
       </div>
-      <div className="min-w-0 truncate font-serif text-[19px] font-medium md:ml-2">
+      <div className="min-w-0 truncate font-serif text-[19px] font-medium max-sm:hidden lg:ml-2">
         {title}
       </div>
-      <div className="ml-auto flex items-center gap-3">
+      <div className="ml-auto flex items-center gap-3 max-sm:min-w-0 max-sm:flex-1">
         <GlobalSearch />
         <span className="hidden rounded-chip bg-fill px-2.5 py-1 font-mono text-[11.5px] text-stone xl:inline">
           {formatLongDay(new Date())}
@@ -220,6 +228,9 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
     </header>
   )
 }
+
+/** The sidebar's breakpoint (Tailwind `lg`); below it the sidebar is a drawer. */
+const SIDEBAR_QUERY = "(min-width: 1024px)"
 
 export function AppShell() {
   const [drawer, setDrawer] = useState(false)
@@ -231,40 +242,52 @@ export function AppShell() {
     if (leaf) setDrawer(false)
   }, [leaf])
 
-  return (
-    <div className="min-h-dvh lg:grid lg:grid-cols-[232px_minmax(0,1fr)]">
-      <aside className="sticky top-0 hidden h-dvh border-line border-r bg-paper lg:block">
-        <Sidebar />
-      </aside>
+  // And when the screen grows past the breakpoint (a rotated tablet), so a drawer that is no
+  // longer shown never keeps the page behind it inert.
+  useEffect(() => {
+    const wide = window.matchMedia(SIDEBAR_QUERY)
+    const close = () => {
+      if (wide.matches) setDrawer(false)
+    }
+    wide.addEventListener("change", close)
+    return () => wide.removeEventListener("change", close)
+  }, [])
 
-      {drawer ? (
-        <div className="fixed inset-0 z-40 lg:hidden">
-          <button
-            type="button"
-            aria-label="Close navigation"
-            className="absolute inset-0 bg-ink/30 backdrop-blur-[2px]"
-            onClick={() => setDrawer(false)}
-          />
-          <aside className="absolute inset-y-0 left-0 w-[264px] animate-in border-line border-r bg-paper shadow-pop slide-in-from-left duration-200">
-            <button
-              type="button"
-              onClick={() => setDrawer(false)}
-              className="absolute top-4 right-3 rounded-btn p-1 text-stone hover:bg-fill"
+  return (
+    <DialogPrimitive.Root open={drawer} onOpenChange={setDrawer}>
+      <div className="min-h-dvh lg:grid lg:grid-cols-[232px_minmax(0,1fr)]">
+        <aside className="sticky top-0 hidden h-dvh border-line border-r bg-paper lg:block">
+          <Sidebar />
+        </aside>
+
+        {/* Below 1024 px the sidebar is a modal drawer: focus stays inside it, Escape or a tap
+            outside closes it, and focus returns to the menu button (its trigger). */}
+        <DialogPrimitive.Portal>
+          <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-ink/30 backdrop-blur-[2px] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0 lg:hidden" />
+          <DialogPrimitive.Content
+            aria-describedby={undefined}
+            className="fixed inset-y-0 left-0 z-40 w-[min(280px,calc(100vw-3rem))] border-line border-r bg-paper shadow-pop outline-none duration-200 data-[state=closed]:animate-out data-[state=closed]:slide-out-to-left data-[state=open]:animate-in data-[state=open]:slide-in-from-left lg:hidden"
+          >
+            <DialogPrimitive.Title className="sr-only">
+              Navigation
+            </DialogPrimitive.Title>
+            <DialogPrimitive.Close
+              className="absolute top-3 right-2 grid size-11 place-items-center rounded-btn text-stone hover:bg-fill"
               aria-label="Close navigation"
             >
-              <X className="size-4" />
-            </button>
+              <X className="size-5" />
+            </DialogPrimitive.Close>
             <Sidebar onNavigate={() => setDrawer(false)} />
-          </aside>
-        </div>
-      ) : null}
+          </DialogPrimitive.Content>
+        </DialogPrimitive.Portal>
 
-      <div className="min-w-0">
-        <TopBar onMenu={() => setDrawer(true)} />
-        <main className="mx-auto w-full max-w-[1240px] px-4 pt-7 pb-16 md:px-8">
-          <Outlet />
-        </main>
+        <div className="min-w-0">
+          <TopBar />
+          <main className="mx-auto w-full max-w-[1240px] px-4 pt-7 pb-16 md:px-8">
+            <Outlet />
+          </main>
+        </div>
       </div>
-    </div>
+    </DialogPrimitive.Root>
   )
 }
