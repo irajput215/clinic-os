@@ -7,6 +7,8 @@ because the Clinical Safety Officer's ruling has to land in one place and nowher
 
 from datetime import date, timedelta
 
+from app.core.db import tenant_transaction
+from app.core.reads import ReadBatch
 from app.modules.tga_approvals import service
 from app.modules.tga_approvals.service import MatchReason, within_validity_window
 from tests.tga.conftest import TenantWithPatient, TgaApi
@@ -220,3 +222,86 @@ def test_the_exclusion_constraint_is_what_makes_the_answer_unambiguous(
     assert in_first.json()["approval_id"] == first["id"]
     in_second = api.match(clinic.owner, clinic.patient_id, date_of_service="2026-09-01")
     assert in_second.json()["approval_id"] == second["id"]
+
+
+def test_the_batched_match_answers_exactly_as_the_single_match(
+    api: TgaApi, clinic: TenantWithPatient
+) -> None:
+    """`queue_matches` (the script queue's gate column) is the single match for many questions.
+
+    One read for every patient asked about, then the same decision matrix on each patient's rows:
+    every answer must equal the single match's, across states, grains, dates either side of the
+    boundary, a patient with no approval and another tenant's patient.
+    """
+    tenant_id = clinic.owner.tenant_id
+    assert tenant_id is not None
+    first = clinic.patient_id
+    second = api.create_patient(clinic.owner, family_name="Second")
+    rows = [
+        (first, "ACTIVE", "CATEGORY_3", "ORAL_OIL", "2026-01-01", "2026-07-01"),
+        (first, "PENDING", "CATEGORY_4", "ORAL_OIL", "2026-01-01", "2026-07-01"),
+        (second, "REVOKED", "CATEGORY_3", "ORAL_OIL", "2026-01-01", "2026-07-01"),
+        (second, "ACTIVE", "CATEGORY_3", "ORAL_OIL", "2026-07-01", "2027-01-01"),
+    ]
+    for index, (patient, state, category, form, valid_from, valid_to) in enumerate(
+        rows
+    ):
+        api.insert_approval(
+            tenant_id=tenant_id,
+            patient_id=patient,
+            state=state,
+            tga_category=category,
+            dosage_form=form,
+            approval_reference=f"TGA-RAW-0009{index:02d}",
+            valid_from=valid_from,
+            valid_to=valid_to,
+            revoked_reason_code="CLINICAL_ERROR" if state == "REVOKED" else None,
+        )
+    without_approval = api.create_patient(clinic.owner, family_name="Without")
+    elsewhere = api.create_patient(api.register(clinic_name="Synthetic Clinic B"))
+    questions = [
+        service.MatchQuestion(
+            patient_id=patient,
+            tga_category=category,
+            dosage_form=form,
+            date_of_service=date.fromisoformat(day),
+        )
+        for patient in (first, second, without_approval, elsewhere)
+        for category in ("CATEGORY_3", "CATEGORY_4")
+        for form in ("ORAL_OIL", "INHALATION")
+        for day in (
+            "2025-12-31",
+            "2026-01-01",
+            "2026-06-30",
+            "2026-07-01",
+            "2027-01-01",
+        )
+    ]
+
+    with tenant_transaction(tenant_id=tenant_id) as session:
+        batch = ReadBatch()
+        batched = service.queue_matches(batch, tenant_id=tenant_id, questions=questions)
+        batch.send(session)
+    # The single match, as the match route asks it (one transaction per question).
+    single = [
+        service.match_approval(
+            tenant_id=tenant_id,
+            patient_id=question.patient_id,
+            tga_category=question.tga_category,
+            dosage_form=question.dosage_form,
+            date_of_service=question.date_of_service,
+        )
+        for question in questions
+    ]
+
+    assert batched.value == single
+    assert {answer.reason_code for answer in single} >= {
+        None,
+        MatchReason.PENDING_VERIFICATION.value,
+        MatchReason.REVOKED.value,
+        MatchReason.NOT_FOUND.value,
+        MatchReason.CATEGORY_MISMATCH.value,
+        MatchReason.DOSAGE_FORM_MISMATCH.value,
+        MatchReason.EXPIRED.value,
+        MatchReason.NOT_YET_EFFECTIVE.value,
+    }
