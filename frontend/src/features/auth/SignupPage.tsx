@@ -8,7 +8,12 @@ import { Button } from "@/components/ui/button"
 import { registerOrganisation, resendSignupEmail } from "@/data/account"
 import { Field } from "@/design/primitives"
 import { focusFirstError } from "@/lib/form"
-import { describeError, httpStatus, validationMessages } from "@/lib/http"
+import {
+  describeError,
+  httpStatus,
+  refusalCode,
+  validationMessages,
+} from "@/lib/http"
 import { z } from "@/lib/zod"
 import {
   AuthAside,
@@ -127,7 +132,7 @@ export function SignupPage() {
       message:
         status === 403
           ? "New organisations can't be registered on this server. Ask your Clinic OS administrator for an account."
-          : status === 503
+          : refusalCode(error) === "EMAIL_NOT_CONFIGURED"
             ? "New organisations can't be registered right now: this server can't send email. Nothing was created."
             : describeError(error),
       error,
@@ -326,12 +331,15 @@ function CheckYourEmail({
         message={resend.state === "failed" ? describeError(resend.error) : null}
         error={resend.state === "failed" ? resend.error : undefined}
       />
-      <AuthAside>
-        Wrong address?{" "}
-        <button type="button" className={authLinkClass} onClick={onChangeEmail}>
-          Use a different email
-        </button>
-      </AuthAside>
+      <Button
+        type="button"
+        variant="ghost"
+        size="lg"
+        className="mt-2 w-full"
+        onClick={onChangeEmail}
+      >
+        Use a different email
+      </Button>
     </AuthLayout>
   )
 }
