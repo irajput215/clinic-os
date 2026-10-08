@@ -46,6 +46,7 @@ from app.modules.patients import service as patients_service
 from app.modules.prescriptions import gate
 from app.modules.prescriptions.models import (
     LEGAL_TRANSITIONS,
+    PRESCRIPTION_STATES,
     DispatchAttempt,
     Prescription,
     PrescriptionEvent,
@@ -55,6 +56,7 @@ from app.modules.prescriptions.schemas import (
     PrescriberRead,
     PrescribersPublic,
     PrescriptionCreate,
+    PrescriptionQueueSummary,
     PrescriptionRead,
     PrescriptionsPublic,
 )
@@ -92,6 +94,8 @@ _IN_FLIGHT_STATES: Final[frozenset[str]] = frozenset(
 
 MAX_PAGE_SIZE: Final[int] = 100
 DEFAULT_PAGE_SIZE: Final[int] = 50
+# How many actionable prescriptions the Today page's "blocked" count asks the gate about.
+GATE_SCAN_LIMIT: Final[int] = 100
 _CURSOR_CONTEXT: Final[bytes] = b"clinos.prescriptions.cursor.v1"
 
 
@@ -392,6 +396,47 @@ def list_prescriptions(
             data=_reads(session, tenant_id=tenant_id, rows=page),
             next_cursor=encode_cursor(page[-1]) if overflow else None,
         )
+
+
+def queue_summary(
+    session: Session, *, tenant_id: uuid.UUID, limit: int
+) -> PrescriptionQueueSummary:
+    """The queue at a glance, on the caller's transaction: every state's count, the newest `limit`
+    prescriptions still needing a human action with the gate's answer **now**, and how many of the
+    newest `GATE_SCAN_LIMIT` actionable ones that answer refuses.
+
+    For the Today page (`dashboard` module). The gate here is `gate.advise`, which authorises
+    nothing: signing and dispatch re-ask `gate.decide` on their own transaction. The scan is bounded
+    so a page load costs at most `GATE_SCAN_LIMIT` lookups, and `gate_checked` says how many it made.
+    """
+    by_state = dict.fromkeys(PRESCRIPTION_STATES, 0)
+    for state, total in session.exec(
+        select(col(Prescription.state), func.count())
+        .where(col(Prescription.tenant_id) == tenant_id)
+        .group_by(col(Prescription.state))
+    ).all():
+        by_state[state] = total
+    rows: Sequence[Prescription] = session.exec(
+        select(Prescription)
+        .where(
+            col(Prescription.tenant_id) == tenant_id,
+            col(Prescription.state).in_(sorted(ACTIONABLE_STATES)),
+        )
+        .order_by(col(Prescription.created_at).desc(), col(Prescription.id).desc())
+        .limit(max(limit, GATE_SCAN_LIMIT))
+    ).all()
+    shown = _reads(session, tenant_id=tenant_id, rows=rows[:limit])
+    refused = sum(
+        1 for read in shown if read.gate is not None and not read.gate.matched
+    )
+    refused += sum(1 for row in rows[limit:] if not gate.advise(session, row).matched)
+    return PrescriptionQueueSummary(
+        by_state=by_state,
+        transport_configured=configured_transport() is not None,
+        actionable=shown,
+        gate_refused=refused,
+        gate_checked=len(rows),
+    )
 
 
 def list_prescribers(*, tenant_id: uuid.UUID) -> PrescribersPublic:

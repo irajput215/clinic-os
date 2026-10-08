@@ -255,7 +255,12 @@ test("the letter's end date is sent unchanged and is itself not covered", async 
   await page.goto("/approvals")
   await page.getByRole("button", { name: "Record approval" }).click()
   const dialog = page.getByRole("dialog")
-  await dialog.getByLabel("Patient").selectOption({ label: "Priya Sharma" })
+  // The picker asks the server's search, so every patient is reachable, not only the first page.
+  await dialog.getByLabel("Patient", { exact: true }).fill("Sharma")
+  await dialog
+    .getByRole("radiogroup", { name: "Matching patients" })
+    .getByRole("radio", { name: /Priya Sharma/ })
+    .check()
   await dialog.getByLabel("TGA reference").fill("SAS-B 2026-555010")
   await dialog.getByLabel("Valid from").fill("2026-01-01")
   await dialog.getByLabel("Valid to (as on the letter)").fill("2027-06-30")

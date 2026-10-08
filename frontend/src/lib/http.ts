@@ -1,20 +1,5 @@
 import { AxiosError } from "axios"
 
-/**
- * A refusal decided in the browser, carrying a machine-readable `code` like the API's `detail.code`,
- * so screens handle both identically. Raised by the preview store (src/data/preview) and its
- * repositories.
- */
-export class Refusal extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-  ) {
-    super(message)
-    this.name = "Refusal"
-  }
-}
-
 /** The HTTP status of a failed API call, or `undefined` when it was not an HTTP failure. */
 export const httpStatus = (error: unknown): number | undefined =>
   error instanceof AxiosError ? error.response?.status : undefined
@@ -43,8 +28,6 @@ export const retryTransient = (
   failureCount: number,
   error: unknown,
 ): boolean => {
-  // A refusal is decided, not transient: retrying it only delays the answer.
-  if (error instanceof Refusal) return false
   const status = httpStatus(error)
   if (status !== undefined && status >= 400 && status < 500) return false
   return failureCount < 3
@@ -76,7 +59,6 @@ export const apiErrorMessage = (error: unknown): string | undefined => {
  * `ERR_WINDOW_EXCEEDS_MAX_DURATION`; Pydantic's built-in types are lower case and are not codes).
  */
 export const refusalCode = (error: unknown): string | undefined => {
-  if (error instanceof Refusal) return error.code
   const detail = problemBody(error)?.detail
   if (Array.isArray(detail)) {
     const type = (detail[0] as { type?: unknown } | undefined)?.type
@@ -177,7 +159,6 @@ export const apiRequestId = (error: unknown): string | undefined => {
 
 /** One sentence a person can act on, for any failure. Never echoes request data. */
 export const describeError = (error: unknown): string => {
-  if (error instanceof Refusal) return error.message
   const code = refusalCode(error)
   if (code && code in REFUSAL_SENTENCES) return REFUSAL_SENTENCES[code]
   const status = httpStatus(error)

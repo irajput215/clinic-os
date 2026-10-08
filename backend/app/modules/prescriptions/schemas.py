@@ -141,6 +141,23 @@ class PrescriptionsPublic(BaseModel):
     next_cursor: str | None
 
 
+class PrescriptionQueueSummary(BaseModel):
+    """The script queue at a glance (the Today page, `docs2/sdlc/08-today`).
+
+    `by_state` carries every state, zero included. `QUEUED` while `transport_configured` is `false`
+    means accepted by ClinicOS and **not sent** to any pharmacy.
+    """
+
+    by_state: dict[str, int]
+    transport_configured: bool
+    #: The newest prescriptions still needing a human action, each with the gate's answer now.
+    actionable: list[PrescriptionRead]
+    #: How many of the `gate_checked` newest actionable prescriptions the gate refuses now.
+    gate_refused: int
+    #: How many actionable prescriptions were asked (all of them, up to a bound of 100).
+    gate_checked: int
+
+
 class PrescriberRead(BaseModel):
     """An account that may sign: the reviewing-doctor choice when staging."""
 

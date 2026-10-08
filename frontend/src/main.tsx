@@ -10,7 +10,6 @@ import { StrictMode } from "react"
 import ReactDOM from "react-dom/client"
 import { client } from "./client/client.gen"
 import { Toaster } from "./components/ui/sonner"
-import { resetPreview } from "./data/preview/store"
 import { retryTransient } from "./lib/http"
 import { readToken, signOut } from "./lib/session"
 import { routeTree } from "./routeTree.gen"
@@ -31,7 +30,6 @@ const handleApiError = (error: Error) => {
   if (!(error instanceof AxiosError) || error.response?.status !== 401) return
   if (window.location.pathname.startsWith("/login")) return
   signOut()
-  resetPreview()
   queryClient.clear()
   const redirect = window.location.pathname + window.location.search
   router.navigate({ to: "/login", search: { redirect } })

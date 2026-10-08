@@ -1,6 +1,6 @@
 # ADR-F004: A labelled preview store for features without a backend
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-F006](ADR-F006-preview-store-retired.md) (2026-10-08): the preview store is deleted and every screen reads the API
 - **Date:** 2026-10-06
 
 ## Context
@@ -20,7 +20,7 @@ Options considered:
 
 ## Decision
 
-Option 4. See [capabilities.md](../capabilities.md) for the mechanics.
+Option 4. The mechanics were in `docs2/capabilities.md`, retired with the store.
 
 ## Consequences
 

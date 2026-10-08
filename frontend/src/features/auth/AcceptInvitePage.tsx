@@ -6,7 +6,6 @@ import { useEffect, useRef, useState } from "react"
 import { useForm } from "react-hook-form"
 import { Button } from "@/components/ui/button"
 import { acceptInvitation } from "@/data/account"
-import { resetPreview } from "@/data/preview/store"
 import { Field } from "@/design/primitives"
 import { focusFirstError } from "@/lib/form"
 import {
@@ -103,7 +102,6 @@ function AcceptInviteForm({ token }: { token: string }) {
     try {
       await signIn(email, new_password)
       queryClient.clear()
-      resetPreview()
       await router.navigate({ to: "/" })
     } catch {
       // The password is set; only the automatic sign-in failed (a busy sign-in limit, say).

@@ -286,6 +286,8 @@ backend/app/
 | `pharmacy` | Dispatch receipt and confirmation | `pharmacy_dispatches`, `dispatch_attempts`, `webhook_events` | `/api/v1/pharmacy/*` | 3 |
 | `documents` | Upload, scan state, presigned URL minting | `documents` | `/api/v1/patients/{id}/documents/*` | 1 |
 | `admin` | Tenant configuration, break-glass, retention operations | `feature_flags`, `configuration`, `retention_jobs` | `/api/v1/admin/*` | 4 |
+| `appointments` | Practitioner roster, calendar bookings, public booking (added in Milestone 2, phase 2C; `docs2/sdlc/04-calendar-and-booking/api.md`) | `appointments`, `appointment_settings` | `/api/v1/practitioners`, `/api/v1/appointments/*`, `/api/v1/public/*` | M2 |
+| `dashboard` | The Today page: one read composed from the `appointments`, `prescriptions` and `tga_approvals` facades (added in Milestone 2, phase 2E; `docs2/sdlc/08-today/api.md`) | none | `/api/v1/dashboard/today` | M2 |
 
 **Legacy `/api/state` — NOT APPLICABLE HERE.** Section 12 records that `grep -rn "api/state" backend
 frontend/src` returns nothing: this endpoint does not exist in this repository. The source contract's

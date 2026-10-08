@@ -32,7 +32,9 @@ export const formatDate = (iso: string) =>
   dayMonthYear.format(iso.length === 10 ? fromIsoDate(iso) : new Date(iso))
 export const formatDayMonth = (iso: string) =>
   dayMonth.format(iso.length === 10 ? fromIsoDate(iso) : new Date(iso))
-export const formatLongDay = (date: Date) => weekdayLong.format(date)
+/** An instant, or a calendar date (`YYYY-MM-DD`) such as the server's clinic day. */
+export const formatLongDay = (date: Date | string) =>
+  weekdayLong.format(typeof date === "string" ? fromIsoDate(date) : date)
 export const formatTime = (iso: string | Date) =>
   time24.format(typeof iso === "string" ? new Date(iso) : iso)
 export const formatDayMonthTime = (iso: string) =>

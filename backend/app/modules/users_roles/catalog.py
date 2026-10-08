@@ -338,6 +338,16 @@ APPOINTMENT_PERMISSIONS: Final[dict[str, str]] = {
     "write": "patient:update",
 }
 
+# The permission each section of the Today page (`GET /api/v1/dashboard/today`, `docs2/sdlc/08-today`)
+# requires. **No new code**: each section is gated by the read permission of the module that owns its
+# data, the same one that module's own list route requires, so the dashboard can never show a caller
+# more than the screens it links to. A section the caller cannot read is withheld, never sent.
+DASHBOARD_SECTION_PERMISSIONS: Final[dict[str, str]] = {
+    "appointments": APPOINTMENT_PERMISSIONS["read"],
+    "scripts": PRESCRIPTION_PERMISSIONS["read"],
+    "approvals": TGA_APPROVAL_READ,
+}
+
 # The system roles whose holders are bookable practitioners, and the practitioner role each implies
 # (R2: a type is booked with a doctor or a nurse). `AUTHORISED_PRESCRIBER` is a doctor for booking
 # purposes. `PRACTICE_OWNER` is deliberately absent: it is an administrative bundle, and an owner who

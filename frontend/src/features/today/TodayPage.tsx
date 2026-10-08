@@ -1,90 +1,188 @@
-import { useQuery, useSuspenseQuery } from "@tanstack/react-query"
-import { Link, useNavigate } from "@tanstack/react-router"
+import { useSuspenseQuery } from "@tanstack/react-query"
+import { Link, type LinkProps, useNavigate } from "@tanstack/react-router"
 import { categoryShort, formLabel } from "@/data/approvals"
-import { todayQuery } from "@/data/dashboard"
-import { previewPractitionersQuery } from "@/data/preview/practitioners"
-import { APPOINTMENT_TYPES } from "@/data/types"
+import { type Today, todayQuery } from "@/data/dashboard"
+import { formatQuantity } from "@/data/scripts"
+import { APPOINTMENT_TYPES, MATCH_REASONS } from "@/data/types"
 import {
   Card,
   CardLink,
   EmptyState,
   Mono,
+  NotForYourRole,
   PageHeader,
   Pill,
-  PreviewBanner,
   StatCard,
 } from "@/design/primitives"
 import {
   AppointmentStatusPill,
   DaysLeftPill,
   GatePill,
+  PrescriptionStatePill,
 } from "@/features/shared/pills"
-import { formatLongDay, formatTime } from "@/lib/format"
+import {
+  daysBetween,
+  formatDate,
+  formatLongDay,
+  formatTime,
+  lastCoveredDay,
+} from "@/lib/format"
 import { currentUserQuery, displayName } from "@/lib/session"
+
+interface AttentionItem {
+  id: string
+  title: string
+  body: string
+  to: LinkProps["to"]
+  search?: LinkProps["search"]
+}
+
+/** What needs a person today, most urgent first, each linking to where it is fixed (R4). */
+const attentionOf = (today: Today): AttentionItem[] => {
+  const items: AttentionItem[] = []
+  for (const a of today.approvals?.expiring_soon.slice(0, 3) ?? []) {
+    const left = daysBetween(today.date, lastCoveredDay(a.valid_to))
+    items.push({
+      id: `exp-${a.id}`,
+      title: `Approval ${left <= 0 ? "ends today" : `ends in ${left} d`} - ${a.patient_display_name ?? "Patient record unavailable"}`,
+      body: `${a.approval_reference} · covered through ${formatDate(lastCoveredDay(a.valid_to))}. Start the renewal now so the patient's scripts never block.`,
+      to: "/approvals",
+      search: { filter: "attention" },
+    })
+  }
+  for (const p of today.approvals?.pending.slice(0, 2) ?? [])
+    items.push({
+      id: `pend-${p.id}`,
+      title: `Approval waiting for verification - ${p.patient_display_name ?? "Patient record unavailable"}`,
+      body: `${p.approval_reference} needs a second clinician to check it against the TGA letter before it can authorise a script.`,
+      to: "/approvals",
+      search: { filter: "pending" },
+    })
+  for (const s of (today.scripts?.actionable ?? [])
+    .filter((s) => s.gate && !s.gate.matched)
+    .slice(0, 2))
+    items.push({
+      id: `blk-${s.id}`,
+      title: `Script blocked - ${s.patient_name ?? "Patient record unavailable"}`,
+      body: `${s.medicine_name}: ${s.gate?.reason_code ? MATCH_REASONS[s.gate.reason_code] : "no covering approval"}.`,
+      to: "/scripts",
+    })
+  return items
+}
+
+const NOT_AVAILABLE = "not available to your role"
 
 export function TodayPage() {
   const { data: me } = useSuspenseQuery(currentUserQuery)
   const { data: today } = useSuspenseQuery(todayQuery)
-  const { data: practitioners = [] } = useQuery(previewPractitionersQuery)
   const navigate = useNavigate()
-  const withName = (id: string) =>
-    practitioners.find((p) => p.id === id)?.name ?? "-"
+  const openPatient = (patientId: string) =>
+    navigate({ to: "/patients/$patientId", params: { patientId } })
+  const { appointments, scripts, approvals } = today
 
-  const done = today.appointments.filter((a) => a.status === "COMPLETED").length
-  const upcoming = today.appointments.filter(
-    (a) => a.status === "BOOKED" || a.status === "CONFIRMED",
-  ).length
+  const count = (state: string) => scripts?.by_state[state] ?? 0
+  const needingAction =
+    count("DRAFT") + count("SIGNED") + count("BLOCKED") + count("FAILED")
+  const status = (s: string) => appointments?.by_status[s] ?? 0
+  const done = status("COMPLETED")
+  const toCome = status("BOOKED") + status("CONFIRMED") + status("ARRIVED")
+  const attention = attentionOf(today)
+  const queuedNotSent =
+    scripts && !scripts.transport_configured ? count("QUEUED") : 0
 
   return (
     <>
       <PageHeader
         title="Today's clinic"
-        subtitle={`${formatLongDay(new Date())} · ${today.appointments.length} appointments · signed in as ${displayName(me)}`}
+        subtitle={[
+          formatLongDay(today.date),
+          appointments
+            ? `${appointments.data.length} appointment${appointments.data.length === 1 ? "" : "s"}`
+            : null,
+          `signed in as ${displayName(me)}`,
+        ]
+          .filter(Boolean)
+          .join(" · ")}
       />
-      <PreviewBanner what="Appointments, scripts and approvals on this page are sample records attached to your real patients." />
 
       <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
-        <StatCard
-          to="/calendar"
-          value={today.appointments.length}
-          label="Appointments today"
-          sub={`${done} done · ${upcoming} to come`}
-        />
-        <StatCard
-          to="/scripts"
-          value={today.scripts_awaiting.length}
-          label="Scripts needing action"
-          sub={
-            today.scripts_blocked
-              ? `${today.scripts_blocked} blocked on approval`
-              : "staging queue"
-          }
-          subTone={today.scripts_blocked ? "danger" : "ink"}
-        />
-        <StatCard
-          to="/approvals"
-          value={today.attention.filter((a) => a.id.startsWith("pend-")).length}
-          label="Approvals to verify"
-          sub="four-eyes check"
-        />
-        <StatCard
-          to="/approvals"
-          value={today.approvals_expiring.length}
-          label={"Approvals expiring ≤\u00a030\u00a0d"}
-          sub={
-            today.approvals_expiring.length ? "renewals needed" : "all current"
-          }
-          subTone={today.approvals_expiring.length ? "danger" : "ok"}
-        />
+        {appointments ? (
+          <StatCard
+            to="/calendar"
+            value={appointments.data.length}
+            label="Appointments today"
+            sub={`${done} done · ${toCome} to come`}
+          />
+        ) : (
+          <StatCard value="-" label="Appointments today" sub={NOT_AVAILABLE} />
+        )}
+        {scripts ? (
+          <StatCard
+            to="/scripts"
+            value={needingAction}
+            label="Scripts needing action"
+            sub={
+              scripts.gate_refused
+                ? // The server asks the gate about at most 100 scripts; past that, say "at least".
+                  `${scripts.gate_refused}${scripts.gate_checked < needingAction ? "+" : ""} blocked on approval`
+                : `${count("DRAFT")} awaiting signature`
+            }
+            subTone={scripts.gate_refused ? "danger" : "ink"}
+          />
+        ) : (
+          <StatCard
+            value="-"
+            label="Scripts needing action"
+            sub={NOT_AVAILABLE}
+          />
+        )}
+        {approvals ? (
+          <>
+            <StatCard
+              to="/approvals"
+              search={{ filter: "pending" }}
+              value={approvals.pending_verification}
+              label="Approvals to verify"
+              sub="four-eyes check"
+            />
+            <StatCard
+              to="/approvals"
+              search={{ filter: "attention" }}
+              value={approvals.expiring}
+              label={`Approvals expiring ≤ ${approvals.expiring_within_days} d`}
+              sub={approvals.expiring ? "renewals needed" : "all current"}
+              subTone={approvals.expiring ? "danger" : "ok"}
+            />
+          </>
+        ) : (
+          <>
+            <StatCard
+              value="-"
+              label="Approvals to verify"
+              sub={NOT_AVAILABLE}
+            />
+            <StatCard
+              value="-"
+              label={"Approvals expiring ≤ 30 d"}
+              sub={NOT_AVAILABLE}
+            />
+          </>
+        )}
       </div>
 
       <div className="mt-3.5 grid gap-3.5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-3.5">
           <Card
             title="Today's schedule"
-            action={<CardLink to="/calendar">Open calendar →</CardLink>}
+            action={
+              appointments ? (
+                <CardLink to="/calendar">Open calendar →</CardLink>
+              ) : null
+            }
           >
-            {today.appointments.length === 0 ? (
+            {!appointments ? (
+              <NotForYourRole />
+            ) : appointments.data.length === 0 ? (
               <EmptyState title="No appointments today." />
             ) : (
               <div className="-mx-1 overflow-x-auto">
@@ -98,17 +196,14 @@ export function TodayPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {today.appointments.map((a) => (
+                    {appointments.data.map((a) => (
                       <tr
                         key={a.id}
                         data-href
-                        onClick={() =>
-                          a.patient_id.startsWith("intake-")
-                            ? navigate({ to: "/calendar" })
-                            : navigate({
-                                to: "/patients/$patientId",
-                                params: { patientId: a.patient_id },
-                              })
+                        tabIndex={0}
+                        onClick={() => openPatient(a.patient_id)}
+                        onKeyDown={(e) =>
+                          e.key === "Enter" && openPatient(a.patient_id)
                         }
                       >
                         <td>
@@ -123,7 +218,7 @@ export function TodayPage() {
                           </div>
                         </td>
                         <td className="whitespace-nowrap text-stone max-sm:hidden">
-                          {withName(a.practitioner_id)}
+                          {a.practitioner_name ?? "-"}
                         </td>
                         <td>
                           <AppointmentStatusPill status={a.status} />
@@ -138,35 +233,54 @@ export function TodayPage() {
 
           <Card
             title="Script staging queue"
-            action={<CardLink to="/scripts">Open queue →</CardLink>}
+            action={
+              scripts ? <CardLink to="/scripts">Open queue →</CardLink> : null
+            }
           >
-            {today.scripts_awaiting.length === 0 ? (
-              <EmptyState title="Nothing waiting for review." />
+            {!scripts ? (
+              <NotForYourRole />
             ) : (
-              <ul className="divide-y divide-line-faint">
-                {today.scripts_awaiting.slice(0, 8).map((s) => (
-                  <li
-                    key={s.id}
-                    className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0"
-                  >
-                    <div className="min-w-0">
-                      <div className="text-[14.5px]">
-                        <span className="font-semibold">{s.patient_name}</span>
-                        <span className="text-stone"> - </span>
-                        {s.product_name}
-                      </div>
-                      <div className="mt-0.5 text-xs text-stone">
-                        Drafted by {s.drafted_by_name} · for {s.prescriber_name}
-                      </div>
-                    </div>
-                    {s.gate && !s.gate.matched ? (
-                      <GatePill gate={s.gate} compact />
-                    ) : (
-                      <Pill tone="warn">Awaiting review</Pill>
-                    )}
-                  </li>
-                ))}
-              </ul>
+              <>
+                {queuedNotSent ? (
+                  <p className="mb-3 rounded-btn bg-info-tint px-3 py-2 text-[13px] text-info-deep">
+                    {queuedNotSent} signed script
+                    {queuedNotSent === 1 ? " is" : "s are"} queued, not sent: no
+                    pharmacy connection is configured yet.
+                  </p>
+                ) : null}
+                {scripts.actionable.length === 0 ? (
+                  <EmptyState title="Nothing waiting for review." />
+                ) : (
+                  <ul className="divide-y divide-line-faint">
+                    {scripts.actionable.map((s) => (
+                      <li
+                        key={s.id}
+                        className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0"
+                      >
+                        <div className="min-w-0">
+                          <div className="text-[14.5px]">
+                            <span className="font-semibold">
+                              {s.patient_name ?? "Patient record unavailable"}
+                            </span>
+                            <span className="text-stone"> - </span>
+                            {s.medicine_name}
+                          </div>
+                          <div className="mt-0.5 text-xs text-stone">
+                            Qty {formatQuantity(s.quantity)} · drafted by{" "}
+                            {s.drafted_by_name ?? "-"} · for{" "}
+                            {s.prescriber_name ?? "-"}
+                          </div>
+                        </div>
+                        {s.gate && !s.gate.matched ? (
+                          <GatePill gate={s.gate} compact />
+                        ) : (
+                          <PrescriptionStatePill state={s.state} />
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
             )}
           </Card>
         </div>
@@ -174,18 +288,30 @@ export function TodayPage() {
         <div className="min-w-0 space-y-3.5">
           <Card
             title="Needs attention"
-            action={<CardLink to="/approvals">Approvals →</CardLink>}
+            action={
+              approvals ? (
+                <CardLink to="/approvals" search={{ filter: "attention" }}>
+                  Approvals →
+                </CardLink>
+              ) : null
+            }
           >
-            {today.attention.length === 0 ? (
+            {!approvals && !scripts ? (
+              <NotForYourRole />
+            ) : attention.length === 0 ? (
               <EmptyState
                 title="All clear."
                 body="Nothing needs your attention right now."
               />
             ) : (
               <ul className="divide-y divide-line-faint">
-                {today.attention.map((item) => (
+                {attention.map((item) => (
                   <li key={item.id} className="py-3 first:pt-0 last:pb-0">
-                    <Link to={item.href} className="group block">
+                    <Link
+                      to={item.to}
+                      search={item.search}
+                      className="group block"
+                    >
                       <div className="flex items-start justify-between gap-3">
                         <span className="text-[14.5px] font-semibold group-hover:text-clay">
                           {item.title}
@@ -204,35 +330,50 @@ export function TodayPage() {
 
           <Card
             title="SAS-B / AP renewals"
-            action={<CardLink to="/approvals">Register →</CardLink>}
+            action={
+              approvals ? (
+                <CardLink to="/approvals" search={{ filter: "attention" }}>
+                  Register →
+                </CardLink>
+              ) : null
+            }
           >
-            {today.approvals_expiring.length === 0 ? (
-              <EmptyState title="No approvals expire in the next 30 days." />
+            {!approvals ? (
+              <NotForYourRole />
+            ) : approvals.expiring_soon.length === 0 ? (
+              <EmptyState
+                title={`No approvals end in the next ${approvals.expiring_within_days} days.`}
+              />
             ) : (
-              <div className="overflow-hidden rounded-inner border border-line">
+              <div className="overflow-x-auto rounded-inner border border-line">
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>Patient</th>
-                      <th>Approval</th>
-                      <th className="text-right">Expires</th>
+                      <th>Patient and approval</th>
+                      <th className="text-right">Days left</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {today.approvals_expiring.map((a) => (
+                    {approvals.expiring_soon.map((a) => (
                       <tr key={a.id}>
-                        <td className="font-medium whitespace-nowrap">
-                          {a.patient_name}
-                        </td>
                         <td>
-                          <Mono>{a.approval_reference}</Mono>
+                          <div className="font-medium">
+                            {a.patient_display_name ??
+                              "Patient record unavailable"}
+                          </div>
                           <div className="text-xs text-stone">
+                            <Mono>{a.approval_reference}</Mono> ·{" "}
                             {categoryShort(a.tga_category)} ·{" "}
                             {formLabel(a.dosage_form)}
                           </div>
                         </td>
                         <td className="text-right">
-                          <DaysLeftPill days={a.days_left} />
+                          <DaysLeftPill
+                            days={daysBetween(
+                              today.date,
+                              lastCoveredDay(a.valid_to),
+                            )}
+                          />
                         </td>
                       </tr>
                     ))}

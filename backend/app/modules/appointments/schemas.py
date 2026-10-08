@@ -89,6 +89,24 @@ class AppointmentRead(BaseModel):
     created_at: datetime
 
 
+class DayAppointment(AppointmentRead):
+    """One booking on a day's schedule, with the practitioner's display name (Today, R2)."""
+
+    #: `None` when the account is no longer this organisation's.
+    practitioner_name: str | None
+
+
+class DaySchedule(BaseModel):
+    """One clinic day's bookings, earliest first, and how many are in each status.
+
+    `by_status` carries every status, zero included, so a client never has to know the vocabulary
+    to draw a count.
+    """
+
+    by_status: dict[AppointmentStatus, int]
+    data: list[DayAppointment]
+
+
 class AppointmentCreate(_IgnoresClientTenantId):
     """`POST /appointments`. The server computes `ends_at` from the type (R2)."""
 

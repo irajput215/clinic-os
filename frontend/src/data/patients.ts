@@ -17,18 +17,6 @@ import type {
  */
 export const PATIENT_PAGE_LIMIT = 25
 
-/** The first page only. Kept for the pickers and name lookups of other features. */
-export const patientsQuery = queryOptions({
-  queryKey: ["patients", "list"],
-  queryFn: async () =>
-    (
-      await PatientsService.listPatients({
-        query: { limit: PATIENT_PAGE_LIMIT },
-      })
-    ).data,
-  staleTime: 30_000,
-})
-
 const fetchPage = async (
   q: string,
   cursor: string | null,

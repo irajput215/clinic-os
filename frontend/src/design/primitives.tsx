@@ -1,6 +1,6 @@
 import { Link, type LinkProps } from "@tanstack/react-router"
-import { FlaskConical, Lock, TriangleAlert } from "lucide-react"
-import type { ReactNode } from "react"
+import { Lock, TriangleAlert } from "lucide-react"
+import { type ReactNode, useId } from "react"
 import { Button } from "@/components/ui/button"
 import { apiRequestId, describeError, isForbidden } from "@/lib/http"
 import { cn } from "@/lib/utils"
@@ -45,8 +45,11 @@ export function Card({
   className?: string
   bodyClassName?: string
 }) {
+  // A titled card is a named region, so assistive technology (and a test) can find it by its title.
+  const titleId = useId()
   return (
     <section
+      aria-labelledby={title ? titleId : undefined}
       className={cn(
         "min-w-0 rounded-card border border-line bg-paper px-5 py-[18px] shadow-card",
         className,
@@ -55,7 +58,9 @@ export function Card({
       {title || action ? (
         <div className="mb-3.5 flex items-center justify-between gap-3">
           {title ? (
-            <h2 className="text-base font-semibold text-ink">{title}</h2>
+            <h2 id={titleId} className="text-base font-semibold text-ink">
+              {title}
+            </h2>
           ) : (
             <span />
           )}
@@ -83,12 +88,14 @@ export function StatCard({
   sub,
   subTone = "ink",
   to,
+  search,
 }: {
   value: ReactNode
   label: string
   sub?: ReactNode
   subTone?: "ink" | "danger" | "ok"
   to?: LinkProps["to"]
+  search?: LinkProps["search"]
 }) {
   const body = (
     <>
@@ -116,6 +123,7 @@ export function StatCard({
   return to ? (
     <Link
       to={to}
+      search={search}
       className={cn(
         cls,
         "hover:-translate-y-px hover:border-stone-faint hover:shadow-pop",
@@ -211,6 +219,21 @@ export function EmptyState({
   )
 }
 
+/** The role boundary: what a `403`, or a section the server withheld, looks like. */
+export function NotForYourRole() {
+  return (
+    <div className="flex items-start gap-3 rounded-inner border border-line bg-oat px-4 py-3.5 text-sm text-stone">
+      <Lock className="mt-0.5 size-4 shrink-0" />
+      <p>
+        <span className="font-semibold text-ink">
+          Not available to your role.
+        </span>{" "}
+        Ask your practice manager if you need access.
+      </p>
+    </div>
+  )
+}
+
 /** A failed read: `403` explains the role boundary, anything else offers a retry. */
 export function ErrorState({
   error,
@@ -219,18 +242,7 @@ export function ErrorState({
   error: unknown
   onRetry?: () => void
 }) {
-  if (isForbidden(error))
-    return (
-      <div className="flex items-start gap-3 rounded-inner border border-line bg-oat px-4 py-3.5 text-sm text-stone">
-        <Lock className="mt-0.5 size-4 shrink-0" />
-        <p>
-          <span className="font-semibold text-ink">
-            Not available to your role.
-          </span>{" "}
-          Ask your practice manager if you need access.
-        </p>
-      </div>
-    )
+  if (isForbidden(error)) return <NotForYourRole />
   return (
     <div className="flex items-start justify-between gap-3 rounded-inner border border-danger/25 bg-danger-tint px-4 py-3.5 text-sm text-danger-deep">
       <div className="flex items-start gap-3">
@@ -249,31 +261,6 @@ export function ErrorState({
           Try again
         </Button>
       ) : null}
-    </div>
-  )
-}
-
-/** Shown on every screen that reads preview data, so it is never mistaken for clinical data. */
-export function PreviewBanner({
-  what,
-  standalone = false,
-}: {
-  what: string
-  /** `what` already says everything (the public page); skip the backend explanation. */
-  standalone?: boolean
-}) {
-  return (
-    <div
-      role="note"
-      className="mb-5 flex items-start gap-3 rounded-inner border border-dashed border-warn/40 bg-warn-tint/60 px-4 py-3 text-[13px] text-warn-deep"
-    >
-      <FlaskConical className="mt-0.5 size-4 shrink-0" />
-      <p>
-        <span className="font-semibold">Preview data.</span> {what}
-        {standalone
-          ? null
-          : " The backend module for this isn't merged yet, so changes here stay in this browser tab."}
-      </p>
     </div>
   )
 }

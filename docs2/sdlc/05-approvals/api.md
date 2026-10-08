@@ -9,7 +9,7 @@
 | `POST` | `/api/v1/tga-approvals` | same | `TgaApprovalCreate`, `extra=forbid`, two-year and forward-window checks |
 | `POST` | `/api/v1/tga-approvals/{id}/verify` | same | `{tga_application_number}`, four-eyes |
 | `POST` | `/api/v1/tga-approvals/{id}/revoke` | same | `{reason_code}` |
-| `POST` | `/api/v1/tga-approvals/match` | same | The gate lookup. Not called by the app yet: feature 07 is preview, and its server will run the gate itself |
+| `POST` | `/api/v1/tga-approvals/match` | same | The gate lookup. Not called by the app: the prescriptions module runs the gate itself, inside the sign and dispatch transactions (feature 07) |
 
 ## `GET /api/v1/tga-approvals` - the practice-wide register
 

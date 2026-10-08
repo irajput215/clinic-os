@@ -12,7 +12,7 @@ Prefilled SOAP sections plus a required reason.
 
 ## States
 
-Preview banner, history skeleton, empty history, retry on failure. Sign and amend refusals are shown in a toast with the server's reason.
+History skeleton, empty history, retry on failure. Sign and amend refusals are shown in a toast with the server's reason.
 
 ## Data flow
 

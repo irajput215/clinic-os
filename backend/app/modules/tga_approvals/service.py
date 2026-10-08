@@ -85,6 +85,7 @@ from app.modules.tga_approvals.schemas import (
     SupersedeChainLink,
     TgaApprovalCreate,
     TgaApprovalDetail,
+    TgaApprovalDigest,
     TgaApprovalRead,
     TgaApprovalRegister,
     TgaApprovalRegisterCounts,
@@ -123,6 +124,7 @@ __all__ = [
     "list_approvals",
     "list_register",
     "match_approval",
+    "needs_action_digest",
     "revoke_approval",
     "service_date_today",
     "supersede_approval",
@@ -735,6 +737,84 @@ def list_register(
             }
         ),
     )
+
+
+def needs_action_digest(
+    session: Session,
+    *,
+    tenant_id: uuid.UUID,
+    limit: int,
+    client_tenant_id_supplied: bool = False,
+) -> TgaApprovalDigest:
+    """The register's "Needs action" set at a glance, on the caller's transaction (Today page).
+
+    Pending approvals (oldest first) and `ACTIVE` approvals lapsing within the register's default
+    window (soonest first), each list at most `limit`, with the practice's two totals. "Today" is the
+    database clock in `Australia/Sydney` (T2-10), and "expiring" is `last_expiring_valid_to`, the
+    same D-006 bound the register uses, so the two screens can never disagree.
+
+    Audited exactly as the register is: one `tga_approval.read` on this transaction, with the
+    register filter it is equivalent to and the number of rows returned. A `tenant_id` the client
+    sent is written down on that event as `CLIENT_TENANT_ID_IGNORED` (INV-1).
+    """
+    _check_limit(limit)
+    window = DEFAULT_EXPIRING_WITHIN_DAYS
+    bound = last_expiring_valid_to(
+        today=service_date_today(session), within_days=window
+    )
+    tenant = col(TgaApproval.tenant_id) == tenant_id
+    pending_only = col(TgaApproval.state) == "PENDING"
+
+    def total(condition: ColumnElement[bool]) -> int:
+        return session.exec(
+            select(func.count()).select_from(TgaApproval).where(tenant, condition)
+        ).one()
+
+    pending = session.exec(
+        select(TgaApproval)
+        .where(tenant, pending_only)
+        .order_by(col(TgaApproval.created_at), col(TgaApproval.id))
+        .limit(limit)
+    ).all()
+    expiring = session.exec(
+        select(TgaApproval)
+        .where(tenant, _expiring(bound))
+        .order_by(col(TgaApproval.valid_to), col(TgaApproval.id))
+        .limit(limit)
+    ).all()
+    names = patients_service.display_names(
+        session,
+        tenant_id=tenant_id,
+        patient_ids=[row.patient_id for row in (*pending, *expiring)],
+    )
+
+    def rows(found: Sequence[TgaApproval]) -> list[TgaApprovalRegisterRow]:
+        return [
+            TgaApprovalRegisterRow(
+                **_read(row).model_dump(),
+                patient_display_name=names.get(row.patient_id),
+            )
+            for row in found
+        ]
+
+    digest = TgaApprovalDigest(
+        pending_verification=total(pending_only),
+        expiring=total(_expiring(bound)),
+        expiring_within_days=window,
+        pending=rows(pending),
+        expiring_soon=rows(expiring),
+    )
+    _record(
+        session,
+        action=APPROVAL_READ,
+        resource_id=None,
+        reason=CLIENT_TENANT_ID_IGNORED if client_tenant_id_supplied else None,
+        payload={
+            "query_filters": {"state": ["PENDING"], "expiring_within_days": window},
+            "result_count": len(pending) + len(expiring),
+        },
+    )
+    return digest
 
 
 # --------------------------------------------------------------------------------------------

@@ -5,7 +5,7 @@ import { Loader2, ShieldAlert, ShieldCheck } from "lucide-react"
 import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { toast } from "sonner"
-import type { PatientRead, PrescriberRead } from "@/client/types.gen"
+import type { PrescriberRead } from "@/client/types.gen"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -22,11 +22,6 @@ import {
   TGA_CATEGORIES,
 } from "@/data/approvals"
 import {
-  patientName,
-  patientQuickFindQuery,
-  useSearchTerm,
-} from "@/data/patients"
-import {
   formatQuantity,
   type Prescription,
   prescribersQuery,
@@ -34,13 +29,9 @@ import {
 } from "@/data/scripts"
 import { MATCH_REASONS } from "@/data/types"
 import { ErrorState, Field, Mono } from "@/design/primitives"
+import { PatientPicker } from "@/features/shared/PatientPicker"
 import { focusFirstError } from "@/lib/form"
-import {
-  clinicToday,
-  formatDate,
-  lastCoveredDay,
-  patientRef,
-} from "@/lib/format"
+import { clinicToday, formatDate, lastCoveredDay } from "@/lib/format"
 import { describeError, refusalCode, validationMessages } from "@/lib/http"
 import { currentUserQuery } from "@/lib/session"
 import { uuid } from "@/lib/uuid"
@@ -142,85 +133,6 @@ function StageScriptForm({
   )
 }
 
-/**
- * The patient, found by the server's search (name, date of birth or PT- reference), so a practice
- * of any size can stage for anyone, not only its first page of patients. The term travels in a
- * request body, never a URL. The chosen patient stays shown while the search changes.
- */
-function PatientPicker({
-  value,
-  onChange,
-  error,
-}: {
-  value: string
-  onChange: (id: string) => void
-  error?: string
-}) {
-  const [find, setFind] = useState("")
-  const [chosen, setChosen] = useState<PatientRead | null>(null)
-  const term = useSearchTerm(find)
-  const matches = useQuery(patientQuickFindQuery(term))
-  const options = [
-    ...(chosen && value === chosen.id ? [chosen] : []),
-    ...(matches.data?.data ?? []).filter((p) => p.id !== chosen?.id),
-  ]
-  return (
-    <fieldset className="grid gap-2 sm:col-span-2">
-      <Field label="Patient" htmlFor="sc-patient-find" error={error}>
-        <input
-          id="sc-patient-find"
-          type="search"
-          className="field-input"
-          autoComplete="off"
-          placeholder="Name, date of birth or PT- reference"
-          value={find}
-          onChange={(e) => setFind(e.target.value)}
-        />
-      </Field>
-      <div
-        role="radiogroup"
-        aria-label="Matching patients"
-        className="grid max-h-48 gap-1 overflow-y-auto rounded-inner border border-line p-1.5"
-      >
-        {matches.isError ? (
-          <p className="px-2 py-1.5 text-[13px] text-danger-deep">
-            {describeError(matches.error)}
-          </p>
-        ) : matches.isPending && options.length === 0 ? (
-          <p className="px-2 py-1.5 text-[13px] text-stone">Searching…</p>
-        ) : options.length === 0 ? (
-          <p className="px-2 py-1.5 text-[13px] text-stone">
-            No patient matches that.
-          </p>
-        ) : (
-          options.map((p) => (
-            <label
-              key={p.id}
-              className="flex cursor-pointer items-center gap-2.5 rounded-btn px-2 py-1.5 text-sm hover:bg-oat"
-            >
-              <input
-                type="radio"
-                name="patient_id"
-                value={p.id}
-                checked={value === p.id}
-                onChange={() => {
-                  setChosen(p)
-                  onChange(p.id)
-                }}
-              />
-              <span className="font-medium">{patientName(p)}</span>
-              <span className="text-stone">{formatDate(p.date_of_birth)}</span>
-              <Mono className="ml-auto text-[11.5px] text-stone">
-                {patientRef(p.id)}
-              </Mono>
-            </label>
-          ))
-        )}
-      </div>
-    </fieldset>
-  )
-}
-
 function StageScriptFields({
   patientId,
   onClose,
@@ -290,6 +202,8 @@ function StageScriptFields({
       <div className="grid gap-4 sm:grid-cols-2">
         {!patientId ? (
           <PatientPicker
+            id="sc-patient-find"
+            className="sm:col-span-2"
             value={form.watch("patient_id")}
             onChange={(id) =>
               form.setValue("patient_id", id, { shouldValidate: true })

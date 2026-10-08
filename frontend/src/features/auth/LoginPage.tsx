@@ -5,7 +5,6 @@ import { Loader2 } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useForm } from "react-hook-form"
 import { Button } from "@/components/ui/button"
-import { resetPreview } from "@/data/preview/store"
 import { Field } from "@/design/primitives"
 import { focusFirstError } from "@/lib/form"
 import { describeError, httpStatus } from "@/lib/http"
@@ -43,7 +42,6 @@ export function LoginPage({ redirectTo }: { redirectTo: string }) {
     try {
       await signIn(username, password)
       queryClient.clear()
-      resetPreview()
       await router.navigate({ to: redirectTo })
     } catch (error) {
       const status = httpStatus(error)
