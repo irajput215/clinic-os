@@ -178,10 +178,17 @@ admin_rate_limit = rate_limit(scope="admin", limit=20, window_seconds=60)
 # shell asks for it on every page load, and in the administrative class it spent the budget an
 # administrator needs for the administration screen itself.
 read_rate_limit = rate_limit(scope="read", limit=300, window_seconds=60)
-# Organisation signup. Unauthenticated, and every success creates a tenant, so it is limited like
-# login (20/min): the explicit "already exists" answer is a deliberate usability trade (the form says
-# which field to fix), and this limit is what bounds how fast that answer can be harvested.
+# Organisation signup (D-007). Unauthenticated, and every request sends an email, so it is limited
+# like login (20/min per client address). Resending a request's email and spending its link each have
+# a window of their own at the same rate: the link is a signed token, so the verify limit bounds load,
+# not guessing.
 signup_rate_limit = rate_limit(scope="signup", limit=20, window_seconds=60)
+signup_resend_rate_limit = rate_limit(
+    scope="signup-resend", limit=20, window_seconds=60
+)
+signup_verify_rate_limit = rate_limit(
+    scope="signup-verify", limit=20, window_seconds=60
+)
 # Patient search (`POST /api/v1/patients/search`). An interim value: the threat model leaves "Rate-limit
 # values for the search and duplicate-candidate routes" open (`docs/features/05-patients/
 # 04-threat-model.md`, T-05.1 and T-05.13). 120/min per session lets the top-bar quick-find search as a

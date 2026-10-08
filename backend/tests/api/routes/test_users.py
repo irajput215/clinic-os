@@ -9,6 +9,7 @@ from app import crud
 from app.core.config import settings
 from app.core.security import verify_password
 from app.models import User, UserCreate
+from tests.utils.signup import link_token, request_signup, sign_up
 from tests.utils.user import create_random_user
 from tests.utils.utils import random_email, random_lower_string
 
@@ -344,12 +345,11 @@ def test_register_user(
     password = random_lower_string()
     full_name = random_lower_string()
     data = {"email": username, "password": password, "full_name": full_name}
-    r = client.post(
-        f"{settings.API_V1_STR}/users/signup",
-        json=data,
-    )
-    assert r.status_code == 200
-    created_user = r.json()
+    # D-007: the account exists once the emailed link is used, with the password chosen at signup.
+    signed_up = sign_up(client, data)
+    me = client.get(f"{settings.API_V1_STR}/users/me", headers=signed_up.headers)
+    assert me.status_code == 200
+    created_user = me.json()
     assert created_user["email"] == username
     assert created_user["full_name"] == full_name
 
@@ -362,23 +362,25 @@ def test_register_user(
     assert verified
 
 
-def test_register_user_already_exists_error(
+def test_register_user_with_a_taken_address_is_not_an_error(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """D-007: a taken address gets the signup's one answer, and its owner a notice, never a link.
+
+    The full equivalence (status, body, statements) is `tests/users/test_signup.py`.
+    """
     monkeypatch.setattr(settings, "USERS_OPEN_REGISTRATION", True)
-    password = random_lower_string()
-    full_name = random_lower_string()
     data = {
         "email": settings.FIRST_SUPERUSER,
-        "password": password,
-        "full_name": full_name,
+        "password": random_lower_string(),
+        "full_name": random_lower_string(),
     }
-    r = client.post(
-        f"{settings.API_V1_STR}/users/signup",
-        json=data,
-    )
-    assert r.status_code == 400
-    assert r.json()["detail"] == "The user with this email already exists in the system"
+    r, sent = request_signup(client, data)
+    assert r.status_code == 202
+    assert set(r.json()) == {"request_id", "expires_in_hours"}
+    (notice,) = sent
+    assert notice["email_to"] == settings.FIRST_SUPERUSER
+    assert link_token(notice["html_content"]) is None
 
 
 def test_update_user(

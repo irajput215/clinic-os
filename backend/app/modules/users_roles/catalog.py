@@ -335,6 +335,9 @@ INVITATION_NOT_PENDING: Final[str] = "INVITATION_NOT_PENDING"
 # The `change` a resend carries on its `user.create` event, which is what tells it apart from the
 # account's creation (`05-data-and-audit.md`, "Resend").
 INVITATION_RESENT: Final[str] = "INVITATION_RESENT"
+# The one answer for an organisation-signup link that is tampered with, expired, replaced by a
+# resend, already used, or whose address has an account by now (D-007).
+SIGNUP_LINK_INVALID: Final[str] = "SIGNUP_LINK_INVALID"
 
 # The permission each appointments route requires (`docs2/sdlc/04-calendar-and-booking/api.md`, agreed
 # 2026-10-07). **No new code**: a booking is part of a patient's care, so reading the calendar is

@@ -181,6 +181,34 @@ so the literal `me` segment is never captured by `/users/{user_id}/permissions` 
   (`EMAIL_NOT_CONFIGURED`: nothing changes); fails closed = yes
 - Step-up: deferred, as for the invitation - blocked by D-003
 
+#### `POST /api/v1/users/signup`
+- Authentication: No - open registration (`USERS_OPEN_REGISTRATION`); refused `403` when it is off
+- Permission: none; Tenant scope: none - no organisation exists until the link is used
+- Input schema: `OrganisationSignup` - `{email, password, full_name?, clinic_name?}`; any other key `422`
+- Output schema: `SignupAccepted` - `{request_id, expires_in_hours}`, `202`, **the same for every
+  address**: a new one is emailed a verification link, one that has an account a notice (D-007)
+- Audit: none - no tenant exists, and the audit log is tenant-scoped; the request row is the record
+- Rate limit: 20/min per client address (`signup`)
+- Errors: `403` (registration closed), `422`, `429`, `503` (`EMAIL_NOT_CONFIGURED`: nothing is
+  written); fails closed = yes
+
+#### `POST /api/v1/users/signup/resend`
+- Authentication: No; the body names one signup attempt, `{request_id}`
+- Output schema: `Message`, `202`, whatever the id: the attempt's email again with a fresh link, or
+  nothing for an unknown, expired or used attempt or after five emails
+- Audit: none, as for the signup; Rate limit: 20/min per client address (`signup-resend`)
+- Errors: `422`, `429`, `503` (`EMAIL_NOT_CONFIGURED`); fails closed = yes
+
+#### `POST /api/v1/users/signup/verify`
+- Authentication: No - the emailed token is the credential: purpose-bound, expiring, single use
+- Output schema: `Token`, `200`: the organisation, the account and its Practice Owner grant now
+  exist, and the person is signed in
+- Audit: `user.create` `SUCCESS` in the new tenant (target and actor the new account, `added =
+  [PRACTICE_OWNER]`), on the creating transaction
+- Rate limit: 20/min per client address (`signup-verify`)
+- Errors: `400` (`SIGNUP_LINK_INVALID`: tampered, expired, replaced, used, a notice, or the address
+  has an account by now - one answer), `422`, `429`; fails closed = yes
+
 #### `POST /api/v1/users/invitations/accept`
 - Authentication: No - the emailed token is the credential. It is purpose-bound, expires after
   `STAFF_INVITATION_EXPIRE_HOURS` and is single use (`invitations.py`)
@@ -216,24 +244,36 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 
 from app.api.deps import ActorDep
 from app.core.config import settings
-from app.core.rate_limit import admin_rate_limit, rate_limit
-from app.modules.users_roles import service
+from app.core.rate_limit import (
+    admin_rate_limit,
+    rate_limit,
+    signup_rate_limit,
+    signup_resend_rate_limit,
+    signup_verify_rate_limit,
+)
+from app.models import Message, Token
+from app.modules.users_roles import service, signup
 from app.modules.users_roles.catalog import (
     EMAIL_NOT_CONFIGURED,
     EMAIL_UNAVAILABLE,
     INVITATION_INVALID,
     INVITATION_NOT_PENDING,
     LAST_ADMINISTRATOR,
+    SIGNUP_LINK_INVALID,
     USERS_ROLES_PERMISSIONS,
 )
 from app.modules.users_roles.schemas import (
     InvitationAccept,
     InvitationAccepted,
+    OrganisationSignup,
     OwnPermissionsRead,
     PermissionsPublic,
     RoleAssignmentCreate,
     RoleRead,
     RolesPublic,
+    SignupAccepted,
+    SignupResend,
+    SignupVerify,
     StaffInvite,
     StaffMemberRead,
     StaffPublic,
@@ -271,6 +311,10 @@ invitations_router = APIRouter(
     tags=["users"],
     dependencies=[Depends(invitation_accept_rate_limit)],
 )
+
+# Organisation signup (D-007). Unauthenticated; each route carries its own per-address limit, so
+# the router has none of its own. Mounted before the legacy `/users/{user_id}` routes.
+signup_router = APIRouter(prefix="/users/signup", tags=["users"])
 
 MAX_STAFF_PAGE_SIZE = 100
 
@@ -535,6 +579,97 @@ def resend_invitation(*, actor: ActorDep, user_id: uuid.UUID) -> StaffMemberRead
         )
     assert result.member is not None
     return result.member
+
+
+def _require_open_registration_and_mail() -> None:
+    """Configuration only, decided before the address is read, so it discloses nothing about one."""
+    if not settings.USERS_OPEN_REGISTRATION:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Open user registration is forbidden on this server",
+        )
+    if not settings.emails_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": EMAIL_NOT_CONFIGURED,
+                "message": (
+                    "Outgoing email is not configured, so new organisations can't be "
+                    "registered on this server."
+                ),
+            },
+        )
+
+
+@signup_router.post(
+    "",
+    response_model=SignupAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(signup_rate_limit)],
+    responses={
+        status.HTTP_403_FORBIDDEN: {"description": "Open registration is off"},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "description": "Outgoing mail is not configured, so nothing is created"
+        },
+    },
+)
+def register_user(*, body: OrganisationSignup) -> SignupAccepted:
+    """Register an organisation: email a link that creates it (D-007).
+
+    The answer is the same for every address. A new address is emailed a single-use link that
+    creates the organisation and signs its owner in; an address that already has an account is
+    emailed a notice instead. Nothing exists until the link is used.
+    """
+    _require_open_registration_and_mail()
+    requested = signup.request_signup(
+        email=str(body.email),
+        password=body.password,
+        full_name=body.full_name,
+        clinic_name=body.clinic_name,
+    )
+    return SignupAccepted(
+        request_id=requested.request_id,
+        expires_in_hours=settings.SIGNUP_VERIFICATION_EXPIRE_HOURS,
+    )
+
+
+@signup_router.post(
+    "/resend",
+    response_model=Message,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(signup_resend_rate_limit)],
+)
+def resend_signup_email(*, body: SignupResend) -> Message:
+    """Send a signup's email again with a fresh link. The same answer whatever the id."""
+    _require_open_registration_and_mail()
+    signup.resend_signup_email(request_id=body.request_id)
+    return Message(
+        message="If that signup is still waiting, its email is on its way again."
+    )
+
+
+@signup_router.post(
+    "/verify",
+    response_model=Token,
+    dependencies=[Depends(signup_verify_rate_limit)],
+    responses={
+        status.HTTP_400_BAD_REQUEST: {
+            "description": "The link is invalid, expired, replaced or already used"
+        }
+    },
+)
+def verify_signup(*, body: SignupVerify) -> Token:
+    """Spend a signup link: create the organisation and its owner, and sign the owner in."""
+    access_token = signup.verify_signup(token=body.token)
+    if access_token is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": SIGNUP_LINK_INVALID,
+                "message": "This link is invalid, has expired or was already used.",
+            },
+        )
+    return Token(access_token=access_token)
 
 
 @invitations_router.post(

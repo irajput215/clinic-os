@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.core.db import engine, tenant_transaction
 from app.models import UserCreate
 from app.modules.users_roles.models import Role, UserRole
+from tests.utils.signup import sign_up
 
 API = settings.API_V1_STR
 
@@ -51,7 +52,11 @@ class RbacApi:
         return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
     def register_tenant(self, *, clinic_name: str | None = None) -> ActorSession:
-        """Register an organisation through the real signup route, then sign in as its owner."""
+        """Register an organisation through the real signup flow (the emailed link included).
+
+        The session is the one verification answers, so the owner is signed in exactly as a person
+        who followed the link is.
+        """
         email = f"rbac-{uuid.uuid4()}@example.com"
         payload: dict[str, Any] = {
             "email": email,
@@ -60,19 +65,16 @@ class RbacApi:
         }
         if clinic_name is not None:
             payload["clinic_name"] = clinic_name
-        created = self.client.post(f"{API}/users/signup", json=payload)
-        assert created.status_code == 200, created.text
-        body = created.json()
-        tenant_id = uuid.UUID(body["tenant_id"]) if body["tenant_id"] else None
-        if tenant_id is not None:
-            self._tenant_ids.append(tenant_id)
+        owner = sign_up(self.client, payload)
+        if owner.tenant_id is not None:
+            self._tenant_ids.append(owner.tenant_id)
         return ActorSession(
-            tenant_id=tenant_id,
-            user_id=uuid.UUID(body["id"]),
+            tenant_id=owner.tenant_id,
+            user_id=owner.user_id,
             email=email,
             password=PASSWORD,
-            role_code="PRACTICE_OWNER" if tenant_id is not None else None,
-            headers=self._login(email, PASSWORD),
+            role_code="PRACTICE_OWNER" if owner.tenant_id is not None else None,
+            headers=owner.headers,
         )
 
     def add_actor(

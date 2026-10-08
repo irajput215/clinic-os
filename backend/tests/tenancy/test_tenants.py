@@ -28,6 +28,7 @@ from app.modules.identity_tenancy.service import (
 )
 from app.modules.users_roles import service as users_roles_service
 from app.modules.users_roles.models import Role, RolePermission, UserRole
+from tests.utils.signup import VERIFY_URL, link_token, request_signup, sign_up
 
 # Every table one organisation signup writes. The atomicity test compares these counts.
 _COUNTED_TABLES = ("tenants", "roles", "role_permissions", "user_roles", '"user"')
@@ -174,22 +175,19 @@ def test_signup_registers_an_organisation(
     monkeypatch.setattr(settings, "USERS_OPEN_REGISTRATION", True)
     clinic_name = f"Northside Clinic {uuid.uuid4()}"
 
-    response = client.post(
-        f"{settings.API_V1_STR}/users/signup",
-        json={
+    owner = sign_up(
+        client,
+        {
             "email": f"admin-{uuid.uuid4()}@example.com",
             "password": "correct-horse-battery",
             "full_name": "Clinic Administrator",
             "clinic_name": clinic_name,
         },
     )
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["tenant_id"] is not None
+    assert owner.tenant_id is not None
 
     with Session(engine) as session:
-        tenant = session.get(Tenant, uuid.UUID(body["tenant_id"]))
+        tenant = session.get(Tenant, owner.tenant_id)
         assert tenant is not None
         assert tenant.legal_name == clinic_name
         assert tenant.slug == slugify(clinic_name)
@@ -209,13 +207,11 @@ def test_two_clinics_may_share_a_name(
 
     slugs = []
     for _ in range(2):
-        response = client.post(
-            f"{settings.API_V1_STR}/users/signup",
-            json={**payload, "email": f"admin-{uuid.uuid4()}@example.com"},
+        owner = sign_up(
+            client, {**payload, "email": f"admin-{uuid.uuid4()}@example.com"}
         )
-        assert response.status_code == 200
         with Session(engine) as session:
-            tenant = session.get(Tenant, uuid.UUID(response.json()["tenant_id"]))
+            tenant = session.get(Tenant, owner.tenant_id)
             assert tenant is not None
             slugs.append(tenant.slug)
 
@@ -231,18 +227,17 @@ def test_slug_suffixes_are_deterministic(
 
     slugs = []
     for _ in range(3):
-        response = client.post(
-            f"{settings.API_V1_STR}/users/signup",
-            json={
+        owner = sign_up(
+            client,
+            {
                 "email": f"admin-{uuid.uuid4()}@example.com",
                 "password": "correct-horse-battery",
                 "full_name": "Clinic Administrator",
                 "clinic_name": "Deterministic Clinic",
             },
         )
-        assert response.status_code == 200
         with Session(engine) as session:
-            tenant = session.get(Tenant, uuid.UUID(response.json()["tenant_id"]))
+            tenant = session.get(Tenant, owner.tenant_id)
             assert tenant is not None
             slugs.append(tenant.slug)
 
@@ -279,27 +274,35 @@ def test_a_failure_after_the_account_is_created_leaves_nothing_behind(
     grant — so the test proves the *whole* unit rolls back: the organisation, the account, the seven
     role bundles and the grant. Before this change the tenant was committed before the account and the
     grant ran in a third transaction, so this failure left an organisation with no administrator.
+
+    Since D-007 that unit runs when the emailed link is used, so the failure is injected there, and
+    the link survives it: the request is untouched and the same link still works afterwards.
     """
     monkeypatch.setattr(settings, "USERS_OPEN_REGISTRATION", True)
     email = f"admin-{uuid.uuid4()}@example.com"
     clinic_name = f"Halfway Clinic {uuid.uuid4()}"
-    before = _row_counts()
 
     def explode(*_args: object, **_kwargs: object) -> None:
         raise RuntimeError("injected failure after the account row was written")
 
-    monkeypatch.setattr(users_roles_service, "provision_tenant_in_transaction", explode)
+    requested, sent = request_signup(
+        client,
+        {
+            "email": email,
+            "password": "correct-horse-battery",
+            "full_name": "Clinic Administrator",
+            "clinic_name": clinic_name,
+        },
+    )
+    assert requested.status_code == 202
+    (message,) = sent
+    token = link_token(message["html_content"])
+    before = _row_counts()
 
-    with pytest.raises(RuntimeError, match="injected failure"):
-        client.post(
-            f"{settings.API_V1_STR}/users/signup",
-            json={
-                "email": email,
-                "password": "correct-horse-battery",
-                "full_name": "Clinic Administrator",
-                "clinic_name": clinic_name,
-            },
-        )
+    with monkeypatch.context() as patched:
+        patched.setattr(users_roles_service, "provision_tenant_in_transaction", explode)
+        with pytest.raises(RuntimeError, match="injected failure"):
+            client.post(VERIFY_URL, json={"token": token})
 
     # Every table the registration writes is back where it started: no orphan organisation, account,
     # role, permission bundle or grant.
@@ -311,6 +314,9 @@ def test_a_failure_after_the_account_is_created_leaves_nothing_behind(
         )
         assert session.exec(select(User).where(User.email == email)).first() is None
 
+    # The request survived the failed attempt, so the same link still creates the organisation.
+    assert client.post(VERIFY_URL, json={"token": token}).status_code == 200
+
 
 def test_signup_without_a_clinic_name_creates_an_unattached_account(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
@@ -318,14 +324,13 @@ def test_signup_without_a_clinic_name_creates_an_unattached_account(
     """The platform administrator's path: an account with no organisation."""
     monkeypatch.setattr(settings, "USERS_OPEN_REGISTRATION", True)
 
-    response = client.post(
-        f"{settings.API_V1_STR}/users/signup",
-        json={
+    operator = sign_up(
+        client,
+        {
             "email": f"staff-{uuid.uuid4()}@example.com",
             "password": "correct-horse-battery",
             "full_name": "Platform Operator",
         },
     )
 
-    assert response.status_code == 200
-    assert response.json()["tenant_id"] is None
+    assert operator.tenant_id is None

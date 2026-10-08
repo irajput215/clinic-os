@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from app.core.config import settings
 from app.main import app
+from tests.utils.signup import request_signup
 
 RECOVERY_URL = f"{settings.API_V1_STR}/password-recovery/nobody@example.com"
 RESET_URL = f"{settings.API_V1_STR}/reset-password/"
@@ -63,8 +64,8 @@ def test_reset_password_is_rate_limited(client: TestClient) -> None:
 
 
 def test_signup_is_rate_limited(client: TestClient) -> None:
-    """Signup is unauthenticated, creates a tenant and answers a taken email explicitly, so it is
-    limited like login: the twenty-first attempt in a minute is refused before it runs."""
+    """Signup is unauthenticated and every attempt sends an email, so it is limited like login:
+    the twenty-first attempt in a minute is refused before it runs (D-007)."""
     payload = {
         "email": settings.FIRST_SUPERUSER,
         "password": "correct-horse-battery-staple",
@@ -72,10 +73,11 @@ def test_signup_is_rate_limited(client: TestClient) -> None:
     }
 
     for _ in range(20):
-        response = client.post(f"{settings.API_V1_STR}/users/signup", json=payload)
-        assert response.status_code == 400
+        response, _sent = request_signup(client, payload)
+        assert response.status_code == 202
 
-    blocked = client.post(f"{settings.API_V1_STR}/users/signup", json=payload)
+    blocked, sent = request_signup(client, payload)
+    assert sent == [], "a refused attempt still sent an email"
 
     assert blocked.status_code == 429
     assert blocked.json()["detail"] == "Too many requests"

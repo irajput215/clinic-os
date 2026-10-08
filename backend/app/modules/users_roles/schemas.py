@@ -242,3 +242,47 @@ class InvitationAccepted(SQLModel):
     model_config = SQLModelConfig(extra="forbid")
 
     email: str
+
+
+class OrganisationSignup(SQLModel):
+    """The body of `POST /api/v1/users/signup` (D-007). Strict: any other key is `422`.
+
+    The field rules are the ones `UserRegister` had (password 8 to 128 characters, the rest at most
+    255). `clinic_name` registers an organisation; without it the account belongs to none, which is
+    what a platform administrator registers.
+    """
+
+    model_config = SQLModelConfig(extra="forbid")
+
+    email: EmailStr = Field(max_length=255)
+    password: str = Field(min_length=8, max_length=128)
+    full_name: str | None = Field(default=None, max_length=255)
+    clinic_name: str | None = Field(default=None, max_length=255)
+
+
+class SignupAccepted(SQLModel):
+    """The one answer to a signup, whatever the address: this attempt's id and the link's window.
+
+    `request_id` identifies the attempt (for "Send the email again"), never an account.
+    """
+
+    model_config = SQLModelConfig(extra="forbid")
+
+    request_id: uuid.UUID
+    expires_in_hours: int
+
+
+class SignupResend(SQLModel):
+    """The body of `POST /api/v1/users/signup/resend`."""
+
+    model_config = SQLModelConfig(extra="forbid")
+
+    request_id: uuid.UUID
+
+
+class SignupVerify(SQLModel):
+    """The body of `POST /api/v1/users/signup/verify`: the emailed token, only ever in a body."""
+
+    model_config = SQLModelConfig(extra="forbid")
+
+    token: str = Field(min_length=1, max_length=2048)

@@ -84,6 +84,10 @@ class Settings(BaseSettings):
     # not accepted inside the configured window"). The design does not fix the window; 72 hours lets
     # an invitation sent on a Friday be accepted on the Monday.
     STAFF_INVITATION_EXPIRE_HOURS: int = Field(default=72, ge=1, le=24 * 14)
+    # How long an organisation signup's verification link (and the unverified request) lives
+    # (`docs/reference/decisions/D-007-signup-email-verification.md`). A day: long enough to find the
+    # email, short enough that an unverified password verifier does not linger.
+    SIGNUP_VERIFICATION_EXPIRE_HOURS: int = Field(default=24, ge=1, le=24 * 7)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
