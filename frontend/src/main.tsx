@@ -6,14 +6,22 @@ import {
 } from "@tanstack/react-query"
 import { createRouter, RouterProvider } from "@tanstack/react-router"
 import { AxiosError } from "axios"
-import { StrictMode } from "react"
+import { lazy, StrictMode, Suspense } from "react"
 import ReactDOM from "react-dom/client"
 import { client } from "./client/client.gen"
-import { Toaster } from "./components/ui/sonner"
 import { retryTransient } from "./lib/http"
 import { readToken, signOut } from "./lib/session"
 import { routeTree } from "./routeTree.gen"
 import "./styles/app.css"
+
+/**
+ * Toasts only ever follow something the person did (a save, a sign, a refusal), so the toast
+ * library is not part of the first load: it arrives in its own chunk right after the first render,
+ * long before anything can raise one.
+ */
+const Toaster = lazy(() =>
+  import("./components/ui/sonner").then((m) => ({ default: m.Toaster })),
+)
 
 client.setConfig({
   baseURL: import.meta.env.VITE_API_URL ?? "",
@@ -66,7 +74,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
-      <Toaster position="bottom-right" closeButton />
+      <Suspense fallback={null}>
+        <Toaster position="bottom-right" closeButton />
+      </Suspense>
     </QueryClientProvider>
   </StrictMode>,
 )
