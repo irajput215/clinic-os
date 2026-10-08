@@ -4,7 +4,7 @@ import { Check, ChevronLeft, Loader2 } from "lucide-react"
 import { useMemo, useState } from "react"
 import { useForm } from "react-hook-form"
 import { Button } from "@/components/ui/button"
-import { bookingRepo, clinicNameFromSlug } from "@/data/booking"
+import { bookingRepo } from "@/data/booking"
 import {
   APPOINTMENT_TYPES,
   type AppointmentType,
@@ -19,7 +19,12 @@ import {
   formatLongDay,
   formatTime,
 } from "@/lib/format"
-import { describeError, httpStatus, refusalCode } from "@/lib/http"
+import {
+  describeError,
+  httpStatus,
+  refusalCode,
+  retryTransient,
+} from "@/lib/http"
 import { cn } from "@/lib/utils"
 import { z } from "@/lib/zod"
 import { BrandMark } from "@/shell/BrandMark"
@@ -86,13 +91,21 @@ const slotsQuery = (clinicSlug: string, visit: AppointmentType) => ({
 })
 
 export function BookingPage({ clinicSlug }: { clinicSlug: string }) {
-  const clinic = clinicNameFromSlug(clinicSlug)
   const [step, setStep] = useState<Step>("visit")
   const [visit, setVisit] = useState<AppointmentType>("NURSE_TRIAGE")
+  // The clinic's PUBLIC display name, as its owner set it (never its legal name). Asked with the
+  // slots, in parallel.
+  const clinic = useQuery({
+    queryKey: ["public-clinic", clinicSlug],
+    queryFn: () => bookingRepo.clinic(clinicSlug),
+    staleTime: 5 * 60_000,
+    retry: retryTransient,
+  })
   // Asked on arrival, so an unknown or closed clinic says so before anyone fills in the form, and
   // the first visit type's times are ready by the time the patient reaches them.
   const opening = useQuery(slotsQuery(clinicSlug, visit))
-  const unavailable = httpStatus(opening.error) === 404
+  const unavailable =
+    httpStatus(opening.error) === 404 || httpStatus(clinic.error) === 404
   const [info, setInfo] = useState<Details | null>(null)
   const [slot, setSlot] = useState<PublicSlot | null>(null)
   const [reference, setReference] = useState<string | null>(null)
@@ -110,8 +123,22 @@ export function BookingPage({ clinicSlug }: { clinicSlug: string }) {
         <div className="mb-6 flex items-center gap-3">
           <BrandMark size={36} />
           <div>
-            <div className="font-serif text-xl font-semibold">
-              {unavailable ? "Online booking" : clinic}
+            <div
+              className="font-serif text-xl font-semibold"
+              data-testid="booking-clinic"
+            >
+              {unavailable ? (
+                "Online booking"
+              ) : clinic.data ? (
+                clinic.data.display_name
+              ) : clinic.isPending ? (
+                <span
+                  className="block h-7 w-48 max-w-full animate-pulse rounded bg-fill"
+                  aria-hidden="true"
+                />
+              ) : (
+                "Online booking"
+              )}
             </div>
             <div className="text-xs tracking-[0.04em] text-stone uppercase">
               Book an appointment

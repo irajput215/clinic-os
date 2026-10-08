@@ -4,6 +4,7 @@ import type { AppointmentType, PublicSlot } from "@/data/types"
 
 /**
  * Public self-booking, served by backend/app/modules/appointments/router.py without a session:
+ *   GET  /public/{clinic_slug}                 the clinic's PUBLIC display name, for the heading
  *   GET  /public/{clinic_slug}/slots?type=     POST /public/{clinic_slug}/bookings
  * The server resolves the clinic from the slug (an unknown or inactive clinic is `404
  * CLINIC_NOT_FOUND`), rate-limits per address and per email, and answers the same `{reference}`
@@ -13,6 +14,13 @@ import type { AppointmentType, PublicSlot } from "@/data/types"
  * The page's eligibility questions decide whether to offer a booking and never leave the browser.
  */
 export const bookingRepo = {
+  clinic: async (clinicSlug: string): Promise<{ display_name: string }> =>
+    (
+      await PublicBookingService.bookingReadPublicClinic({
+        path: { clinic_slug: clinicSlug },
+      })
+    ).data,
+
   slots: async (
     clinicSlug: string,
     type: AppointmentType,
@@ -35,14 +43,3 @@ export const bookingRepo = {
       })
     ).data,
 }
-
-/**
- * The clinic's name as the page shows it: derived from its routing slug, which is the only public
- * identity a clinic has today (its legal name is not public data).
- */
-export const clinicNameFromSlug = (slug: string) =>
-  slug
-    .split("-")
-    .filter(Boolean)
-    .map((w) => w[0].toUpperCase() + w.slice(1))
-    .join(" ")

@@ -60,9 +60,10 @@ test("the sidebar names the signed-in clinic and links its own booking page", as
   clinic,
 }) => {
   await page.goto("/")
-  // The slug is the only clinic identity the API returns. `GET /tenants/current` is the
-  // single-resource read class (300/min per session), so it answers at once.
-  await expect(page.getByTestId("sidebar-clinic")).toHaveText(clinic.slug)
+  // The clinic's display name (`GET /tenants/current/profile`), set from the name typed at signup;
+  // the slug (`GET /tenants/current`) builds the booking link. Both are single-resource reads
+  // (300/min per session), so they answer at once.
+  await expect(page.getByTestId("sidebar-clinic")).toHaveText(clinic.name)
   await expect(
     page
       .getByRole("navigation", { name: "Main" })

@@ -2,6 +2,7 @@ import { createFileRoute, redirect } from "@tanstack/react-router"
 import { approvalCountsQuery } from "@/data/approvals"
 import { myPermissionsQuery } from "@/data/permissions"
 import { scriptsQuery } from "@/data/scripts"
+import { clinicProfileQuery } from "@/data/tenant"
 import { currentUserQuery, isSignedIn } from "@/lib/session"
 import { AppShell } from "@/shell/AppShell"
 
@@ -12,8 +13,8 @@ const once = { retry: false, staleTime: Number.POSITIVE_INFINITY } as const
  * Every staff screen sits under this layout. No token means the sign-in page; the token itself is
  * validated by the server on the first request (`/users/me`), and a `401` there signs out.
  *
- * The shell's own reads (the permission set that decides the Administration entry, and the two
- * sidebar counts) start here, together with `/users/me` and the screen's own loader, instead of
+ * The shell's own reads (the permission set that decides the Administration entry, the clinic's
+ * display name and the two sidebar counts) start here, together with `/users/me` and the screen's own loader, instead of
  * after `/users/me` has answered and the shell has rendered: no cold load waits a round trip for
  * them. They do not block the render; the components that show them read the same cache entries
  * (`data/permissions.ts`, `shell/AppShell.tsx`), and a refusal there is the server's answer as usual.
@@ -29,6 +30,7 @@ export const Route = createFileRoute("/_app")({
     void queryClient.prefetchQuery({ ...myPermissionsQuery, ...once })
     void queryClient.prefetchQuery({ ...scriptsQuery, ...once })
     void queryClient.prefetchQuery({ ...approvalCountsQuery, ...once })
+    void queryClient.prefetchQuery({ ...clinicProfileQuery, ...once })
     return queryClient.ensureQueryData(currentUserQuery)
   },
   component: AppShell,

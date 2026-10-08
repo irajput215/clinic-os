@@ -1499,6 +1499,18 @@ export type PublicBookingRequest = {
 };
 
 /**
+ * PublicClinicRead
+ *
+ * `GET /api/v1/public/{clinic_slug}`: all an unauthenticated visitor learns about a clinic.
+ */
+export type PublicClinicRead = {
+    /**
+     * Display Name
+     */
+    display_name: string;
+};
+
+/**
  * PublicSlot
  *
  * One free, bookable time. Only what the booking page shows: never another patient's data.
@@ -1889,6 +1901,34 @@ export type TenantCurrentRead = {
      * Updated At
      */
     updated_at: string;
+};
+
+/**
+ * TenantProfileRead
+ *
+ * The caller's own clinic as every member of it may see it: the PUBLIC display name only.
+ */
+export type TenantProfileRead = {
+    /**
+     * Display Name
+     */
+    display_name: string;
+};
+
+/**
+ * TenantProfileUpdate
+ *
+ * The body of `PATCH /api/v1/tenants/current/profile`.
+ *
+ * Strict (`extra="forbid"`): any unknown key is a `422`. The one exception is `tenant_id`, which
+ * INV-1 says is **ignored and audited** rather than refused: it is dropped before validation and the
+ * service records the attempt on the change's own transaction.
+ */
+export type TenantProfileUpdate = {
+    /**
+     * Display Name
+     */
+    display_name: string;
 };
 
 /**
@@ -3724,6 +3764,51 @@ export type tenantsUpdateCurrentTenantResponses = {
     200: unknown;
 };
 
+export type tenantsReadCurrentTenantProfileData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/tenants/current/profile';
+};
+
+export type tenantsReadCurrentTenantProfileResponses = {
+    /**
+     * Successful Response
+     */
+    200: TenantProfileRead;
+};
+
+export type tenantsReadCurrentTenantProfileResponse = tenantsReadCurrentTenantProfileResponses[keyof tenantsReadCurrentTenantProfileResponses];
+
+export type tenantsUpdateCurrentTenantProfileData = {
+    body: TenantProfileUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/tenants/current/profile';
+};
+
+export type tenantsUpdateCurrentTenantProfileErrors = {
+    /**
+     * `PERMISSION_NOT_HELD`: renaming the clinic needs `tenant:configure`. Audited `tenant.config_changed` `DENIED`; nothing is changed.
+     */
+    403: unknown;
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type tenantsUpdateCurrentTenantProfileError = tenantsUpdateCurrentTenantProfileErrors[keyof tenantsUpdateCurrentTenantProfileErrors];
+
+export type tenantsUpdateCurrentTenantProfileResponses = {
+    /**
+     * Successful Response
+     */
+    200: TenantProfileRead;
+};
+
+export type tenantsUpdateCurrentTenantProfileResponse = tenantsUpdateCurrentTenantProfileResponses[keyof tenantsUpdateCurrentTenantProfileResponses];
+
 export type auditListAuditEventsData = {
     body?: never;
     path?: never;
@@ -4461,6 +4546,40 @@ export type appointmentsListPatientAppointmentsResponses = {
 };
 
 export type appointmentsListPatientAppointmentsResponse = appointmentsListPatientAppointmentsResponses[keyof appointmentsListPatientAppointmentsResponses];
+
+export type publicBookingReadPublicClinicData = {
+    body?: never;
+    path: {
+        /**
+         * Clinic Slug
+         */
+        clinic_slug: string;
+    };
+    query?: never;
+    url: '/api/v1/public/{clinic_slug}';
+};
+
+export type publicBookingReadPublicClinicErrors = {
+    /**
+     * No such clinic, or not taking bookings
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type publicBookingReadPublicClinicError = publicBookingReadPublicClinicErrors[keyof publicBookingReadPublicClinicErrors];
+
+export type publicBookingReadPublicClinicResponses = {
+    /**
+     * Successful Response
+     */
+    200: PublicClinicRead;
+};
+
+export type publicBookingReadPublicClinicResponse = publicBookingReadPublicClinicResponses[keyof publicBookingReadPublicClinicResponses];
 
 export type publicBookingListPublicSlotsData = {
     body?: never;

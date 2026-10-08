@@ -9,6 +9,8 @@ export interface Clinic {
   fullName: string
   /** The organisation's routing slug, as the server derives it from the clinic name at signup. */
   slug: string
+  /** The clinic's display name: the name typed at signup (`tenants.display_name`). */
+  name: string
   /** The owner's access token, from the setup project's one sign-in. */
   token: string
   /**
