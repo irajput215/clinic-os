@@ -223,3 +223,30 @@ def test_a_write_as_the_first_statement_is_scoped_and_committed(
 
     assert name in names
     assert name not in other
+
+
+# --- 4. The pool is full before the first request ------------------------------------------------
+
+
+def test_warming_fills_the_pool_with_distinct_open_connections() -> None:
+    """Start-up opens `POOL_SIZE` connections, so a burst of requests finds one each."""
+    fresh = create_engine(
+        str(settings.DATABASE_URL), pool_size=db_module.POOL_SIZE, max_overflow=0
+    )
+    original = db_module.engine
+    db_module.engine = fresh
+    try:
+        db_module.warm_pool()
+        assert fresh.pool.checkedin() == db_module.POOL_SIZE  # type: ignore[attr-defined]
+        backends = set()
+        held = [fresh.connect() for _ in range(db_module.POOL_SIZE)]
+        try:
+            for connection in held:
+                backends.add(connection.execute(BACKEND_PID).scalar_one())
+        finally:
+            for connection in held:
+                connection.close()
+        assert len(backends) == db_module.POOL_SIZE
+    finally:
+        db_module.engine = original
+        fresh.dispose()

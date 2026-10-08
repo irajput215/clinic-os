@@ -9,12 +9,13 @@ another tenant's request
 import logging
 import select as io_select
 from collections.abc import Iterator, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from typing import Any, Final, LiteralString, cast
 from uuid import UUID
 
 import psycopg
-from sqlalchemy import Select, TextClause, event, exc
+from sqlalchemy import Connection, Select, TextClause, event, exc
 from sqlalchemy.pool import ConnectionPoolEntry, PoolProxiedConnection
 from sqlalchemy.sql.compiler import SQLCompiler
 from sqlmodel import Session, create_engine, select
@@ -42,16 +43,18 @@ class TenantContextRequired(RuntimeError):
 #
 # - **No `pool_pre_ping`.** It sent a statement on every checkout: one round trip per transaction.
 #   A dead connection is found instead by `_refuse_dead_connection` below at no network cost.
-# - **`pool_recycle`** replaces a connection after four minutes, inside Neon's five-minute idle
-#   suspend and any proxy idle timeout, so a pooled connection is never older than the compute it
-#   was opened against.
+# - **`pool_recycle`** replaces a connection after an hour. Not sooner: a new connection costs about
+#   six round trips (1.2-1.3 s in production on 2026-10-08), and a request that meets a recycled
+#   connection pays it. A connection the server closed (Neon suspending after five idle minutes, a
+#   restart) is caught at checkout by the socket check instead, whatever its age; the hour is only a
+#   backstop against a connection that lives forever.
 # - **TCP keepalives** make the kernel notice a silently dropped connection (a NAT or proxy that
 #   forgets it without a FIN), which then reads as dead at checkout.
 # - **Size**: five per process plus ten overflow, the default, sized for one request holding at most
 #   one connection at a time.
 POOL_SIZE: Final = 5
 POOL_MAX_OVERFLOW: Final = 10
-POOL_RECYCLE_SECONDS: Final = 240
+POOL_RECYCLE_SECONDS: Final = 3600
 _KEEPALIVES: Final = {
     "keepalives": 1,
     "keepalives_idle": 30,
@@ -96,24 +99,28 @@ def _refuse_dead_connection(
         raise exc.DisconnectionError("pooled connection was closed by the server")
 
 
-def warm_pool(connections: int = 2) -> None:
-    """Open connections before the first request needs them. Never raises.
+def warm_pool(connections: int = POOL_SIZE) -> None:
+    """Fill the pool before the first request needs it. Never raises.
 
-    A new connection costs several round trips (TCP, TLS, authentication) and, after an idle period,
-    Neon's compute start. Paying that at start-up keeps it off the first user's request. A failure is
-    logged with a constant message (the driver's text can name the host) and the app starts anyway:
+    A new connection costs about six round trips (TCP, TLS, authentication) and, after an idle
+    period, Neon's compute start. Paying that at start-up keeps it off users' requests, including the
+    first burst of concurrent ones: production on 2026-10-08 showed the fifth concurrent request
+    opening a connection of its own (+1.2 s) when only two were warmed. The connections are opened
+    together, so the start-up costs about one connection's time rather than five. A failure is logged
+    with a constant message (the driver's text can name the host) and the app starts anyway:
     readiness reports the database separately.
     """
-    opened = []
+    opened: list[Connection] = []
     try:
-        for _ in range(connections):
-            connection = engine.connect()
-            opened.append(connection)
-            connection.exec_driver_sql("SELECT 1")
-            connection.rollback()
+        # One first, alone: the first connection initialises the dialect.
+        opened.append(engine.connect())
+        with ThreadPoolExecutor(max_workers=max(connections - 1, 1)) as pool:
+            opened.extend(pool.map(lambda _: engine.connect(), range(connections - 1)))
     except Exception:  # noqa: BLE001 - start-up must not fail on a database blip
         logger.warning("Database warm-up failed; connections will open on demand")
     finally:
+        # Every connection stays checked out until all are open, so they are distinct; closing them
+        # returns them to the pool.
         for connection in opened:
             connection.close()
 
