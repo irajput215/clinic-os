@@ -1,12 +1,10 @@
-"""Response schemas for the care-relationship resolver.
+"""Schemas for the care-relationship resolver and its interim upkeep routes.
 
-The design names no care-relationship endpoint — the table is read by the policy layer, not by a route
+The design names no care-relationship endpoint — the table is read by the policy layer
 (`docs/features/05-patients/03-design.md` "Treating-relationship rule";
-`06-clinical-records/03-design.md` "Treating-relationship check") — so the only shape declared here is
-the one the resolver returns to its callers. A request schema arrives only if a route to create or end a
-relationship is specified, and that is **OPEN**: open-questions.md §3.2 `06` item 5 records "the
-`care_relationships` source of truth, and who maintains it when a patient changes clinic" with the
-Clinical Safety Officer.
+`06-clinical-records/03-design.md` "Treating-relationship check") — and the source of truth is **OPEN**
+(open-questions.md C13). Decision D-007 records the interim upkeep routes these shapes serve
+(`docs2/sdlc/02-patients/api.md`, "Care team").
 
 `tenant_id` is absent deliberately: the caller is the request's own tenant context, and a schema that
 carried it would invite a client to treat it as an input (INV-1).
@@ -40,3 +38,27 @@ class CareRelationshipRead(SQLModel):
     active_from: datetime
     active_to: datetime | None = None
     source: str
+
+
+class CareTeamMember(SQLModel):
+    """One active relationship on a patient's care team. `practitioner_name` is `None` for an account
+    that is no longer an active practitioner (the relationship still shows, so it can be ended)."""
+
+    id: uuid.UUID
+    practitioner_id: uuid.UUID
+    practitioner_name: str | None
+    active_from: datetime
+    source: str
+
+
+class CareTeamPublic(SQLModel):
+    data: list[CareTeamMember]
+    count: int
+
+
+class CareRelationshipCreate(SQLModel):
+    """Add a practitioner to a patient's care team. Unknown fields (a `tenant_id` above all) are `422`."""
+
+    model_config = SQLModelConfig(extra="forbid")
+
+    practitioner_id: uuid.UUID

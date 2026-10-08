@@ -369,3 +369,38 @@ PRACTITIONER_ROLE_BY_CODE: Final[dict[str, str]] = {
     "AUTHORISED_PRESCRIBER": "DOCTOR",
     "NURSE": "NURSE",
 }
+
+# The matrix's `cr` modifier: the (role, permission) grants that reach a patient **only** through an
+# active care relationship (`docs/features/03-users-and-roles/01-requirements.md`, "Permission
+# catalogue": `G cr` on `patient:read`, `patient:update`, `clinical_record:read` and
+# `clinical_record:write` for `DOCTOR` and `NURSE`, and on no other cell). Every other grant of those
+# codes is unconditional: `PRACTICE_OWNER`, `AUTHORISED_PRESCRIBER` and `ADMINISTRATOR` hold them as
+# a plain `G`. Grants are additive, so an account holding `PRACTICE_OWNER` and `DOCTOR` holds
+# `patient:read` unconditionally through the first. Confirming the rule per role is OPEN with the
+# Clinical Safety Officer (`02-user-stories.md` open items, US-9); this is the matrix as written,
+# recorded in decision D-007.
+CARE_RELATIONSHIP_SCOPED_GRANTS: Final[dict[str, frozenset[str]]] = {
+    role_code: frozenset(
+        {
+            "patient:read",
+            "patient:update",
+            "clinical_record:read",
+            "clinical_record:write",
+        }
+    )
+    for role_code in ("DOCTOR", "NURSE")
+}
+
+
+def grant_is_unconditional(role_code: str, permission_code: str) -> bool:
+    """Whether this role grants this permission without the care-relationship rule.
+
+    Fails closed: a role code outside the seven system roles (custom roles are OPEN-2 and cannot exist
+    yet) is treated as relationship-bound for every permission, so an unknown bundle can never widen a
+    patient read to the tenant.
+    """
+    if role_code not in SYSTEM_ROLE_CODES:
+        return False
+    return permission_code not in CARE_RELATIONSHIP_SCOPED_GRANTS.get(
+        role_code, frozenset()
+    )
