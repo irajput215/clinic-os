@@ -1,8 +1,8 @@
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query"
 import { Link, useNavigate } from "@tanstack/react-router"
-import { practitionersQuery } from "@/data/appointments"
 import { categoryShort, formLabel } from "@/data/approvals"
 import { todayQuery } from "@/data/dashboard"
+import { previewPractitionersQuery } from "@/data/preview/practitioners"
 import { APPOINTMENT_TYPES } from "@/data/types"
 import {
   Card,
@@ -25,7 +25,7 @@ import { currentUserQuery, displayName } from "@/lib/session"
 export function TodayPage() {
   const { data: me } = useSuspenseQuery(currentUserQuery)
   const { data: today } = useSuspenseQuery(todayQuery)
-  const { data: practitioners = [] } = useQuery(practitionersQuery)
+  const { data: practitioners = [] } = useQuery(previewPractitionersQuery)
   const navigate = useNavigate()
   const withName = (id: string) =>
     practitioners.find((p) => p.id === id)?.name ?? "-"

@@ -9,10 +9,10 @@ import type {
   TgaApproval,
 } from "@/data/types"
 import { APPOINTMENT_TYPES } from "@/data/types"
+import { clinicInstant, plusMinutes } from "@/lib/clinic-time"
 import { addDays, clinicToday } from "@/lib/format"
 import { displayName } from "@/lib/session"
 import { previewMatch } from "./gate"
-import { clinicInstant, plusMinutes } from "./time"
 
 export interface PreviewState {
   version: 3

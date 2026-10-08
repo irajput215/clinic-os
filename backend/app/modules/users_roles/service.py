@@ -834,6 +834,70 @@ def list_staff(*, tenant_id: uuid.UUID, skip: int, limit: int) -> StaffPublic:
         )
 
 
+@dataclass(frozen=True)
+class StaffHoldingRoles:
+    """One active account of the organisation, and the system roles it holds there."""
+
+    user_id: uuid.UUID
+    full_name: str | None
+    email: str
+    # `{code: display name}` for the roles held, among the ones asked about.
+    roles: dict[str, str]
+
+
+def active_staff_holding(
+    session: Session, *, tenant_id: uuid.UUID, role_codes: Iterable[str]
+) -> list[StaffHoldingRoles]:
+    """The organisation's **active** accounts that hold at least one of `role_codes`.
+
+    Runs on the caller's tenant transaction, so a reader (the appointments module's practitioner
+    roster) can decide on the same snapshot it writes under. The account table has no RLS (T1-03), so
+    the explicit `tenant_id` predicate is the isolation control for it, exactly as in `list_staff`;
+    the role and assignment reads run under forced RLS as well. Ordered by name, then email, then id.
+    """
+    wanted = frozenset(role_codes)
+    roles: Sequence[Role] = session.exec(
+        select(Role).where(Role.tenant_id == tenant_id, col(Role.code).in_(wanted))
+    ).all()
+    if not roles:
+        return []
+    role_by_id = {role.id: role for role in roles}
+    assignments: Sequence[UserRole] = session.exec(
+        select(UserRole).where(
+            UserRole.tenant_id == tenant_id,
+            col(UserRole.role_id).in_(list(role_by_id)),
+        )
+    ).all()
+    held: dict[uuid.UUID, dict[str, str]] = {}
+    for assignment in assignments:
+        role = role_by_id[assignment.role_id]
+        held.setdefault(assignment.user_id, {})[role.code] = role.name
+    if not held:
+        return []
+    users: Sequence[User] = session.exec(
+        select(User)
+        .where(
+            User.tenant_id == tenant_id,
+            col(User.is_active).is_(True),
+            col(User.id).in_(list(held)),
+        )
+        .order_by(
+            func.lower(func.coalesce(col(User.full_name), col(User.email))),
+            func.lower(col(User.email)),
+            col(User.id),
+        )
+    ).all()
+    return [
+        StaffHoldingRoles(
+            user_id=user.id,
+            full_name=user.full_name,
+            email=user.email,
+            roles=held[user.id],
+        )
+        for user in users
+    ]
+
+
 class InvitationOutcome(StrEnum):
     """What one invitation attempt did, so the router maps it to a status without re-deciding.
 

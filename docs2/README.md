@@ -57,7 +57,7 @@ with a `clinic_name` (open registration is on in development). The public bookin
 | 01 | [Auth and app shell](sdlc/01-auth-and-shell/) | Settings: profile, password, deactivate own account | API |
 | 02 | [Patients](sdlc/02-patients/) | Patients list (server search, keyset paging), add/edit, patient record | API (search and paging, M2 2B) |
 | 03 | [Consult notes](sdlc/03-consult-notes/) | Patient record → Consult notes | API (clinical records, #47) |
-| 04 | [Calendar and booking](sdlc/04-calendar-and-booking/) | Calendar day/week, public booking page | Preview (contract proposed) |
+| 04 | [Calendar and booking](sdlc/04-calendar-and-booking/) | Calendar day/week, patient Appointments tab, public booking page | API (appointments module) |
 | 05 | [TGA approvals](sdlc/05-approvals/) | Approvals register, patient approvals tab | Patient tab: API (#46). Register: refusal until `GET /tga-approvals` exists |
 | 06 | [Patient activity](sdlc/06-patient-activity/) | Patient record → Activity | API (audit log, #42) |
 | 07 | [Script queue](sdlc/07-script-queue/) | Script queue, review and sign, patient scripts tab | Preview (contract proposed) |

@@ -107,7 +107,7 @@ const REFUSAL_SENTENCES: Record<string, string> = {
   DUPLICATE_APPROVAL_GRAIN:
     "This approval is already on file for this patient, category, dosage form and dates.",
   ILLEGAL_STATE_TRANSITION:
-    "This approval can't be changed that way any more. Refresh to see its current state.",
+    "This can't be changed that way any more. Refresh to see its current state.",
   ERR_WINDOW_NOT_FORWARD: "The end date must be after the start date.",
   ERR_WINDOW_EXCEEDS_MAX_DURATION:
     "An approval can't be valid for more than two years.",

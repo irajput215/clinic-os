@@ -7,10 +7,10 @@ import {
   appointmentsForDatesQuery,
   practitionersQuery,
 } from "@/data/appointments"
-import { clinicDateOf, clinicMinutesOfDay } from "@/data/preview/time"
 import { APPOINTMENT_TYPES, type Appointment } from "@/data/types"
-import { EmptyState, PageHeader, PreviewBanner } from "@/design/primitives"
+import { EmptyState, ErrorState, PageHeader } from "@/design/primitives"
 import { AppointmentStatusPill } from "@/features/shared/pills"
+import { clinicDateOf, clinicMinutesOfDay } from "@/lib/clinic-time"
 import { addDays, clinicToday, formatDate, formatTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import {
@@ -61,7 +61,8 @@ export function CalendarPage({
     [date, view],
   )
   const { data: practitioners } = useSuspenseQuery(practitionersQuery)
-  const { data: appointments = [] } = useQuery(appointmentsForDatesQuery(dates))
+  const schedule = useQuery(appointmentsForDatesQuery(dates))
+  const appointments = schedule.data ?? []
   const [prefill, setPrefill] = useState<SlotPrefill | null>(null)
   const [selected, setSelected] = useState<Appointment | null>(null)
   const today = clinicToday()
@@ -74,9 +75,14 @@ export function CalendarPage({
     <>
       <PageHeader
         title="Calendar"
-        subtitle={`${live.length} appointment${live.length === 1 ? "" : "s"} ${view === "day" ? `on ${formatDate(date)}` : `in the week of ${formatDate(dates[0])}`}`}
+        subtitle={
+          schedule.isPending
+            ? "Loading appointments…"
+            : `${live.length} appointment${live.length === 1 ? "" : "s"} ${view === "day" ? `on ${formatDate(date)}` : `in the week of ${formatDate(dates[0])}`}`
+        }
         actions={
           <Button
+            disabled={practitioners.length === 0}
             onClick={() =>
               setPrefill({
                 practitionerId: practitioners[0]?.id ?? "",
@@ -89,7 +95,6 @@ export function CalendarPage({
           </Button>
         }
       />
-      <PreviewBanner what="Appointments are sample bookings for your real patients." />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="flex items-center rounded-btn border border-line bg-paper">
@@ -143,6 +148,15 @@ export function CalendarPage({
           ))}
         </div>
       </div>
+
+      {schedule.isError ? (
+        <div className="mb-4">
+          <ErrorState
+            error={schedule.error}
+            onRetry={() => void schedule.refetch()}
+          />
+        </div>
+      ) : null}
 
       {view === "day" ? (
         <DayGrid
@@ -268,7 +282,14 @@ function DayGrid({
       : null
 
   if (practitioners.length === 0)
-    return <EmptyState title="No practitioners rostered." />
+    return (
+      <div className="rounded-card border border-line bg-paper shadow-card">
+        <EmptyState
+          title="No one to book with yet."
+          body="Practitioners are staff holding the Doctor, Authorised Prescriber or Nurse role. Give someone one of those roles in Administration to open their column."
+        />
+      </div>
+    )
 
   return (
     <div className="overflow-x-auto rounded-card border border-line bg-paper shadow-card">

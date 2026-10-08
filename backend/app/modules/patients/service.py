@@ -552,3 +552,93 @@ def update_patient(
         )
         session.refresh(patient)
         return PatientRead.model_validate(patient)
+
+
+def display_names(
+    session: Session, *, tenant_id: uuid.UUID, patient_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, str]:
+    """`{id: "Preferred-or-given Family"}` for the **live** patients among `patient_ids`.
+
+    Runs on the caller's tenant transaction (the appointments module names the patient on each
+    booking it returns). An id that is absent, soft-deleted or another tenant's is simply missing from
+    the answer, so a caller cannot tell those apart.
+    """
+    if not patient_ids:
+        return {}
+    rows: Sequence[Patient] = session.exec(
+        select(Patient).where(
+            Patient.tenant_id == tenant_id,
+            col(Patient.id).in_(list(set(patient_ids))),
+            col(Patient.deleted_at).is_(None),
+        )
+    ).all()
+    return {
+        patient.id: f"{patient.preferred_name or patient.given_name} {patient.family_name}"
+        for patient in rows
+    }
+
+
+def match_or_create_for_booking(
+    session: Session,
+    *,
+    tenant_id: uuid.UUID,
+    given_name: str,
+    family_name: str,
+    date_of_birth: date,
+    email: str,
+    phone: str,
+    source_ip: str | None = None,
+) -> uuid.UUID:
+    """The patient a public booking is for: an exact existing match, or a new record.
+
+    Runs on the caller's tenant transaction, so the patient, the booking and both audit events commit
+    or roll back together. A match needs **all four** of given name, family name, date of birth and
+    email to agree (case-insensitively for the text), so a booking never attaches itself to somebody
+    else's record on a shared email or a common name. A matched record is never changed: an anonymous
+    form is not a source of truth for an existing patient's details. The caller answers the same way
+    in both cases, so the response cannot be used to learn whether a person is a patient here.
+
+    A new record is audited as `patient.create` with its field names only, exactly as a staff create
+    is (INV-4); the envelope carries no actor, because nobody signed in.
+    """
+    existing = session.exec(
+        select(Patient.id).where(
+            Patient.tenant_id == tenant_id,
+            col(Patient.deleted_at).is_(None),
+            func.lower(col(Patient.given_name)) == given_name.lower(),
+            func.lower(col(Patient.family_name)) == family_name.lower(),
+            Patient.date_of_birth == date_of_birth,
+            func.lower(col(Patient.email)) == email.lower(),
+        )
+    ).first()
+    if existing is not None:
+        return existing
+    patient = Patient(
+        tenant_id=tenant_id,
+        given_name=given_name,
+        family_name=family_name,
+        date_of_birth=date_of_birth,
+        email=email,
+        phone=phone,
+    )
+    session.add(patient)
+    session.flush()
+    audit.record(
+        session,
+        audit.AuditEvent(
+            action=PATIENT_CREATE,
+            result="SUCCESS",
+            resource_id=patient.id,
+            source_ip=source_ip,
+            payload={
+                "field_set": [
+                    "date_of_birth",
+                    "email",
+                    "family_name",
+                    "given_name",
+                    "phone",
+                ]
+            },
+        ),
+    )
+    return patient.id

@@ -13,7 +13,7 @@
 | family_name | varchar |  | false |  |  |  |
 | gender_identity | varchar |  | true |  |  |  |
 | given_name | varchar |  | false |  |  |  |
-| id | uuid | gen_random_uuid() | false | [public.care_relationships](public.care_relationships.md) [public.clinical_records](public.clinical_records.md) [public.patients](public.patients.md) [public.tga_approvals](public.tga_approvals.md) |  |  |
+| id | uuid | gen_random_uuid() | false | [public.appointments](public.appointments.md) [public.care_relationships](public.care_relationships.md) [public.clinical_records](public.clinical_records.md) [public.patients](public.patients.md) [public.tga_approvals](public.tga_approvals.md) |  |  |
 | ihi | bytea |  | true |  |  |  |
 | ihi_blind_index | bytea |  | true |  |  |  |
 | medicare_blind_index | bytea |  | true |  |  |  |
@@ -25,7 +25,7 @@
 | sex_at_birth | varchar |  | true |  |  |  |
 | state | varchar |  | true |  |  |  |
 | suburb | varchar |  | true |  |  |  |
-| tenant_id | uuid |  | false | [public.clinical_records](public.clinical_records.md) [public.tga_approvals](public.tga_approvals.md) | [public.tenants](public.tenants.md) |  |
+| tenant_id | uuid |  | false | [public.appointments](public.appointments.md) [public.clinical_records](public.clinical_records.md) [public.tga_approvals](public.tga_approvals.md) | [public.tenants](public.tenants.md) |  |
 | updated_at | timestamp with time zone |  | false |  |  |  |
 
 ## Constraints
@@ -65,6 +65,7 @@
 ```mermaid
 erDiagram
 
+"public.appointments" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
 "public.care_relationships" }o--|| "public.patients" : "FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE RESTRICT"
 "public.clinical_records" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
 "public.patients" }o--o| "public.patients" : "FOREIGN KEY (merged_into_patient_id) REFERENCES patients(id) ON DELETE RESTRICT"
@@ -94,6 +95,21 @@ erDiagram
   varchar state
   varchar suburb
   uuid tenant_id FK
+  timestamp_with_time_zone updated_at
+}
+"public.appointments" {
+  timestamp_with_time_zone created_at
+  uuid created_by
+  tstzrange during
+  timestamp_with_time_zone ends_at
+  uuid id
+  uuid patient_id FK
+  uuid practitioner_id
+  varchar source
+  timestamp_with_time_zone starts_at
+  varchar status
+  uuid tenant_id FK
+  varchar type
   timestamp_with_time_zone updated_at
 }
 "public.care_relationships" {

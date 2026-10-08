@@ -74,7 +74,7 @@ class AuditLogEntry(SQLModel, table=True):
         sa.CheckConstraint(
             "resource_type IN ('PATIENT', 'CLINICAL_RECORD', 'PRESCRIPTION', 'TGA_APPROVAL',"
             " 'TGA_DOCUMENT', 'USER', 'TENANT', 'SESSION', 'AUDIT', 'REPORT', 'INTEGRATION',"
-            " 'EXPORT')",
+            " 'EXPORT', 'APPOINTMENT')",
             name="resource_type",
         ),
         # The keyset the read API uses, and the filter columns the design names. `tenant_id` leads

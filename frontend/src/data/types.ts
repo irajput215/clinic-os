@@ -7,7 +7,13 @@
  *   replaces the mirror and the compiler points at every difference.
  * - PROPOSED: no backend module exists. The shape is this app's proposed contract, written up in
  *   docs2/sdlc/<feature>/api.md for the backend owner to accept or amend.
+ * - GENERATED: an alias of the generated client's type, kept so screens import one name.
  */
+import type {
+  AppointmentRead,
+  PublicSlot as GeneratedPublicSlot,
+  PractitionerRead,
+} from "@/client/types.gen"
 
 // MIRROR: tga_approvals/models.py APPROVAL_STATES
 export const APPROVAL_STATES = [
@@ -136,15 +142,13 @@ export interface SoapNote {
   plan?: string | null
 }
 
-// PROPOSED: a person who can be booked. Resolved from users + roles server-side.
-export interface Practitioner {
-  id: string
-  name: string
-  role: "DOCTOR" | "NURSE"
-  title: string
-}
+// GENERATED: appointments module (backend/app/modules/appointments/schemas.py). A person who can be
+// booked, resolved from users + roles server-side; a booking, half-open `[starts_at, ends_at)`.
+export type Practitioner = PractitionerRead
+export type Appointment = AppointmentRead
+export type PublicSlot = GeneratedPublicSlot
 
-// PROPOSED: appointments module (docs2/sdlc/04-calendar-and-booking/api.md)
+// MIRROR: appointments/models.py APPOINTMENT_TYPES (R2). The server computes `ends_at` from it.
 export const APPOINTMENT_TYPES = {
   NURSE_TRIAGE: { label: "Free nurse triage", minutes: 15, role: "NURSE" },
   INITIAL_CONSULT: {
@@ -176,20 +180,6 @@ export const APPOINTMENT_TRANSITIONS: Record<
   COMPLETED: [],
   CANCELLED: [],
   NO_SHOW: [],
-}
-
-export interface Appointment {
-  id: string
-  patient_id: string
-  patient_name: string
-  practitioner_id: string
-  type: AppointmentType
-  status: AppointmentStatus
-  /** Half-open `[starts_at, ends_at)`, ISO instants. */
-  starts_at: string
-  ends_at: string
-  source: "STAFF" | "PUBLIC_BOOKING"
-  created_at: string
 }
 
 // PROPOSED: products module (drug catalogue). The approval grain is category + dosage form,
@@ -265,26 +255,4 @@ export interface TodaySummary {
     TgaApproval & { patient_name: string; days_left: number }
   >
   attention: Array<{ id: string; title: string; body: string; href: string }>
-}
-
-// PROPOSED: public booking (no auth; tenant resolved from the clinic slug server-side).
-export interface PublicSlot {
-  practitioner_id: string
-  practitioner_name: string
-  starts_at: string
-  ends_at: string
-}
-
-export interface PublicBookingRequest {
-  slot: PublicSlot
-  type: AppointmentType
-  given_name: string
-  family_name: string
-  date_of_birth: string
-  email: string
-  phone: string
-  condition: string
-  tried_conventional: boolean
-  conventional_detail: string
-  consent: boolean
 }

@@ -210,7 +210,11 @@ function OverviewTab({ patientId }: { patientId: string }) {
           )}
         </Card>
         <Card title="Upcoming appointments">
-          {upcoming.length === 0 ? (
+          {appts.isError ? (
+            <ErrorState error={appts.error} />
+          ) : appts.isPending ? (
+            <SkeletonRows rows={2} />
+          ) : upcoming.length === 0 ? (
             <p className="text-sm text-stone">Nothing booked.</p>
           ) : (
             <ul className="space-y-2 text-sm">
@@ -357,50 +361,51 @@ function AppointmentsTab({ patientId }: { patientId: string }) {
   const appts = useQuery(patientAppointmentsQuery(patientId))
   const { data: practitioners = [] } = useQuery(practitionersQuery)
   return (
-    <>
-      <PreviewBanner what="Appointments are sample bookings." />
-      <Card bodyClassName="-mx-5 -my-[18px]">
-        {appts.isPending ? (
-          <div className="p-5">
-            <SkeletonRows rows={3} />
-          </div>
-        ) : (appts.data ?? []).length === 0 ? (
-          <EmptyState title="No appointments." />
-        ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th className="pl-5">When</th>
-                <th>Type</th>
-                <th className="max-sm:hidden">With</th>
-                <th className="pr-5">Status</th>
+    <Card bodyClassName="-mx-5 -my-[18px]">
+      {appts.isError ? (
+        <div className="p-5">
+          <ErrorState
+            error={appts.error}
+            onRetry={() => void appts.refetch()}
+          />
+        </div>
+      ) : appts.isPending ? (
+        <div className="p-5">
+          <SkeletonRows rows={3} />
+        </div>
+      ) : (appts.data ?? []).length === 0 ? (
+        <EmptyState title="No appointments." />
+      ) : (
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th className="pl-5">When</th>
+              <th>Type</th>
+              <th className="max-sm:hidden">With</th>
+              <th className="pr-5">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {appts.data!.map((a) => (
+              <tr key={a.id}>
+                <td className="pl-5">
+                  <Mono>
+                    {formatDate(a.starts_at)} {formatTime(a.starts_at)}
+                  </Mono>
+                </td>
+                <td>{APPOINTMENT_TYPES[a.type].label}</td>
+                <td className="max-sm:hidden">
+                  {practitioners.find((p) => p.id === a.practitioner_id)?.name}
+                </td>
+                <td className="pr-5">
+                  <AppointmentStatusPill status={a.status} />
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {appts.data!.map((a) => (
-                <tr key={a.id}>
-                  <td className="pl-5">
-                    <Mono>
-                      {formatDate(a.starts_at)} {formatTime(a.starts_at)}
-                    </Mono>
-                  </td>
-                  <td>{APPOINTMENT_TYPES[a.type].label}</td>
-                  <td className="max-sm:hidden">
-                    {
-                      practitioners.find((p) => p.id === a.practitioner_id)
-                        ?.name
-                    }
-                  </td>
-                  <td className="pr-5">
-                    <AppointmentStatusPill status={a.status} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </Card>
-    </>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Card>
   )
 }
 
