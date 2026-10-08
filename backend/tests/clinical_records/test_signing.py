@@ -13,6 +13,11 @@ def test_sign_is_identity_bound_to_version_author(
     """F4 / R4: only the version's author may sign it; a different clinician is refused `403`."""
     record = created_record(clinical.create_record(tenant.owner, tenant.patient))
     other_clinician = clinical.add_actor(session=tenant.owner, role_code="DOCTOR")
+    # A doctor reaches a record only through a care relationship (T1-34); with one, the refusal
+    # that remains is the authorship rule this test is about.
+    clinical.relate(
+        manager=tenant.owner, practitioner=other_clinician, patient=tenant.patient
+    )
 
     attempt = clinical.sign(other_clinician, record["id"])
     assert attempt.status_code == 403, attempt.text

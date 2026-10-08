@@ -21,6 +21,7 @@ from sqlmodel import Session
 from app.core.config import settings
 from app.core.db import engine
 from tests.tga.conftest import TgaApi
+from tests.utils.care import relate
 from tests.utils.rbac import ActorSession
 
 API = settings.API_V1_STR
@@ -69,6 +70,18 @@ class RxApi:
             granted_by=clinic.owner.user_id,
             role_code=role_code,
         )
+
+    def related_member(self, clinic: Clinic, role_code: str) -> ActorSession:
+        """A member whose patient access is relationship-bound (a doctor or a nurse), put on the
+        clinic patient's care team by the owner, as the product does it (T1-34)."""
+        member = self.member(clinic, role_code)
+        relate(
+            self.client,
+            clinic.owner.headers,
+            patient_id=clinic.patient_id,
+            practitioner_id=member.user_id,
+        )
+        return member
 
     def approve(
         self,

@@ -79,7 +79,7 @@ def test_another_tenants_patient_is_not_found(rx: RxApi, clinic: Clinic) -> None
 
 def test_a_nurse_stages_a_draft_for_the_doctor(rx: RxApi, clinic: Clinic) -> None:
     """US-6: the draft is `DRAFT`, tenant from the session, drafter and prescriber recorded apart."""
-    nurse = rx.member(clinic, "NURSE")
+    nurse = rx.related_member(clinic, "NURSE")
     body = rx.stage(clinic, nurse)
     assert body["state"] == "DRAFT"
     assert body["drafted_by"] == str(nurse.user_id)
@@ -111,7 +111,7 @@ def test_the_queue_is_tenant_scoped_and_filtered(rx: RxApi, clinic: Clinic) -> N
     other = rx.clinic("Other Clinic")
     rx.stage(other)
     mine = rx.stage(clinic)
-    nurse = rx.member(clinic, "NURSE")
+    nurse = rx.related_member(clinic, "NURSE")
     listed = rx.list(nurse).json()["data"]
     assert [item["id"] for item in listed] == [mine["id"]]
     assert rx.list(nurse, state="SIGNED").json()["data"] == []

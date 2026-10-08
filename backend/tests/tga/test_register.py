@@ -435,7 +435,16 @@ def test_a_patient_list_and_a_detail_read_are_each_one_audited_read(
     assert [
         (event["result"], event["resource_id"], event["metadata"]) for event in events
     ] == [
-        ("SUCCESS", None, {"patient_id": str(clinic.patient_id), "result_count": 2}),
+        # The patient-level read records the purpose (T1-34); the owner's grant is unconditional.
+        (
+            "SUCCESS",
+            None,
+            {
+                "patient_id": str(clinic.patient_id),
+                "result_count": 2,
+                "purpose": "PRACTICE_ADMINISTRATION",
+            },
+        ),
         (
             "SUCCESS",
             uuid.UUID(first["id"]),

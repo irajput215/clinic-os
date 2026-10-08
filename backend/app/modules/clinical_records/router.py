@@ -18,11 +18,10 @@ denial.
 **There is no `DELETE` route** (R12). A record is never hard-deleted by the application; the database
 grant removes the capability as well.
 
-The treating-relationship rule (R11) is the one authorisation step this slice does not implement: the
-`care_relationships` module it reads does not exist on this branch, and the feature's own documents
-record it as `OPEN — blocked` (`01-requirements.md` OPEN-3). The service docstring records the
-deferral; it is reported as a gap in the PR, and it is not a fail-open — `can()` allows only after
-the explicit permission check, so the missing resource rule can only ever remove access.
+**The treating-relationship rule (R11, T1-34)** runs on every route: a doctor's or nurse's grant
+reaches a record only through an active care relationship with its patient, resolved in the route's
+first statement; without one the answer is `403 AUTHZ_CARE_RELATIONSHIP_DENIED`, audited. Across a
+tenant boundary the answer stays `404` (the service docstring has the detail).
 
 ## Endpoint declarations (`docs/reference/definition-of-done.md` §4)
 
@@ -191,7 +190,11 @@ def _authorise(
     resource_id: uuid.UUID | None = None,
     patient_id: uuid.UUID | None = None,
 ) -> None:
-    """Apply the central decision, resource-tenant check included, and audit a refusal."""
+    """Apply the central decision (the permission) and audit a refusal.
+
+    The resource rules - tenant (`404`) and treating relationship (`403`) - are decided by the service
+    once it has loaded the row, in the same statement as the relationship.
+    """
     decision = can(actor, permission, ResourceRef(tenant_id=actor.tenant_id))
     if decision.allowed:
         return
@@ -203,6 +206,12 @@ def _authorise(
         resource_id=resource_id,
         patient_id=patient_id,
     )
+
+
+def _enforce_relationship(decision: Decision | None) -> None:
+    """Raise the treating-relationship refusal the service decided and already audited."""
+    if decision is not None:
+        enforce(decision)
 
 
 def _not_found(detail: str) -> HTTPException:
@@ -247,15 +256,16 @@ def create_clinical_record(
         action=service.RECORD_WRITE_ACTION,
         patient_id=record_in.patient_id,
     )
-    # The patient is reached through its module's service facade, never its tables
-    # (`build-contract.md` §7). `None` is "absent" and "another tenant's" alike, so the answer is
-    # `404` and the attempt is audited as a denial.
-    if (
-        patients_service.get_patient(
-            tenant_id=actor.tenant_id, patient_id=record_in.patient_id
-        )
-        is None
-    ):
+    # The patient and the actor's relationship with it are reached through the patients facade,
+    # never its tables (`build-contract.md` §7). `None` is "absent" and "another tenant's" alike, so
+    # the answer is `404`; a patient of this organisation without the relationship a bound grant
+    # needs is `403`. Both are audited as denials.
+    resolved = patients_service.patient_access(
+        actor=actor,
+        patient_id=record_in.patient_id,
+        permission=service.CLINICAL_RECORD_WRITE_PERMISSION,
+    )
+    if resolved.patient is None or resolved.access is None:
         service.record_denial(
             tenant_id=actor.tenant_id,
             context=context,
@@ -264,6 +274,14 @@ def create_clinical_record(
             patient_id=record_in.patient_id,
         )
         raise _not_found("Patient not found")
+    if not resolved.access.allowed:
+        _refuse(
+            actor=actor,
+            context=context,
+            decision=resolved.access.decision,
+            action=service.RECORD_WRITE_ACTION,
+            patient_id=record_in.patient_id,
+        )
     return service.create_record(
         tenant_id=actor.tenant_id, context=context, record_in=record_in
     )
@@ -282,9 +300,8 @@ def read_clinical_record(
         action=service.RECORD_READ_ACTION,
         resource_id=record_id,
     )
-    outcome = service.get_record(
-        tenant_id=actor.tenant_id, context=context, record_id=record_id
-    )
+    outcome = service.get_record(actor=actor, context=context, record_id=record_id)
+    _enforce_relationship(outcome.decision)
     if outcome.record is None:
         raise _not_found(_NOT_FOUND)
     return outcome.record
@@ -311,11 +328,12 @@ def read_clinical_record_version(
         resource_id=record_id,
     )
     outcome = service.get_version(
-        tenant_id=actor.tenant_id,
+        actor=actor,
         context=context,
         record_id=record_id,
         version=version,
     )
+    _enforce_relationship(outcome.decision)
     if outcome.version is None:
         raise _not_found(_NOT_FOUND)
     return outcome.version
@@ -346,7 +364,7 @@ def list_patient_clinical_records(
     try:
         # A patient that is not the caller's own is `NOT_FOUND`, audited inside `list_timeline`.
         outcome = service.list_timeline(
-            tenant_id=actor.tenant_id,
+            actor=actor,
             context=context,
             patient_id=patient_id,
             limit=limit,
@@ -354,6 +372,7 @@ def list_patient_clinical_records(
         )
     except service.InvalidCursor as error:
         raise _unprocessable("INVALID_CURSOR", str(error)) from error
+    _enforce_relationship(outcome.decision)
     if outcome.page is None:
         raise _not_found("Patient not found")
     return outcome.page
@@ -418,7 +437,7 @@ def _append(
     )
     try:
         outcome = service.append_version(
-            tenant_id=actor.tenant_id,
+            actor=actor,
             context=context,
             record_id=record_id,
             append_in=append_in,
@@ -426,6 +445,7 @@ def _append(
         )
     except service.VersionConflict as error:
         raise _conflict(service.VERSION_CONFLICT, str(error)) from error
+    _enforce_relationship(outcome.decision)
     if outcome.status == service.STATUS_ALREADY_SIGNED:
         raise _refusal(
             service.NOTE_ALREADY_SIGNED,
@@ -454,9 +474,8 @@ def sign_clinical_record(
         action=service.RECORD_WRITE_ACTION,
         resource_id=record_id,
     )
-    outcome = service.sign_record(
-        tenant_id=actor.tenant_id, context=context, record_id=record_id
-    )
+    outcome = service.sign_record(actor=actor, context=context, record_id=record_id)
+    _enforce_relationship(outcome.decision)
     if outcome.status == service.STATUS_ALREADY_SIGNED:
         raise _refusal(service.NOTE_ALREADY_SIGNED, "The record is already signed")
     if outcome.status == service.STATUS_NOT_AUTHOR:

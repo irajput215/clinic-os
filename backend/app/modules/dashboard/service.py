@@ -14,10 +14,11 @@ Contract: `docs2/sdlc/08-today/api.md` (built 2026-10-08, Milestone 2 phase 2E).
 - **A section is read only when the caller may read it.** The router decides from the permission
   set; a withheld section is never queried, so it cannot leak through a bug in the response shaping.
 - **Audit**: each section is audited exactly as the owning module audits its own list route, on this
-  transaction. The approvals section writes `tga_approval.read` (the register's event). The schedule
-  and the script queue write nothing, like `GET /appointments` (deferred with `patient.read`, T1-34)
-  and `GET /prescriptions` (the closed catalogue has no prescription read action). No catalogue
-  action was added; the gap is recorded in `docs2/sdlc/08-today/api.md`.
+  transaction: `appointment.read` for the schedule, `prescription.read` for the script queue (both
+  registered with T1-34) and `tga_approval.read` for the approvals (the register's event). The
+  events are written together, chained in that order, in one lock-and-insert
+  (`audit.record_many`), so auditing every section costs the page no more round trips than
+  auditing one did.
 """
 
 from collections.abc import Collection
@@ -26,6 +27,7 @@ from typing import Final
 from app.core.db import tenant_transaction
 from app.core.reads import Lockstep
 from app.modules.appointments import service as appointments
+from app.modules.audit import service as audit
 from app.modules.dashboard.schemas import DashboardSection, TodaySummary
 from app.modules.prescriptions import service as prescriptions
 from app.modules.tga_approvals import service as tga_approvals
@@ -53,6 +55,7 @@ def today(
     name, dispatch and gate lookup - then the approvals section's audit event (two: the chain lock
     with its head, and the insert), then `COMMIT`.
     """
+    events: list[audit.AuditEvent] = []
     with tenant_transaction(
         tenant_id=actor.tenant_id, actor_id=actor.user_id, actor_role=actor.actor_role
     ) as session:
@@ -82,12 +85,29 @@ def today(
                     today=day.day,
                     limit=APPROVAL_DIGEST_LIMIT,
                     client_tenant_id_supplied=client_tenant_id_supplied,
+                    events=events,
                 )
             )
             if "approvals" in readable
             else None
         )
         sections.run(session)
+        section_events = []
+        if schedule is not None:
+            section_events.append(
+                appointments.read_event(
+                    query_filters=["today"],
+                    result_count=len(schedule.value.data),
+                )
+            )
+        if scripts is not None:
+            section_events.append(
+                prescriptions.read_event(
+                    query_filters=["actionable"],
+                    result_count=len(scripts.value.actionable),
+                )
+            )
+        audit.record_many(session, [*section_events, *events])
         return TodaySummary(
             date=day.day,
             timezone=appointments.TIMEZONE,

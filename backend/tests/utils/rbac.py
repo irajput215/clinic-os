@@ -200,6 +200,15 @@ class RbacApi:
         if not self._tenant_ids:
             return
         with engine.begin() as conn:
+            # Care relationships first, for every tenant at once: a test may file one under another
+            # organisation (to prove it authorises nothing), and it names this one's patient and user.
+            conn.execute(
+                text(
+                    "DELETE FROM care_relationships WHERE tenant_id = ANY(:tenant_ids)"
+                    " OR patient_id IN (SELECT id FROM patients WHERE tenant_id = ANY(:tenant_ids))"
+                ),
+                {"tenant_ids": list(self._tenant_ids)},
+            )
             for tenant_id in self._tenant_ids:
                 # RESTRICT ordering: patients, then the RBAC rows, then the accounts, then the
                 # organisation. Signup provisions roles and a bootstrap grant for every tenant.

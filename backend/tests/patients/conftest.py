@@ -174,6 +174,10 @@ class PatientsApi:
         with engine.begin() as conn:
             for tenant_id in self._tenant_ids:
                 conn.execute(
+                    text("DELETE FROM care_relationships WHERE tenant_id = :tenant_id"),
+                    {"tenant_id": tenant_id},
+                )
+                conn.execute(
                     text("DELETE FROM patients WHERE tenant_id = :tenant_id"),
                     {"tenant_id": tenant_id},
                 )

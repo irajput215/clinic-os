@@ -55,13 +55,14 @@ from app.modules.appointments.schemas import (
     PublicSlot,
 )
 from app.modules.audit import service as audit
+from app.modules.care_relationships import service as care
 from app.modules.patients import service as patients
 from app.modules.users_roles import service as users_roles
 from app.modules.users_roles.catalog import (
     CLIENT_TENANT_ID_IGNORED,
     PRACTITIONER_ROLE_BY_CODE,
 )
-from app.modules.users_roles.policy import Actor
+from app.modules.users_roles.policy import Actor, Decision
 
 TIMEZONE: Final[str] = "Australia/Sydney"
 # The public page offers the next 14 days (contract), starting tomorrow: a same-day online booking
@@ -76,6 +77,14 @@ MAX_PATIENT_HISTORY: Final[int] = 200
 
 APPOINTMENT_CREATE: Final[str] = "appointment.create"
 APPOINTMENT_STATE_CHANGE: Final[str] = "appointment.state_change"
+# Registered with T1-34: every read of bookings is audited, a patient's with the relationship and the
+# purpose, the calendar's and the Today page's with the kinds of filter and the row count.
+APPOINTMENT_READ: Final[str] = "appointment.read"
+# The permission a patient's bookings are read under, and the rule is decided for (a booking is part
+# of the patient's record: `APPOINTMENT_PERMISSIONS["read"]` is `patient:read`).
+_PATIENT_READ: Final[str] = "patient:read"
+# The audit `reason` for a patient that is not the caller's own (the clinical-records trail's code).
+NOT_FOUND_REASON: Final[str] = "AUTHZ_DENIED_CROSS_TENANT"
 
 # Refusal codes, each with one status (`detail.code` in the RFC 7807 body).
 APPOINTMENT_NOT_FOUND: Final[str] = "APPOINTMENT_NOT_FOUND"
@@ -193,19 +202,27 @@ def _reads(
 
 def list_appointments(
     *,
-    tenant_id: uuid.UUID,
+    actor: Actor,
     starts_from: datetime,
     starts_before: datetime,
     practitioner_id: uuid.UUID | None,
+    source_ip: str | None = None,
 ) -> list[AppointmentRead]:
-    """Appointments **starting** in `[starts_from, starts_before)`, earliest first."""
+    """Appointments **starting** in `[starts_from, starts_before)`, earliest first. Audited
+    `appointment.read` with the kinds of filter (never a value) and the row count (T1-34)."""
+    tenant_id = actor.tenant_id
     if starts_before <= starts_from or starts_before - starts_from > MAX_RANGE:
         raise AppointmentRefused(
             422,
             INVALID_RANGE,
             "Choose a range where 'to' is after 'from' and no more than 31 days later.",
         )
-    with tenant_transaction(tenant_id=tenant_id) as session:
+    with tenant_transaction(
+        tenant_id=tenant_id,
+        actor_id=actor.user_id,
+        actor_role=actor.actor_role,
+        source_ip=source_ip,
+    ) as session:
         statement = select(Appointment).where(
             Appointment.tenant_id == tenant_id,
             col(Appointment.starts_at) >= starts_from,
@@ -216,19 +233,65 @@ def list_appointments(
         rows = session.exec(
             statement.order_by(col(Appointment.starts_at), col(Appointment.id))
         ).all()
-        return _reads(session, tenant_id=tenant_id, rows=rows)
+        reads = _reads(session, tenant_id=tenant_id, rows=rows)
+        audit.record(
+            session,
+            read_event(
+                query_filters=["range"]
+                + ([] if practitioner_id is None else ["practitioner"]),
+                result_count=len(reads),
+                source_ip=source_ip,
+            ),
+        )
+        return reads
+
+
+def read_event(
+    *, query_filters: list[str], result_count: int, source_ip: str | None = None
+) -> audit.AuditEvent:
+    """The `appointment.read` event for a practice-wide read: filter kinds and a count only."""
+    return audit.AuditEvent(
+        action=APPOINTMENT_READ,
+        result="SUCCESS",
+        source_ip=source_ip,
+        payload={"query_filters": query_filters, "result_count": result_count},
+    )
+
+
+@dataclass(frozen=True)
+class PatientBookings:
+    """A patient's bookings, or why not: `found=False` is `404`; `decision` is the `403`."""
+
+    found: bool
+    bookings: list[AppointmentRead]
+    decision: Decision | None = None
 
 
 def list_for_patient(
-    *, tenant_id: uuid.UUID, patient_id: uuid.UUID
-) -> list[AppointmentRead] | None:
-    """One patient's bookings, newest first; `None` when the patient is absent or another tenant's."""
-    with tenant_transaction(tenant_id=tenant_id) as session:
-        # The patient's name and its bookings in one flight. The bookings are only returned once the
-        # patients facade has answered that the patient is this tenant's own and live.
+    *, actor: Actor, patient_id: uuid.UUID, source_ip: str | None = None
+) -> PatientBookings:
+    """One patient's bookings, newest first, under the treating-relationship rule (T1-34).
+
+    Not found (absent, or another tenant's) and refused (a relationship-bound grant without an active
+    care relationship) are both audited `DENIED`; a read is audited `SUCCESS` with the relationship id,
+    the purpose and the row count.
+    """
+    tenant_id = actor.tenant_id
+    with tenant_transaction(
+        tenant_id=tenant_id,
+        actor_id=actor.user_id,
+        actor_role=actor.actor_role,
+        source_ip=source_ip,
+    ) as session:
+        # The patient's name, the actor's relationship with it and its bookings in one flight. The
+        # bookings are only returned once the patients facade has answered that the patient is this
+        # tenant's own and live, and the policy layer has allowed the read.
         batch = ReadBatch()
         names = patients.queue_display_names(
             batch, tenant_id=tenant_id, patient_ids=[patient_id]
+        )
+        relationship = batch.scalars(
+            select(care.actor_relationship_id(actor, patient_id))
         )
         rows = batch.scalars(
             select(Appointment)
@@ -240,9 +303,48 @@ def list_for_patient(
             .limit(MAX_PATIENT_HISTORY)
         )
         batch.send(session)
+
+        def denied(reason: str) -> None:
+            audit.record(
+                session,
+                audit.AuditEvent(
+                    action=APPOINTMENT_READ,
+                    result="DENIED",
+                    resource_id=patient_id,
+                    reason=reason,
+                    source_ip=source_ip,
+                    payload={"patient_id": str(patient_id)},
+                ),
+            )
+
         if patient_id not in names.value:
-            return None
-        return _convert(rows.value, names.value)
+            denied(NOT_FOUND_REASON)
+            return PatientBookings(found=False, bookings=[])
+        access = care.patient_access(
+            actor,
+            _PATIENT_READ,
+            patient_id=patient_id,
+            care_relationship_id=relationship.value[0],
+        )
+        if not access.allowed:
+            denied(access.reason)
+            return PatientBookings(found=True, bookings=[], decision=access.decision)
+        bookings = _convert(rows.value, names.value)
+        audit.record(
+            session,
+            audit.AuditEvent(
+                action=APPOINTMENT_READ,
+                result="SUCCESS",
+                resource_id=patient_id,
+                source_ip=source_ip,
+                payload={
+                    "patient_id": str(patient_id),
+                    "result_count": len(bookings),
+                    **access.audit_payload(),
+                },
+            ),
+        )
+        return PatientBookings(found=True, bookings=bookings)
 
 
 @dataclass(frozen=True)

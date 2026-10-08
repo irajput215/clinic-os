@@ -106,10 +106,10 @@ def list_prescriptions(
     cursor: Annotated[str | None, Query(max_length=512)] = None,
 ) -> PrescriptionsPublic:
     """The queue and its history, newest first; actionable rows carry the gate's answer **now**."""
-    enforce(can(actor, PRESCRIPTION_PERMISSIONS["read"]))
+    _authorize(actor, PRESCRIPTION_PERMISSIONS["read"], action=service.READ)
     try:
-        return service.list_prescriptions(
-            tenant_id=actor.tenant_id,
+        result = service.list_prescriptions(
+            actor=actor,
             states=state or (),
             prescriber_id=prescriber_id,
             patient_id=patient_id,
@@ -121,6 +121,11 @@ def list_prescriptions(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={"code": "INVALID_CURSOR", "message": str(error)},
         ) from error
+    if result.decision is not None:
+        # The treating-relationship refusal for a patient's scripts, already audited (T1-34).
+        enforce(result.decision)
+    assert result.page is not None, "a page is returned whenever nothing refused it"
+    return result.page
 
 
 @router.get(
@@ -145,12 +150,7 @@ def stage_prescription(
 ) -> PrescriptionRead:
     """Stage a `DRAFT`. The response carries the gate's current answer so the UI can warn."""
     _authorize(actor, PRESCRIPTION_PERMISSIONS["stage"], action=service.CREATE)
-    result = service.stage(
-        tenant_id=actor.tenant_id,
-        actor_id=actor.user_id,
-        actor_role=actor.actor_role,
-        body=body,
-    )
+    result = service.stage(actor=actor, body=body)
     if isinstance(result, Refusal):
         _raise(result)
     return result

@@ -27,6 +27,7 @@ from app.core.server_timing import SERVER_TIMING_HEADER
 from tests.dashboard.conftest import DashboardApi
 from tests.patients.conftest import PatientsApi, TenantSession
 from tests.prescriptions.conftest import Clinic
+from tests.utils.care import relate
 from tests.utils.rbac import ActorSession
 
 API = settings.API_V1_STR
@@ -141,6 +142,13 @@ def _seed(dash: DashboardApi) -> SeededClinic:
             assert signed.status_code == 200, signed.text
     limiter.clear()
 
+    # The doctor writes the notes: a doctor reaches a patient through the care team (T1-34).
+    relate(
+        dash.client,
+        owner.headers,
+        patient_id=base.patient_id,
+        practitioner_id=doctor.user_id,
+    )
     for _ in range(SEEDED_NOTES):
         created = dash.client.post(
             f"{API}/clinical-records",

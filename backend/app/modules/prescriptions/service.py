@@ -42,6 +42,7 @@ from app.core.config import settings
 from app.core.db import tenant_transaction
 from app.core.reads import Pending, Plan, ReadBatch
 from app.modules.audit import service as audit
+from app.modules.care_relationships import service as care
 from app.modules.identity_tenancy import service as identity
 from app.modules.patients import service as patients_service
 from app.modules.prescriptions import gate
@@ -65,9 +66,16 @@ from app.modules.prescriptions.transport import configured_transport
 from app.modules.tga_approvals.schemas import TgaMatchResponse
 from app.modules.users_roles import service as users_roles
 from app.modules.users_roles.catalog import PRESCRIPTION_PERMISSIONS
+from app.modules.users_roles.policy import Actor, Decision
 
 # The closed catalogue's actions (`app/modules/audit/actions.py`).
 CREATE: Final[str] = "prescription.create"
+# Registered with T1-34: a read of scripts, once per page (per patient on a patient's page), never
+# once per row (`11-prescribing/02-user-stories.md`).
+READ: Final[str] = "prescription.read"
+# A script is part of its patient's record: reaching a patient's scripts, or staging one, is decided as
+# a `patient:read` of that patient under the treating-relationship rule (T1-34, D-007).
+PATIENT_ACCESS_PERMISSION: Final[str] = "patient:read"
 SIGN: Final[str] = "prescription.sign"
 DISPATCH: Final[str] = "prescription.dispatch"
 DISPATCH_BLOCKED: Final[str] = "prescription.dispatch_blocked"
@@ -116,6 +124,14 @@ class DispatchResult:
 
     prescription: PrescriptionRead
     replayed: bool
+
+
+@dataclass(frozen=True)
+class PrescriptionsPage:
+    """A page, or the treating-relationship refusal (`decision`) for a patient's page."""
+
+    page: PrescriptionsPublic | None
+    decision: Decision | None = None
 
 
 class InvalidCursor(RuntimeError):
@@ -398,16 +414,25 @@ def decode_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
 
 def list_prescriptions(
     *,
-    tenant_id: uuid.UUID,
+    actor: Actor,
     states: Sequence[str] = (),
     prescriber_id: uuid.UUID | None = None,
     patient_id: uuid.UUID | None = None,
     limit: int = DEFAULT_PAGE_SIZE,
     cursor: str | None = None,
-) -> PrescriptionsPublic:
-    """One keyset page, newest first. Actionable rows carry the gate as it answers **now** (R2)."""
+) -> PrescriptionsPage:
+    """One keyset page, newest first. Actionable rows carry the gate as it answers **now** (R2).
+
+    Audited once per page as `prescription.read` (T1-34). A patient's page (`patient_id`) runs the
+    treating-relationship rule for that patient - the relationship travels with the page in one
+    flight - and records the relationship id and the purpose; a relationship-bound reader without one
+    is refused `403` and audited `DENIED`. The queue records the kinds of filter and the row count.
+    """
+    tenant_id = actor.tenant_id
     decoded = None if cursor is None else decode_cursor(cursor)
-    with tenant_transaction(tenant_id=tenant_id) as session:
+    with tenant_transaction(
+        tenant_id=tenant_id, actor_id=actor.user_id, actor_role=actor.actor_role
+    ) as session:
         conditions = [col(Prescription.tenant_id) == tenant_id]
         if states:
             conditions.append(col(Prescription.state).in_(list(states)))
@@ -426,17 +451,84 @@ def list_prescriptions(
                     ),
                 )
             )
-        rows: Sequence[Prescription] = session.exec(
+        first = ReadBatch()
+        found = first.scalars(
             select(Prescription)
             .where(*conditions)
             .order_by(col(Prescription.created_at).desc(), col(Prescription.id).desc())
             .limit(limit + 1)
-        ).all()
+        )
+        patient = (
+            None
+            if patient_id is None
+            else patients_service.queue_display_names(
+                first, tenant_id=tenant_id, patient_ids=[patient_id]
+            )
+        )
+        relationship = (
+            None
+            if patient_id is None
+            else first.scalars(select(care.actor_relationship_id(actor, patient_id)))
+        )
+        first.send(session)
+
+        payload: dict[str, Any]
+        if patient_id is None or patient is None or relationship is None:
+            payload = {
+                "query_filters": sorted(
+                    kind
+                    for kind, used in (
+                        ("state", bool(states)),
+                        ("prescriber", prescriber_id is not None),
+                    )
+                    if used
+                )
+            }
+        elif patient_id not in patient.value:
+            # Not one of the caller's patients: nothing of theirs can match, and the page is empty.
+            payload = {"patient_id": str(patient_id)}
+        else:
+            access = care.patient_access(
+                actor,
+                PATIENT_ACCESS_PERMISSION,
+                patient_id=patient_id,
+                care_relationship_id=relationship.value[0],
+            )
+            if not access.allowed:
+                _record(
+                    session,
+                    action=READ,
+                    result="DENIED",
+                    resource_id=None,
+                    reason=access.reason,
+                    payload={"patient_id": str(patient_id)},
+                )
+                return PrescriptionsPage(page=None, decision=access.decision)
+            payload = {"patient_id": str(patient_id), **access.audit_payload()}
+
+        rows = found.value
         page, overflow = list(rows[:limit]), rows[limit:]
-        return PrescriptionsPublic(
+        result = PrescriptionsPublic(
             data=_reads(session, tenant_id=tenant_id, rows=page),
             next_cursor=encode_cursor(page[-1]) if overflow else None,
         )
+        _record(
+            session,
+            action=READ,
+            result="SUCCESS",
+            resource_id=None,
+            payload={**payload, "result_count": len(result.data)},
+        )
+        return PrescriptionsPage(page=result)
+
+
+def read_event(*, query_filters: list[str], result_count: int) -> audit.AuditEvent:
+    """The `prescription.read` event for a practice-wide read: filter kinds and a count only."""
+    return audit.AuditEvent(
+        action=READ,
+        result="SUCCESS",
+        payload={"query_filters": query_filters, "result_count": result_count},
+    )
 
 
 def queue_summary_plan(
@@ -513,15 +605,21 @@ def list_prescribers(*, tenant_id: uuid.UUID) -> PrescribersPublic:
 
 def stage(
     *,
-    tenant_id: uuid.UUID,
-    actor_id: uuid.UUID,
-    actor_role: str | None,
+    actor: Actor,
     body: PrescriptionCreate,
 ) -> PrescriptionRead | Refusal:
-    """Create a `DRAFT` for a patient of this tenant, addressed to a prescriber who may sign it."""
-    patient = patients_service.get_patient(
-        tenant_id=tenant_id, patient_id=body.patient_id
+    """Create a `DRAFT` for a patient of this tenant, addressed to a prescriber who may sign it.
+
+    The patient and the actor's relationship with it are resolved in one statement through the
+    patients facade; staging for a patient a relationship-bound grant cannot reach is refused
+    `403 AUTHZ_CARE_RELATIONSHIP_DENIED` and audited (`11-prescribing` US-1: "active care
+    relationship"; T1-34).
+    """
+    tenant_id, actor_id, actor_role = actor.tenant_id, actor.user_id, actor.actor_role
+    resolved = patients_service.patient_access(
+        actor=actor, patient_id=body.patient_id, permission=PATIENT_ACCESS_PERMISSION
     )
+    patient = resolved.patient
     prescribers = users_roles.holders_of(
         tenant_id=tenant_id, permission=PRESCRIPTION_PERMISSIONS["sign"]
     )
@@ -539,6 +637,17 @@ def stage(
             return Refusal(
                 PATIENT_NOT_FOUND, status.HTTP_404_NOT_FOUND, "Patient not found"
             )
+        if resolved.access is not None and not resolved.access.allowed:
+            decision = resolved.access.decision
+            _record(
+                session,
+                action=CREATE,
+                result="DENIED",
+                resource_id=None,
+                reason=decision.code.value,
+                payload={"patient_id": str(body.patient_id)},
+            )
+            return Refusal(decision.code.value, decision.status_code, decision.message)
         if body.prescriber_id not in prescribers:
             _record(
                 session,
