@@ -81,6 +81,7 @@ from sqlmodel import Session, col, func, select
 
 from app.core.config import settings
 from app.core.db import tenant_transaction
+from app.core.reads import Pending, ReadBatch
 
 # The audit module is reached through its service facade (`docs/reference/build-contract.md` §7).
 # The import is one-way — `audit` knows nothing about `patients` — so there is no cycle.
@@ -360,14 +361,23 @@ def _page(
             > tuple_(literal(family_name), literal(given_name), literal(boundary_id))
         )
 
-    count = session.exec(select(func.count()).select_from(Patient).where(*live)).one()
-    rows: Sequence[Patient] = session.exec(
-        select(Patient)
+    # The page and the total in one statement: every row carries the total as a scalar subquery
+    # (`docs/reference/performance.md`). Only an empty page after a cursor, which has no row to carry
+    # it, counts on its own; an empty first page means nothing matches at all.
+    counted = select(func.count()).select_from(Patient).where(*live)
+    rows = session.exec(
+        select(Patient, counted.scalar_subquery())
         .where(*live, *after)
         .order_by(col(Patient.family_name), col(Patient.given_name), col(Patient.id))
         .limit(limit + 1)
     ).all()
-    page, overflow = rows[:limit], rows[limit:]
+    if rows:
+        count = rows[0][1]
+    elif boundary_id is None:
+        count = 0
+    else:
+        count = session.exec(counted).one()
+    page, overflow = [patient for patient, _ in rows[:limit]], rows[limit:]
     return PatientsPublic(
         data=[PatientRead.model_validate(patient) for patient in page],
         count=count,
@@ -576,6 +586,37 @@ def display_names(
         patient.id: f"{patient.preferred_name or patient.given_name} {patient.family_name}"
         for patient in rows
     }
+
+
+def queue_display_names(
+    batch: ReadBatch, *, tenant_id: uuid.UUID, patient_ids: Sequence[uuid.UUID]
+) -> Pending[dict[uuid.UUID, str]]:
+    """`display_names`, queued on the caller's batch so it travels with the caller's other reads.
+
+    Same answer, same transaction (`app.core.reads`): an id that is absent, soft-deleted or another
+    tenant's is simply missing. No ids, no statement.
+    """
+    wanted = sorted(set(patient_ids))
+    if not wanted:
+        return Pending.ready({})
+    rows = batch.rows(
+        select(
+            col(Patient.id),
+            col(Patient.given_name),
+            col(Patient.preferred_name),
+            col(Patient.family_name),
+        ).where(
+            col(Patient.tenant_id) == tenant_id,
+            col(Patient.id).in_(wanted),
+            col(Patient.deleted_at).is_(None),
+        )
+    )
+    return rows.then(
+        lambda found: {
+            patient_id: f"{preferred or given} {family}"
+            for patient_id, given, preferred, family in found
+        }
+    )
 
 
 def match_or_create_for_booking(
