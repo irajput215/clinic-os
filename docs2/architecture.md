@@ -96,17 +96,42 @@ The UI hides, disables and explains. It never decides. In particular:
 
 ## Speed measures
 
-| Measure | Effect |
-|---|---|
-| Route-level code splitting (`autoCodeSplitting`), no page code in route definitions | Entry chunk is the shell and libraries only |
-| No schema library in route search validation (`lib/search.ts`) | zod loads with forms, not on every page |
-| Hover/intent preloading and loader prefetching | Navigation renders from cache |
-| Per-query `staleTime`, `retry` only for network/5xx (`retryTransient`) | No refetch storms, no 7-second retries on a `403` |
-| Self-hosted fonts (`@fontsource`), `unicode-range` subsets | No third-party font request; only the Latin subset downloads |
-| One-round-trip Today page (`GET /dashboard/today`, every section read on one server transaction) | One request instead of four |
+Every row was checked against the code on 2026-10-08 (branch `m3/frontend-speed`).
 
-**Budget:** initial JS at most 200 KB gzipped. Measured at build: entry 115 KB plus shared 36 KB, so
-about 151 KB. Every route chunk is under 7 KB gzipped.
+| Measure | Effect | Where |
+|---|---|---|
+| Route-level code splitting (`autoCodeSplitting`); a route file holds only its loader and search validation | Each screen's code, dialogs, zod and react-hook-form load with the screen that needs them | `vite.config.ts`, `routes/` |
+| React in its own chunk | A deploy that changes only app code leaves React's ~55 KB cached | `vite.config.ts` (`codeSplitting.groups`) |
+| Toast library mounted with the app | A toast raised on a slow first load is never lost (sonner's toaster drops toasts raised before it mounts, so it is not deferred) | `main.tsx` |
+| No schema library in route search validation | zod loads with forms, not on every page | `lib/search.ts` |
+| Intent preloading (`defaultPreload: "intent"`) and loader prefetching | A hovered or focused link has its code and data before the click | `main.tsx`, `routes/` |
+| No first-load waterfall: the `_app` loader starts `/users/me`, the permission set and the two sidebar counts together with the screen's own loader | One round trip before the shell and the page can render. Only the clinic slug waits (for the permission set, so it is never asked when the server is certain to refuse) | `routes/_app.tsx`, proved by `tests/first-load.spec.ts` |
+| Per-query `staleTime`: session, permissions 5 min, tenant for the session; clinical lists and Today 15 s, sidebar approval count 30 s; `retry` only for network/5xx (`retryTransient`) | No refetch storms, no 7-second retries on a `403` | `data/*.ts`, `lib/session.ts` |
+| One-round-trip Today page (`GET /dashboard/today`, every section read on one server transaction) | One request instead of four | `data/dashboard.ts` |
+| Self-hosted fonts, latin and latin-ext only, woff2 only, `font-display: swap`; the serif's italic from the smaller `wght` file | 16 font files in the build (was 44); sign-in downloads 238 KB of fonts (was 315 KB) | `styles/fonts.css` |
+| The serif and body latin files preloaded from `index.html`, hashed URLs written at build | Text is drawn in its own face sooner | `vite.config.ts` (`preloadFonts`) |
+| Hashed `/assets/*` sent `Cache-Control: public, max-age=31536000, immutable`; HTML (`index.html`, the SPA fallback) sent `no-cache` | A returning browser asks for nothing but the HTML (answered `304`), and never runs a stale `index.html` | `backend/app/core/static_cache.py`, `tests/core/test_static_cache.py` |
+| Brotli and gzip copies written at build with Node's zlib; the backend sends the one the browser accepts (`Content-Encoding`, `Vary: Accept-Encoding`) | JS and CSS travel compressed from the origin; no per-request compression, no new dependency | `vite.config.ts` (`precompress`), `static_cache.py` |
+| Skeletons, not spinners, while a screen or section loads; `PagePending` has `PageHeader`'s exact height | Nothing jumps when data arrives | `design/primitives.tsx` |
+
+Optimistic updates: none. Every mutation in the app is either a clinical or audited action (signing,
+dispatch, approvals, appointments, consult notes, patients, role grants, invitations) or a change to
+one's own account that the server validates; each waits for the server's answer.
+
+**Budgets** (CI, `.github/workflows/playwright.yml`, `bun run check:budget` after `bun run build`;
+gzip):
+
+| | Budget | Measured | Before this branch |
+|---|---|---|---|
+| Initial JS (entry + every `modulepreload`): what any first load fetches before rendering | 150 KB | 145.6 KB | 145.2 KB |
+| Entry chunk (`index-*.js`) | 90 KB | 44.5 KB (React is its own chunk) | 98.3 KB |
+| Largest lazy chunk (zod with react-hook-form) | 35 KB | 28.6 KB | 28.6 KB |
+| CSS | 15 KB | 10.8 KB | 11.3 KB |
+
+**Largest Contentful Paint** under 2 s on sign-in and Today, cold, measured against the
+backend-served build (`tests/performance.spec.ts`) with Chrome DevTools throttling: 9 Mbit/s down,
+1.5 Mbit/s up, 30 ms added round trip (a clinic near a Sydney edge on fast 4G or ordinary office
+broadband), CPU slowed 2x. Measured locally (median of five): about 0.70 s on both.
 
 ## Accessibility
 

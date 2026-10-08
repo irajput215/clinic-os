@@ -372,8 +372,9 @@ export function PagePending() {
   return (
     <div aria-busy="true">
       <div className="mb-6 border-line border-b pb-5">
-        <div className="h-8 w-64 animate-pulse rounded-btn bg-fill" />
-        <div className="mt-2.5 h-4 w-96 max-w-full animate-pulse rounded bg-fill/70" />
+        {/* PageHeader's own box: a 31 px title at 1.1 leading, a 6 px gap, a 20 px subtitle line. */}
+        <div className="h-[34px] w-64 max-w-full animate-pulse rounded-btn bg-fill" />
+        <div className="mt-1.5 h-5 w-96 max-w-full animate-pulse rounded bg-fill/70" />
       </div>
       <SkeletonRows rows={5} />
     </div>

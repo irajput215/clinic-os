@@ -28,6 +28,8 @@ extend-ignore-re = [
     "@[a-zA-Z0-9](?:-?[a-zA-Z0-9])*",
     # Name of the package in the PR title
     "Bump certifi ",
+    # Unicode code points and ranges in @font-face `unicode-range` (U+0100-02BA)
+    "U\\+[0-9A-Fa-f?]+(?:-[0-9A-Fa-f]+)?",
 ]
 
 [tool.typos.default.extend-identifiers]

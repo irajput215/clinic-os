@@ -28,7 +28,7 @@ import {
   scriptsRepo,
 } from "@/data/scripts"
 import { MATCH_REASONS } from "@/data/types"
-import { ErrorState, Field, Mono } from "@/design/primitives"
+import { ErrorState, Field, Mono, SkeletonRows } from "@/design/primitives"
 import { PatientPicker } from "@/features/shared/PatientPicker"
 import { focusFirstError } from "@/lib/form"
 import { clinicToday, formatDate, lastCoveredDay } from "@/lib/format"
@@ -117,12 +117,7 @@ function StageScriptForm({
   const prescribers = useQuery(prescribersQuery)
   const { data: me } = useQuery(currentUserQuery)
   if (prescribers.error) return <ErrorState error={prescribers.error} />
-  if (!prescribers.data || !me)
-    return (
-      <div className="flex justify-center py-10 text-stone">
-        <Loader2 className="animate-spin" aria-label="Loading" />
-      </div>
-    )
+  if (!prescribers.data || !me) return <SkeletonRows rows={6} />
   return (
     <StageScriptFields
       patientId={patientId}

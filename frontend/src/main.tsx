@@ -66,6 +66,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
+      {/* Mounted with the app, not deferred: sonner's toaster starts empty and drops any toast
+          raised before it mounts, so a deferred one lost "Profile saved" on a slow first load. */}
       <Toaster position="bottom-right" closeButton />
     </QueryClientProvider>
   </StrictMode>,

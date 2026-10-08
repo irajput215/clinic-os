@@ -9,7 +9,6 @@ import {
 import { ArrowLeft, ArrowRight, Menu, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import { approvalCountsQuery } from "@/data/approvals"
-import { useCanAdminister } from "@/data/permissions"
 import { isActionable, scriptsQuery } from "@/data/scripts"
 import { useClinicSlug } from "@/data/tenant"
 import { formatLongDay } from "@/lib/format"
@@ -18,6 +17,7 @@ import { cn } from "@/lib/utils"
 import { BrandMark } from "./BrandMark"
 import { GlobalSearch } from "./GlobalSearch"
 import { type CountKey, NAV } from "./nav"
+import { useCanAdminister } from "./useCanAdminister"
 
 function useNavCounts(): Record<CountKey, number | undefined> {
   const scripts = useQuery({ ...scriptsQuery, retry: false })

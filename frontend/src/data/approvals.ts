@@ -155,7 +155,7 @@ export const registerQuery = (filter: RegisterFilter) =>
 export const approvalCountsQuery = queryOptions({
   queryKey: ["approvals", "counts"],
   queryFn: async () => (await readRegister({}, 1)).counts,
-  staleTime: 60_000,
+  staleTime: 30_000,
 })
 
 export const patientApprovalsQuery = (patientId: string) =>

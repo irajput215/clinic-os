@@ -131,14 +131,14 @@ export const scriptsRepo = {
 export const scriptsQuery = queryOptions({
   queryKey: ["scripts"],
   queryFn: scriptsRepo.list,
-  staleTime: 10_000,
+  staleTime: 15_000,
 })
 
 export const patientScriptsQuery = (patientId: string) =>
   queryOptions({
     queryKey: ["scripts", "patient", patientId],
     queryFn: () => scriptsRepo.listForPatient(patientId),
-    staleTime: 10_000,
+    staleTime: 15_000,
   })
 
 export const prescribersQuery = queryOptions({

@@ -1,4 +1,10 @@
+import { readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
+import {
+  brotliCompressSync,
+  gzipSync,
+  constants as zlibConstants,
+} from "node:zlib"
 import tailwindcss from "@tailwindcss/vite"
 import { tanstackRouter } from "@tanstack/router-plugin/vite"
 import react from "@vitejs/plugin-react"
@@ -40,6 +46,110 @@ const contentSecurityPolicy = (apiUrl: string): Plugin => {
   }
 }
 
+/**
+ * `<link rel="preload">` for the font files the first paint of every screen needs: the serif's and
+ * the body face's latin upright (`src/styles/fonts.css`). Without it a font is requested only after
+ * the stylesheet is parsed and the first layout finds text that uses it.
+ *
+ * The files are content-hashed at build, so the links are written from the bundle, never hard-coded.
+ * A source file that no longer reaches the bundle fails the build instead of silently losing the
+ * preload. Same-origin, so the policy's `font-src 'self'` covers it; `crossorigin` is required
+ * because fonts are always fetched in CORS mode and a preload without it is fetched twice.
+ */
+const CRITICAL_FONTS = [
+  "source-serif-4-latin-opsz-normal.woff2",
+  "instrument-sans-latin-400-normal.woff2",
+]
+
+const preloadFonts = (): Plugin => ({
+  name: "clinic-os-preload-fonts",
+  apply: "build",
+  transformIndexHtml: {
+    order: "post",
+    handler: (_html, ctx) => {
+      const assets = Object.values(ctx.bundle ?? {}).filter(
+        (output) => output.type === "asset",
+      )
+      return CRITICAL_FONTS.map((source) => {
+        const asset = assets.find((a) =>
+          a.originalFileNames.some((name) => name.endsWith(`/${source}`)),
+        )
+        if (!asset)
+          throw new Error(
+            `preloadFonts: ${source} is not in the bundle (src/styles/fonts.css)`,
+          )
+        return {
+          tag: "link",
+          attrs: {
+            rel: "preload",
+            href: `/${asset.fileName}`,
+            as: "font",
+            type: "font/woff2",
+            crossorigin: "",
+          },
+          // After the CSP <meta>, which governs only what follows it.
+          injectTo: "head" as const,
+        }
+      })
+    },
+  },
+})
+
+/**
+ * A Brotli (`.br`) and a gzip (`.gz`) copy beside every compressible file under `assets/`, made
+ * once at build with Node's own zlib (no dependency). The backend serves the copy the browser
+ * accepts, with `Content-Encoding` and `Vary: Accept-Encoding`, and the original otherwise
+ * (`backend/app/core/static_cache.py`), so nothing is compressed per request. Fonts and images are
+ * already compressed and are left alone; a copy that saves too little is not written.
+ */
+const COMPRESSIBLE = /\.(js|css|svg|json|txt)$/
+const MIN_BYTES = 1024
+const MIN_SAVING = 0.9
+
+const precompress = (): Plugin => {
+  let outDir = ""
+  return {
+    name: "clinic-os-precompress",
+    apply: "build",
+    configResolved: (config) => {
+      outDir = path.resolve(config.root, config.build.outDir)
+    },
+    writeBundle: async (_options, bundle) => {
+      const files = Object.keys(bundle).filter(
+        (name) => name.startsWith("assets/") && COMPRESSIBLE.test(name),
+      )
+      await Promise.all(
+        files.map(async (name) => {
+          const file = path.join(outDir, name)
+          const source = await readFile(file)
+          if (source.length < MIN_BYTES) return
+          const variants: Array<[string, Buffer]> = [
+            [
+              ".br",
+              brotliCompressSync(source, {
+                params: {
+                  [zlibConstants.BROTLI_PARAM_MODE]:
+                    zlibConstants.BROTLI_MODE_TEXT,
+                  [zlibConstants.BROTLI_PARAM_QUALITY]:
+                    zlibConstants.BROTLI_MAX_QUALITY,
+                  [zlibConstants.BROTLI_PARAM_SIZE_HINT]: source.length,
+                },
+              }),
+            ],
+            [
+              ".gz",
+              gzipSync(source, { level: zlibConstants.Z_BEST_COMPRESSION }),
+            ],
+          ]
+          for (const [suffix, data] of variants)
+            if (data.length < source.length * MIN_SAVING)
+              await writeFile(file + suffix, data)
+        }),
+      )
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "VITE_")
   const apiProxy = {
@@ -74,6 +184,22 @@ export default defineConfig(({ mode }) => {
       outDir: "../backend/app/frontend",
       emptyOutDir: true,
       sourcemap: false,
+      rolldownOptions: {
+        output: {
+          // React and React DOM (about 55 KB gzip, on every screen) in a chunk of their own: a deploy
+          // that changes only app code leaves its hashed name, and so the browser's year-long cache,
+          // untouched. It costs no bytes on a first load. (Grouping @tanstack the same way would pull
+          // hooks only some screens use into every first load, so it is left to the default split.)
+          codeSplitting: {
+            groups: [
+              {
+                name: "react",
+                test: /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/,
+              },
+            ],
+          },
+        },
+      },
     },
     resolve: {
       alias: {
@@ -88,6 +214,8 @@ export default defineConfig(({ mode }) => {
       react(),
       tailwindcss(),
       contentSecurityPolicy(env.VITE_API_URL ?? ""),
+      preloadFonts(),
+      precompress(),
     ],
   }
 })
