@@ -78,8 +78,15 @@ Open <http://127.0.0.1:8000> (page title `Clinic OS`). Rebuild after frontend ch
 
 ## 6. First clinic and sign in
 
-Open `/signup` (on `:5174` or `:8000`), enter a clinic name, your name, email and password. That
-creates the organisation and makes you its administrator. The public booking page is
+Open `/signup` (on `:5174` or `:8000`), enter a clinic name, your name, email and password. The
+page says **Check your email**: nothing exists yet. Open Mailpit (<http://localhost:8025>), open the
+"Confirm your email" message and its link, and choose **Confirm and sign in**. That creates the
+organisation, makes you its administrator and signs you in. The link works once and for 24 hours
+(`SIGNUP_VERIFICATION_EXPIRE_HOURS`); **Send the email again** on the signup page sends a fresh one.
+An address that already has an account gets the same page, and its mailbox a "You already have an
+account" notice instead of a link ([D-007](docs/reference/decisions/D-007-signup-email-verification.md)).
+Without outgoing mail (no Mailpit, no `SMTP_HOST`) signup is refused (`503 EMAIL_NOT_CONFIGURED`)
+and nothing is created. The public booking page is
 `/book/<clinic-slug>`. `FIRST_SUPERUSER` is the platform superuser (account administration), not a
 clinic member.
 
@@ -203,9 +210,10 @@ public URL, or CORS and every emailed link point at `http://localhost:8000`. Two
 decide whether the deployment is safe and complete:
 
 - **Outgoing mail (`SMTP_*`).** Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` (a
-  secret), `SMTP_TLS`/`SMTP_SSL` and `EMAILS_FROM_EMAIL` from your mail provider. Without them, staff
-  invitations are refused with `503 EMAIL_NOT_CONFIGURED` and password-recovery emails are never
-  sent (the page still says one was). Production has none of these set today.
+  secret), `SMTP_TLS`/`SMTP_SSL` and `EMAILS_FROM_EMAIL` from your mail provider. Without them,
+  organisation signup and staff invitations are refused with `503 EMAIL_NOT_CONFIGURED` (nothing is
+  created) and password-recovery emails are never sent (the page still says one was). Production
+  sends through Resend, configured this way.
 - **Never set `FASTAPI_ENV`.** `FASTAPI_ENV=development` turns the refusal to start with a
   `changethis` secret into a warning, labels logs as `development` and turns Sentry off. It is for local work only;
   production currently has `FASTAPI_ENV=development` and it must be removed.
@@ -220,8 +228,8 @@ your own use, is gitignored and must never be committed. Details: [deployment.md
 - **Port already in use** (`5432`, `8000`, `5174`, `8025`) - find the owner with
   `lsof -nP -iTCP:8000 -sTCP:LISTEN` and stop it. The dev server uses a fixed port (`strictPort`)
   and fails rather than moving.
-- **429 Too Many Requests in e2e runs** - login and signup are limited to 20/min and password
-  recovery to 5/min per client address, per backend process. One full run spends 18 sign-ins and 4
+- **429 Too Many Requests in e2e runs** - login, signup, signup resend and signup verification are
+  each limited to 20/min and password recovery to 5/min per client address, per backend process. One full run spends 18 sign-ins and 4
   recovery calls, and a run started within a minute of the previous one against the same backend
   first waits out that minute (it prints `Waiting ...s for the previous run's rate-limit window`).
   A `429` therefore means something else is spending the budget, such as a dev session signing in
