@@ -184,6 +184,22 @@ export default defineConfig(({ mode }) => {
       outDir: "../backend/app/frontend",
       emptyOutDir: true,
       sourcemap: false,
+      rolldownOptions: {
+        output: {
+          // React and React DOM (about 55 KB gzip, on every screen) in a chunk of their own: a deploy
+          // that changes only app code leaves its hashed name, and so the browser's year-long cache,
+          // untouched. It costs no bytes on a first load. (Grouping @tanstack the same way would pull
+          // hooks only some screens use into every first load, so it is left to the default split.)
+          codeSplitting: {
+            groups: [
+              {
+                name: "react",
+                test: /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/,
+              },
+            ],
+          },
+        },
+      },
     },
     resolve: {
       alias: {

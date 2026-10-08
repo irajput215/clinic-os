@@ -9,8 +9,8 @@
  * Sizes are gzip at zlib's default level, which is close to what a CDN edge sends; the build also
  * writes Brotli copies, which are smaller still.
  *
- * - Entry: the one `<script type="module">` in index.html. It holds React, the router, the query
- *   client and the route table, and nothing that only some screens need.
+ * - Entry: the one `<script type="module">` in index.html: the app's bootstrap and route table.
+ *   React is split into its own long-cached chunk (vite.config.ts), so this alone says little.
  * - Initial: the entry plus every `<link rel="modulepreload">`, i.e. all the JavaScript a cold load
  *   of any screen fetches before it can render. Splitting the entry differently cannot hide bytes
  *   from this number.
@@ -22,11 +22,12 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { gzipSync } from "node:zlib"
 
-// Measured 2026-10-08 (m3/frontend-speed): entry 85.6, initial 140.9, largest lazy chunk 28.6
-// (zod with react-hook-form, loaded with the first form), CSS 10.7. Before: entry 98.3, initial 145.2.
+// Measured 2026-10-08 (m3/frontend-speed): entry 35.8 (React is its own cached chunk), initial
+// 137.1, largest lazy chunk 28.6 (zod with react-hook-form, loaded with the first form), CSS 10.8.
+// Before that branch: entry 98.3, initial 145.2, CSS 11.3. `initial` is the number that binds.
 const BUDGET_KB = {
   entry: 90,
-  initial: 145,
+  initial: 142,
   chunk: 35,
   css: 15,
 }
