@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-query"
 import { createRouter, RouterProvider } from "@tanstack/react-router"
 import { AxiosError } from "axios"
-import { lazy, StrictMode, Suspense } from "react"
+import { lazy, StrictMode, Suspense, useEffect, useState } from "react"
 import ReactDOM from "react-dom/client"
 import { client } from "./client/client.gen"
 import { retryTransient } from "./lib/http"
@@ -16,12 +16,32 @@ import "./styles/app.css"
 
 /**
  * Toasts only ever follow something the person did (a save, a sign, a refusal), so the toast
- * library is not part of the first load: it arrives in its own chunk right after the first render,
- * long before anything can raise one.
+ * library is not part of the first load: its chunk is fetched once the browser is idle after the
+ * first paint (at most 2 s later), so it never competes with the screen's own code, and long before
+ * anything can raise a toast.
  */
 const Toaster = lazy(() =>
   import("./components/ui/sonner").then((m) => ({ default: m.Toaster })),
 )
+
+function DeferredToaster() {
+  const [ready, setReady] = useState(false)
+  useEffect(() => {
+    if (typeof window.requestIdleCallback !== "function") {
+      const timer = window.setTimeout(() => setReady(true), 1_000)
+      return () => window.clearTimeout(timer)
+    }
+    const idle = window.requestIdleCallback(() => setReady(true), {
+      timeout: 2_000,
+    })
+    return () => window.cancelIdleCallback(idle)
+  }, [])
+  return ready ? (
+    <Suspense fallback={null}>
+      <Toaster position="bottom-right" closeButton />
+    </Suspense>
+  ) : null
+}
 
 client.setConfig({
   baseURL: import.meta.env.VITE_API_URL ?? "",
@@ -74,9 +94,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
-      <Suspense fallback={null}>
-        <Toaster position="bottom-right" closeButton />
-      </Suspense>
+      <DeferredToaster />
     </QueryClientProvider>
   </StrictMode>,
 )
