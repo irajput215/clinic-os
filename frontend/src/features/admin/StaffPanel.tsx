@@ -1,24 +1,41 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query"
-import { KeyRound, UserPlus } from "lucide-react"
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query"
+import { KeyRound, Loader2, MailPlus, UserPlus } from "lucide-react"
 import { useState } from "react"
-import type { UserPublic } from "@/client/types.gen"
+import { toast } from "sonner"
+import type { StaffMemberRead, UserPublic } from "@/client/types.gen"
 import { Button } from "@/components/ui/button"
-import { STAFF_PAGE_SIZE, staffQuery } from "@/data/admin"
+import {
+  ADMIN_WRITE,
+  describeAccessError,
+  resendInvitation,
+  STAFF_PAGE_SIZE,
+  staffQuery,
+} from "@/data/admin"
 import {
   Card,
   EmptyState,
   ErrorState,
+  FormAlert,
   Pill,
   SkeletonRows,
 } from "@/design/primitives"
+import { formatDayMonthTime } from "@/lib/format"
+import { describeError, refusalCode } from "@/lib/http"
 import { displayName } from "@/lib/session"
 import { InviteStaffDialog } from "./InviteStaffDialog"
 
 /**
  * The organisation's staff (`GET /users/staff`): every account of the signed-in person's own
- * organisation and the roles each holds. The server resolves the organisation from the session and
- * refuses anyone without `users:manage`. Inviting creates the account with its roles and emails the
- * person a link to choose their own password; "Manage access" opens User access on that account.
+ * organisation, the roles each holds and where each stands (active, inactive, or invited and not yet
+ * signed up). The server resolves the organisation from the session and refuses anyone without
+ * `users:manage`. Inviting creates the account with its roles and emails the person a link to choose
+ * their own password; "Resend invite" emails a fresh link and retires the old one; "Manage access"
+ * opens User access on that account.
  */
 export function StaffPanel({
   me,
@@ -37,6 +54,35 @@ export function StaffPanel({
   const total = staff.data?.count ?? 0
   const pages = Math.max(1, Math.ceil(total / STAFF_PAGE_SIZE))
   const refused = staff.isError
+
+  const queryClient = useQueryClient()
+  const resend = useMutation({
+    mutationFn: (member: StaffMemberRead) => resendInvitation(member.id),
+    ...ADMIN_WRITE,
+    onSuccess: (updated) => {
+      // The answer is the row as it now stands, so it replaces the row in place: no second read of
+      // the list, which shares the administrative 20-a-minute budget.
+      queryClient.setQueryData(staffQuery(page).queryKey, (list) =>
+        list
+          ? {
+              ...list,
+              data: list.data.map((m) => (m.id === updated.id ? updated : m)),
+            }
+          : list,
+      )
+      toast.success(`New invitation sent to ${updated.email}`)
+    },
+    onError: (error) => {
+      // A row the server says has no invitation any more is out of date: read the list again.
+      if (refusalCode(error) === "INVITATION_NOT_PENDING")
+        void queryClient.invalidateQueries({ queryKey: ["admin", "staff"] })
+    },
+  })
+  const resendFailure = resend.isError
+    ? refusalCode(resend.error) === "GRANT_EXCEEDS_ACTOR"
+      ? "You can't resend this invitation: the person's roles include permissions your own roles don't. Ask someone who holds them to resend it."
+      : (describeAccessError(resend.error) ?? describeError(resend.error))
+    : null
 
   return (
     <div className="space-y-4">
@@ -69,7 +115,7 @@ export function StaffPanel({
               <thead>
                 <tr>
                   <th className="rounded-tl-card pl-5">Name</th>
-                  <th className="max-md:hidden">Email</th>
+                  <th className="max-xl:hidden">Email</th>
                   <th className="max-sm:hidden">Roles</th>
                   <th className="max-sm:hidden">Status</th>
                   <th className="rounded-tr-card pr-5">
@@ -83,7 +129,7 @@ export function StaffPanel({
                   const name = member.full_name || displayName(member)
                   return (
                     <tr key={member.id} data-testid={`staff-${member.email}`}>
-                      <td className="pl-5 max-sm:w-full max-sm:max-w-0 sm:max-w-[260px]">
+                      <td className="w-[55%] max-w-0 pl-5 max-sm:w-full">
                         <div className="flex min-w-0 items-center gap-2">
                           <span
                             className={
@@ -96,15 +142,17 @@ export function StaffPanel({
                           </span>
                           {self ? <Pill tone="clay">You</Pill> : null}
                         </div>
-                        <div className="truncate text-xs text-stone md:hidden">
+                        <div className="truncate text-xs text-stone xl:hidden">
                           {member.email}
                         </div>
                         <div className="mt-1 flex flex-wrap gap-1 sm:hidden">
                           <RolePills roles={member.roles} />
-                          {member.is_active ? null : <Pill>Inactive</Pill>}
+                          {member.status === "ACTIVE" ? null : (
+                            <StatusPill member={member} />
+                          )}
                         </div>
                       </td>
-                      <td className="max-w-[280px] truncate max-md:hidden">
+                      <td className="w-[45%] max-w-0 truncate max-xl:hidden">
                         {member.email}
                       </td>
                       <td className="max-sm:hidden">
@@ -113,23 +161,39 @@ export function StaffPanel({
                         </div>
                       </td>
                       <td className="max-sm:hidden">
-                        {member.is_active ? (
-                          <Pill tone="ok">Active</Pill>
-                        ) : (
-                          <Pill>Inactive</Pill>
-                        )}
+                        <StatusPill member={member} />
                       </td>
-                      <td className="pr-5 text-right">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          aria-label={`Manage access for ${name}`}
-                          onClick={() => onManageAccess(member.id)}
-                        >
-                          <KeyRound />
-                          <span className="max-sm:hidden">Manage access</span>
-                          <span className="sm:hidden">Access</span>
-                        </Button>
+                      <td className="pr-5">
+                        <div className="flex items-center justify-end gap-2">
+                          {member.status === "INVITED" ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              aria-label={`Resend invite to ${name}`}
+                              title="Resend invite"
+                              disabled={resend.isPending}
+                              onClick={() => resend.mutate(member)}
+                            >
+                              {resend.isPending &&
+                              resend.variables?.id === member.id ? (
+                                <Loader2 className="animate-spin" />
+                              ) : (
+                                <MailPlus />
+                              )}
+                              <span className="max-xl:hidden">Resend</span>
+                            </Button>
+                          ) : null}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            aria-label={`Manage access for ${name}`}
+                            onClick={() => onManageAccess(member.id)}
+                          >
+                            <KeyRound />
+                            <span className="max-sm:hidden">Manage access</span>
+                            <span className="sm:hidden">Access</span>
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -139,6 +203,8 @@ export function StaffPanel({
           </div>
         )}
       </Card>
+
+      {resendFailure ? <FormAlert>{resendFailure}</FormAlert> : null}
 
       {pages > 1 ? (
         <nav
@@ -169,6 +235,34 @@ export function StaffPanel({
 
       <InviteStaffDialog me={me} open={inviting} onOpenChange={setInviting} />
     </div>
+  )
+}
+
+/**
+ * Where one person stands. An invitation shows when its link stops working (the server decides
+ * whether it already has), in the clinic's timezone like every other time in the app.
+ */
+function StatusPill({ member }: { member: StaffMemberRead }) {
+  if (member.status === "INACTIVE") return <Pill>Inactive</Pill>
+  const invitation = member.invitation
+  if (member.status !== "INVITED" || !invitation)
+    return <Pill tone="ok">Active</Pill>
+  if (invitation.expired)
+    return (
+      <Pill
+        tone="danger"
+        title={`The link expired ${formatDayMonthTime(invitation.expires_at)}`}
+      >
+        Invitation expired
+      </Pill>
+    )
+  return (
+    <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+      <Pill tone="warn">Invited</Pill>
+      <span className="text-xs whitespace-nowrap text-stone">
+        expires {formatDayMonthTime(invitation.expires_at)}
+      </span>
+    </span>
   )
 }
 
