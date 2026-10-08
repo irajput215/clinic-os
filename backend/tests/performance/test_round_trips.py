@@ -23,9 +23,8 @@ API = settings.API_V1_STR
 
 
 def _get(client: TestClient, clinic: TenantSession, path: str) -> int:
-    client.get(
-        f"{API}{path}", headers=clinic.headers
-    )  # the pool is warm for the counted request
+    # Once first, so the counted request finds the pool warm.
+    client.get(f"{API}{path}", headers=clinic.headers)
     response = client.get(f"{API}{path}", headers=clinic.headers)
     assert response.status_code == 200, response.text
     return round_trips(response)
