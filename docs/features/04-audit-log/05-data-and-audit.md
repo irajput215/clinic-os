@@ -105,7 +105,10 @@ access recorded per patient, not per row") and `appointment.read` (the booking r
 `result_count` on a practice-wide one; `care_relationship.create` (`care_relationship_id`,
 `target_user_id`, `source`) and `care_relationship.end` (`care_relationship_id`, `target_user_id`)
 record the interim care-team upkeep, with the patient as the resource. `tga_approval.read` gained
-`care_relationship_id` and `purpose` for a patient-level read.
+`care_relationship_id` and `purpose` for a patient-level read. On the same date (decision D-008)
+`prescription.modify` gained its payload row (`patient_id`, `changed_fields` - names only - and, on an
+addendum's new version, `supersedes_id`) and `prescription.reject` its (`patient_id`, `from_state`; the
+cancel reason code is the envelope's `reason`).
 
 Events beyond the envelope carry the mandatory per-action fields from doc 07 §1 — for example
 `prescription.dispatch_blocked` carries `block_reason` and `approval_id`, and `audit.read` carries

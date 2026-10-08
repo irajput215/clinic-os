@@ -17,6 +17,7 @@
 - R4 Only the assigned prescriber can sign. Signing needs the password (interim step-up, ADR-F002).
 - R5 The gate is evaluated again at sign **and** at dispatch, server-side. A refusal at either step leaves the script BLOCKED and nothing is sent.
 - R6 Recent activity lists sent scripts with mono token, RTPM status and pharmacy. "Just my scripts" filters by prescriber.
+- R7 (M4, D-008) The review dialog offers, to whom the server would allow it: **History** (every transition, who and why), **Edit draft** (directions, quantity, repeats, date of service; a draft only, by its drafter or prescriber), **Amend** (a signed, unsent script, by its prescriber: a new draft that replaces it once signed; the original is kept), and **Cancel script** with a reason from the list. A script with nothing to sign or send shows **Details** to reach them. The patient's Scripts tab shows each finished script's history. No optimistic update: each change redraws from the server's answer.
 
 ## Non-functional
 
@@ -25,5 +26,5 @@
 ## Out of scope (this phase)
 
 - Real Parchment dispatch (adapter, outbox, reconciliation: backend).
-- Cancel/void with the pharmacy.
+- Cancel/void with the pharmacy, and any correction after a script is sent (a reversal, FEAT-12).
 - Drug catalogue management.

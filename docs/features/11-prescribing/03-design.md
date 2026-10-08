@@ -122,6 +122,12 @@ payload, signature or grain change after `SIGNED`. Mutating an append-only table
 | `POST /api/v1/prescriptions/{id}/cancel` | `prescription:cancel` | reason code required |
 | `GET /api/v1/prescriptions/{id}/history` | `prescription:read` | ordered transitions |
 
+Built 2026-10-08 (Milestone 4): the single read, `PATCH`, `addendum`, `cancel` and `history`, with the
+interim answers this document leaves open (cancel reason codes, who cancels, what an addendum does to
+the original) recorded in decision
+[D-008](../../reference/decisions/D-008-prescription-corrections.md). `cancel` uses the existing
+`prescription:modify` until `prescription:cancel` is decided.
+
 No `DELETE` endpoint. Per `21-technical-design.md` §7 every route declares auth, permission, tenant scope,
 ownership, input/output schema, audit event, rate limit and error behaviour; error envelope
 `{"error": {"code", "message", "request_id", "details"}}`.
