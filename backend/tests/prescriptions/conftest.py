@@ -105,7 +105,9 @@ class RxApi:
         }
         return self.client.post(URL, json=body, headers=actor.headers)
 
-    def stage(self, clinic: Clinic, actor: ActorSession | None = None, **overrides: Any) -> dict[str, Any]:
+    def stage(
+        self, clinic: Clinic, actor: ActorSession | None = None, **overrides: Any
+    ) -> dict[str, Any]:
         response = self.stage_raw(actor or clinic.owner, clinic, **overrides)
         assert response.status_code == 201, response.text
         return response.json()
@@ -128,7 +130,10 @@ class RxApi:
         )
 
     def step_up(
-        self, actor: ActorSession, resource_id: str, operation: str = "prescription.sign"
+        self,
+        actor: ActorSession,
+        resource_id: str,
+        operation: str = "prescription.sign",
     ) -> str:
         response = self.step_up_raw(actor, resource_id, operation)
         assert response.status_code == 201, response.text

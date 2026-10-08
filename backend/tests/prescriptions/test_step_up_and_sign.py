@@ -11,7 +11,9 @@ from tests.prescriptions.conftest import API, URL, Clinic, RxApi, code
 # -- step-up ---------------------------------------------------------------------------------------
 
 
-def test_a_wrong_password_issues_nothing_and_is_audited(rx: RxApi, clinic: Clinic) -> None:
+def test_a_wrong_password_issues_nothing_and_is_audited(
+    rx: RxApi, clinic: Clinic
+) -> None:
     staged = rx.stage(clinic)
     response = rx.step_up_raw(clinic.owner, staged["id"], password="not-the-password")
     assert response.status_code == 403  # never 401: a typo must not end the session
@@ -23,24 +25,38 @@ def test_a_wrong_password_issues_nothing_and_is_audited(rx: RxApi, clinic: Clini
     assert event["payload"] == {"operation": "prescription.sign"}
 
 
-def test_step_up_rejects_unknown_operations_and_fields(rx: RxApi, clinic: Clinic) -> None:
-    body = {"password": "x", "operation": "patient.export", "resource_id": str(uuid.uuid4())}
+def test_step_up_rejects_unknown_operations_and_fields(
+    rx: RxApi, clinic: Clinic
+) -> None:
+    body = {
+        "password": "x",
+        "operation": "patient.export",
+        "resource_id": str(uuid.uuid4()),
+    }
     headers = clinic.owner.headers
-    assert rx.client.post(f"{API}/auth/step-up", json=body, headers=headers).status_code == 422
+    assert (
+        rx.client.post(f"{API}/auth/step-up", json=body, headers=headers).status_code
+        == 422
+    )
     body = {
         "password": "x",
         "operation": "prescription.sign",
         "resource_id": str(uuid.uuid4()),
         "user_id": str(uuid.uuid4()),
     }
-    assert rx.client.post(f"{API}/auth/step-up", json=body, headers=headers).status_code == 422
+    assert (
+        rx.client.post(f"{API}/auth/step-up", json=body, headers=headers).status_code
+        == 422
+    )
 
 
 def test_a_grant_is_stored_as_a_hash_and_audited(rx: RxApi, clinic: Clinic) -> None:
     staged = rx.stage(clinic)
     token = rx.step_up(clinic.owner, staged["id"])
     with engine.connect() as conn:
-        stored = conn.execute(text("SELECT token_hash FROM step_up_grants")).scalars().all()
+        stored = (
+            conn.execute(text("SELECT token_hash FROM step_up_grants")).scalars().all()
+        )
     assert token not in stored
     assert clinic.owner.tenant_id is not None
     [event] = rx.audit(clinic.owner.tenant_id, "auth.step_up")
@@ -50,7 +66,9 @@ def test_a_grant_is_stored_as_a_hash_and_audited(rx: RxApi, clinic: Clinic) -> N
     }
 
 
-def test_signing_without_a_valid_grant_is_step_up_required(rx: RxApi, clinic: Clinic) -> None:
+def test_signing_without_a_valid_grant_is_step_up_required(
+    rx: RxApi, clinic: Clinic
+) -> None:
     rx.approve(clinic)
     staged = rx.stage(clinic)
     other = rx.stage(clinic)
@@ -113,18 +131,22 @@ def test_a_grant_cannot_live_longer_than_two_minutes(clinic: Clinic) -> None:
 # -- signing ---------------------------------------------------------------------------------------
 
 
-def test_a_nurse_cannot_sign_and_the_refusal_is_audited(rx: RxApi, clinic: Clinic) -> None:
+def test_a_nurse_cannot_sign_and_the_refusal_is_audited(
+    rx: RxApi, clinic: Clinic
+) -> None:
     nurse = rx.member(clinic, "NURSE")
     staged = rx.stage(clinic, nurse)
     response = rx.client.post(
-        f"{URL}/{staged['id']}/sign", json={"step_up_token": "x" * 43}, headers=nurse.headers
+        f"{URL}/{staged['id']}/sign",
+        json={"step_up_token": "x" * 43},
+        headers=nurse.headers,
     )
     assert response.status_code == 403
     assert code(response) == "PERMISSION_NOT_HELD"
     assert clinic.owner.tenant_id is not None
-    assert [e["reason"] for e in rx.audit(clinic.owner.tenant_id, "prescription.sign")] == [
-        "PERMISSION_NOT_HELD"
-    ]
+    assert [
+        e["reason"] for e in rx.audit(clinic.owner.tenant_id, "prescription.sign")
+    ] == ["PERMISSION_NOT_HELD"]
 
 
 def test_only_the_prescriber_of_record_can_sign(rx: RxApi, clinic: Clinic) -> None:
@@ -140,7 +162,9 @@ def test_another_tenants_prescription_is_404(rx: RxApi, clinic: Clinic) -> None:
     other = rx.clinic("Other Clinic")
     foreign = rx.stage(other)
     response = rx.client.post(
-        f"{URL}/{foreign['id']}/sign", json={"step_up_token": "x" * 43}, headers=clinic.owner.headers
+        f"{URL}/{foreign['id']}/sign",
+        json={"step_up_token": "x" * 43},
+        headers=clinic.owner.headers,
     )
     assert response.status_code == 404
     assert code(response) == "PRESCRIPTION_NOT_FOUND"
@@ -153,8 +177,14 @@ def test_another_tenants_prescription_is_404(rx: RxApi, clinic: Clinic) -> None:
         (None, "TGA_APPROVAL_NOT_FOUND"),
         ({"tga_category": "CATEGORY_4"}, "TGA_CATEGORY_MISMATCH"),
         ({"dosage_form": "CAPSULE"}, "TGA_DOSAGE_FORM_MISMATCH"),
-        ({"valid_from": "2026-01-01", "valid_to": "2026-06-01"}, "TGA_APPROVAL_EXPIRED"),
-        ({"valid_from": "2026-06-02", "valid_to": "2027-01-01"}, "TGA_APPROVAL_NOT_YET_EFFECTIVE"),
+        (
+            {"valid_from": "2026-01-01", "valid_to": "2026-06-01"},
+            "TGA_APPROVAL_EXPIRED",
+        ),
+        (
+            {"valid_from": "2026-06-02", "valid_to": "2027-01-01"},
+            "TGA_APPROVAL_NOT_YET_EFFECTIVE",
+        ),
     ],
 )
 def test_the_gate_refuses_every_uncovered_grain_at_sign(
@@ -179,10 +209,17 @@ def test_the_gate_refuses_every_uncovered_grain_at_sign(
     assert event["payload"]["block_reason"] == expected
 
 
-def test_a_pending_or_revoked_approval_does_not_cover(rx: RxApi, clinic: Clinic) -> None:
-    pending = rx.tga.create(clinic.owner, clinic.patient_id, approval_reference="TGA-PEND-1")
+def test_a_pending_or_revoked_approval_does_not_cover(
+    rx: RxApi, clinic: Clinic
+) -> None:
+    pending = rx.tga.create(
+        clinic.owner, clinic.patient_id, approval_reference="TGA-PEND-1"
+    )
     staged = rx.stage(clinic)
-    assert code(rx.sign_raw(clinic.owner, staged["id"])) == "TGA_APPROVAL_PENDING_VERIFICATION"
+    assert (
+        code(rx.sign_raw(clinic.owner, staged["id"]))
+        == "TGA_APPROVAL_PENDING_VERIFICATION"
+    )
     rx.tga.activate(clinic.owner, pending, verifier=clinic.verifier)
     assert rx.tga.revoke(clinic.owner, pending["id"]).status_code == 200
     assert code(rx.sign_raw(clinic.owner, staged["id"])) == "TGA_APPROVAL_REVOKED"

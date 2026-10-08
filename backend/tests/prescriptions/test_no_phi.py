@@ -28,7 +28,10 @@ def test_no_clinical_value_in_logs_or_audit(rx: RxApi, clinic: Clinic) -> None:
         rx.approve(clinic)
         assert rx.sign_raw(clinic.owner, refused["id"]).status_code == 200
         assert rx.dispatch_raw(clinic.owner, refused["id"]).status_code == 202
-        assert rx.stage_raw(clinic.owner, clinic, **SENTINELS, quantity="0").status_code == 422
+        assert (
+            rx.stage_raw(clinic.owner, clinic, **SENTINELS, quantity="0").status_code
+            == 422
+        )
         assert rx.list(clinic.owner).status_code == 200
     raw = sink.raw
     assert "QZQZ" not in raw

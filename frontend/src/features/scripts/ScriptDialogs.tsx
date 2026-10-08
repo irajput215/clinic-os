@@ -21,7 +21,11 @@ import {
   formLabel,
   TGA_CATEGORIES,
 } from "@/data/approvals"
-import { patientName, patientsQuery } from "@/data/patients"
+import {
+  patientName,
+  patientQuickFindQuery,
+  useSearchTerm,
+} from "@/data/patients"
 import {
   formatQuantity,
   type Prescription,
@@ -31,7 +35,12 @@ import {
 import { MATCH_REASONS } from "@/data/types"
 import { ErrorState, Field, Mono } from "@/design/primitives"
 import { focusFirstError } from "@/lib/form"
-import { clinicToday, formatDate, lastCoveredDay } from "@/lib/format"
+import {
+  clinicToday,
+  formatDate,
+  lastCoveredDay,
+  patientRef,
+} from "@/lib/format"
 import { describeError, refusalCode, validationMessages } from "@/lib/http"
 import { currentUserQuery } from "@/lib/session"
 import { z } from "@/lib/zod"
@@ -113,12 +122,10 @@ function StageScriptForm({
   patientId?: string
   onClose: () => void
 }) {
-  const patients = useQuery({ ...patientsQuery, enabled: !patientId })
   const prescribers = useQuery(prescribersQuery)
   const { data: me } = useQuery(currentUserQuery)
-  const failed = prescribers.error ?? patients.error
-  if (failed) return <ErrorState error={failed} />
-  if (!prescribers.data || !me || (!patientId && !patients.data))
+  if (prescribers.error) return <ErrorState error={prescribers.error} />
+  if (!prescribers.data || !me)
     return (
       <div className="flex justify-center py-10 text-stone">
         <Loader2 className="animate-spin" aria-label="Loading" />
@@ -128,23 +135,99 @@ function StageScriptForm({
     <StageScriptFields
       patientId={patientId}
       onClose={onClose}
-      patients={patients.data?.data ?? []}
       prescribers={prescribers.data}
       meId={me.id}
     />
   )
 }
 
+/**
+ * The patient, found by the server's search (name, date of birth or PT- reference), so a practice
+ * of any size can stage for anyone, not only its first page of patients. The term travels in a
+ * request body, never a URL. The chosen patient stays shown while the search changes.
+ */
+function PatientPicker({
+  value,
+  onChange,
+  error,
+}: {
+  value: string
+  onChange: (id: string) => void
+  error?: string
+}) {
+  const [find, setFind] = useState("")
+  const [chosen, setChosen] = useState<PatientRead | null>(null)
+  const term = useSearchTerm(find)
+  const matches = useQuery(patientQuickFindQuery(term))
+  const options = [
+    ...(chosen && value === chosen.id ? [chosen] : []),
+    ...(matches.data?.data ?? []).filter((p) => p.id !== chosen?.id),
+  ]
+  return (
+    <fieldset className="grid gap-2 sm:col-span-2">
+      <Field label="Patient" htmlFor="sc-patient-find" error={error}>
+        <input
+          id="sc-patient-find"
+          type="search"
+          className="field-input"
+          autoComplete="off"
+          placeholder="Name, date of birth or PT- reference"
+          value={find}
+          onChange={(e) => setFind(e.target.value)}
+        />
+      </Field>
+      <div
+        role="radiogroup"
+        aria-label="Matching patients"
+        className="grid max-h-48 gap-1 overflow-y-auto rounded-inner border border-line p-1.5"
+      >
+        {matches.isError ? (
+          <p className="px-2 py-1.5 text-[13px] text-danger-deep">
+            {describeError(matches.error)}
+          </p>
+        ) : matches.isPending && options.length === 0 ? (
+          <p className="px-2 py-1.5 text-[13px] text-stone">Searching…</p>
+        ) : options.length === 0 ? (
+          <p className="px-2 py-1.5 text-[13px] text-stone">
+            No patient matches that.
+          </p>
+        ) : (
+          options.map((p) => (
+            <label
+              key={p.id}
+              className="flex cursor-pointer items-center gap-2.5 rounded-btn px-2 py-1.5 text-sm hover:bg-oat"
+            >
+              <input
+                type="radio"
+                name="patient_id"
+                value={p.id}
+                checked={value === p.id}
+                onChange={() => {
+                  setChosen(p)
+                  onChange(p.id)
+                }}
+              />
+              <span className="font-medium">{patientName(p)}</span>
+              <span className="text-stone">{formatDate(p.date_of_birth)}</span>
+              <Mono className="ml-auto text-[11.5px] text-stone">
+                {patientRef(p.id)}
+              </Mono>
+            </label>
+          ))
+        )}
+      </div>
+    </fieldset>
+  )
+}
+
 function StageScriptFields({
   patientId,
   onClose,
-  patients,
   prescribers,
   meId,
 }: {
   patientId?: string
   onClose: () => void
-  patients: PatientRead[]
   prescribers: PrescriberRead[]
   meId: string
 }) {
@@ -205,25 +288,13 @@ function StageScriptFields({
 
       <div className="grid gap-4 sm:grid-cols-2">
         {!patientId ? (
-          <Field
-            label="Patient"
-            htmlFor="sc-patient"
+          <PatientPicker
+            value={form.watch("patient_id")}
+            onChange={(id) =>
+              form.setValue("patient_id", id, { shouldValidate: true })
+            }
             error={fieldError("patient_id")}
-            className="sm:col-span-2"
-          >
-            <select
-              id="sc-patient"
-              className="field-input"
-              {...form.register("patient_id")}
-            >
-              <option value="">Choose a patient</option>
-              {patients.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {patientName(p)}
-                </option>
-              ))}
-            </select>
-          </Field>
+          />
         ) : null}
         <Field
           label="Product"

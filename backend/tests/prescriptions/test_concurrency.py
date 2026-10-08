@@ -31,7 +31,9 @@ def _run(target: Callable[[], Any]) -> tuple[threading.Thread, dict[str, Any]]:
     def body() -> None:
         try:
             box["result"] = target()
-        except BaseException as error:  # pragma: no cover - surfaced by the assertion below
+        except (
+            BaseException
+        ) as error:  # pragma: no cover - surfaced by the assertion below
             box["error"] = error
 
     thread = threading.Thread(target=body, daemon=True)
@@ -39,7 +41,7 @@ def _run(target: Callable[[], Any]) -> tuple[threading.Thread, dict[str, Any]]:
     return thread, box
 
 
-def _sign(rx: RxApi, clinic: Clinic, prescription_id: str, token: str) -> Any:
+def _sign(clinic: Clinic, prescription_id: str, token: str) -> Any:
     assert clinic.owner.tenant_id is not None
     return service.sign(
         tenant_id=clinic.owner.tenant_id,
@@ -66,9 +68,11 @@ def test_a_revocation_that_holds_the_row_first_blocks_the_signature(
             ),
             {"id": uuid.UUID(approval["id"]), "actor": clinic.owner.user_id},
         )
-        thread, box = _run(lambda: _sign(rx, clinic, staged["id"], token))
+        thread, box = _run(lambda: _sign(clinic, staged["id"], token))
         time.sleep(_BLOCKED_FOR)
-        assert thread.is_alive(), "the signature did not wait for the revocation's row lock"
+        assert thread.is_alive(), (
+            "the signature did not wait for the revocation's row lock"
+        )
         # The revocation commits when the block exits.
     thread.join(timeout=10)
     assert "error" not in box, box.get("error")
@@ -98,7 +102,7 @@ def test_a_signature_that_holds_the_row_first_commits_before_the_revocation(
         return decision
 
     monkeypatch.setattr(gate, "decide", paused_decide)
-    signer, sign_box = _run(lambda: _sign(rx, clinic, staged["id"], token))
+    signer, sign_box = _run(lambda: _sign(clinic, staged["id"], token))
     assert decided.wait(timeout=10)
 
     assert clinic.owner.tenant_id is not None
@@ -130,12 +134,14 @@ def test_a_signature_that_holds_the_row_first_commits_before_the_revocation(
     assert rx.attempts(staged["id"]) == []
 
 
-def test_two_concurrent_signatures_produce_one_signed_row(rx: RxApi, clinic: Clinic) -> None:
+def test_two_concurrent_signatures_produce_one_signed_row(
+    rx: RxApi, clinic: Clinic
+) -> None:
     """FEAT-11 R6: exactly one `SIGNED` row and one successful `prescription.sign`."""
     rx.approve(clinic)
     staged = rx.stage(clinic)
     tokens = [rx.step_up(clinic.owner, staged["id"]) for _ in range(2)]
-    runs = [_run(lambda t=token: _sign(rx, clinic, staged["id"], t)) for token in tokens]
+    runs = [_run(lambda t=token: _sign(clinic, staged["id"], t)) for token in tokens]
     for thread, _box in runs:
         thread.join(timeout=10)
     results = [box["result"] for _thread, box in runs]
@@ -143,6 +149,8 @@ def test_two_concurrent_signatures_produce_one_signed_row(rx: RxApi, clinic: Cli
     assert len(refusals) == 1 and refusals[0].code == "INVALID_STATE_TRANSITION"
     assert clinic.owner.tenant_id is not None
     signed = [
-        e for e in rx.audit(clinic.owner.tenant_id, "prescription.sign") if e["result"] == "SUCCESS"
+        e
+        for e in rx.audit(clinic.owner.tenant_id, "prescription.sign")
+        if e["result"] == "SUCCESS"
     ]
     assert len(signed) == 1

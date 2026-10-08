@@ -86,6 +86,7 @@ ATTEMPT_TRANSITIONS: Final[dict[str, frozenset[str]]] = {
 }
 OUTCOME_CLASSES: Final[tuple[str, ...]] = ("CONFIRMED", "REJECTED", "UNKNOWN")
 
+
 # Free text a clinician types: bounded, and no control characters, so it cannot smuggle a line break
 # into anything that later renders it. The bound is the schema's as well.
 def _text_check(column: str, limit: int) -> str:

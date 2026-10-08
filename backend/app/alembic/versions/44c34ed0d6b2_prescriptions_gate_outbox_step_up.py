@@ -1,7 +1,7 @@
 """prescriptions, prescription_events, dispatch_attempts and step_up_grants; the prescription:read code
 
 Revision ID: 44c34ed0d6b2
-Revises: 9a21387b450c
+Revises: b9fa64996260
 Create Date: 2026-10-07 17:18:27.118822
 
 Milestone 2, phase 2D (`docs2/sdlc/07-script-queue/api.md`, agreed 2026-10-07 by the owner). Feature
@@ -41,7 +41,7 @@ from app.modules.users_roles.catalog import PERMISSION_CATALOGUE, SYSTEM_ROLE_CA
 
 # revision identifiers, used by Alembic.
 revision = '44c34ed0d6b2'
-down_revision = '9a21387b450c'
+down_revision = 'b9fa64996260'
 branch_labels = None
 depends_on = None
 

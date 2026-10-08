@@ -131,6 +131,36 @@ test("a script with no covering approval cannot be signed", async ({
   ).toBeDisabled()
 })
 
+test("the queue's staging form finds the patient with the server search", async ({
+  signedIn: page,
+}) => {
+  await page.goto("/scripts")
+  await page.getByRole("button", { name: "Stage a draft" }).click()
+  const stage = page.getByRole("dialog")
+  await stage.getByLabel("Patient", { exact: true }).fill("Webb")
+  const matches = stage.getByRole("radiogroup", { name: "Matching patients" })
+  await matches.getByRole("radio", { name: /Marcus Webb/ }).check()
+  // A new search keeps the chosen patient visible and chosen.
+  await stage.getByLabel("Patient", { exact: true }).fill("Sharma")
+  await expect(
+    matches.getByRole("radio", { name: /Marcus Webb/ }),
+  ).toBeChecked()
+  await expect(
+    matches.getByRole("radio", { name: /Priya Sharma/ }),
+  ).toBeVisible()
+  await stage.getByLabel("Product").fill("Picker Check Oil")
+  await stage.getByLabel("TGA category").selectOption("CATEGORY_1")
+  await stage.getByLabel("Dosage form").selectOption("ORAL_LIQUID")
+  await stage.getByLabel("Directions / titration").fill("0.25 mL mane")
+  await stage.getByLabel("Triage outcome").fill("Eligible - anxiety")
+  await stage.getByLabel("Conventional therapy first").fill("SSRIs, 12 months")
+  await stage.getByRole("button", { name: "Stage draft" }).click()
+  await expect(stage).toBeHidden()
+  await expect(
+    page.locator("article", { hasText: "Picker Check Oil" }),
+  ).toContainText("Marcus Webb")
+})
+
 // The approvals are the real API's (`tgaApprovals: "api"`); this one is recorded on the patient's
 // own tab (the register is covered in approvals.spec.ts).
 test("the person who records an approval cannot verify it", async ({

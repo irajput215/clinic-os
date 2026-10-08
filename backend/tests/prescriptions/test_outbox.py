@@ -28,8 +28,12 @@ from tests.prescriptions.conftest import Clinic, RxApi
 class SimulatedTransport:
     """Scripted outcomes; records every call. Lives in the tests, so no deployment can select it."""
 
-    send_outcome: TransportOutcome = field(default_factory=lambda: Confirmed("EVQ-REF-1"))
-    lookup_outcome: TransportOutcome = field(default_factory=lambda: ExplicitUnknown("TIMEOUT"))
+    send_outcome: TransportOutcome = field(
+        default_factory=lambda: Confirmed("EVQ-REF-1")
+    )
+    lookup_outcome: TransportOutcome = field(
+        default_factory=lambda: ExplicitUnknown("TIMEOUT")
+    )
     sent: list[tuple[DispatchRequest, str]] = field(default_factory=list)
     looked_up: list[str] = field(default_factory=list)
 
@@ -44,7 +48,9 @@ class SimulatedTransport:
         self.sent.append((request, idempotency_key))
         return self.send_outcome
 
-    def lookup(self, *, idempotency_key: str, provider_reference: str | None) -> TransportOutcome:
+    def lookup(
+        self, *, idempotency_key: str, provider_reference: str | None
+    ) -> TransportOutcome:
         self.looked_up.append(idempotency_key)
         return self.lookup_outcome
 
@@ -81,7 +87,10 @@ def test_without_a_transport_nothing_moves_and_the_command_says_so(
     report = outbox.drain(_tenant(clinic), None)
     assert report.sent == 0 and report.still_waiting == 1
     assert outbox.reconcile(_tenant(clinic), None).still_waiting == 1
-    assert outbox.main(["drain", "--tenant-id", str(_tenant(clinic))]) == outbox.EXIT_NO_TRANSPORT
+    assert (
+        outbox.main(["drain", "--tenant-id", str(_tenant(clinic))])
+        == outbox.EXIT_NO_TRANSPORT
+    )
     assert "no transport configured" in capsys.readouterr().out
     assert outbox.main(["reconcile", "--tenant-id", str(_tenant(clinic))]) == 2
     assert rx.row(prescription_id)["state"] == "QUEUED"
@@ -104,17 +113,20 @@ def test_a_confirmed_send_is_dispatched_once(rx: RxApi, clinic: Clinic) -> None:
         "EVQ-REF-1",
     )
     assert rx.row(prescription_id)["state"] == "DISPATCHED"
-    reasons = [
-        e["reason"] for e in rx.audit(_tenant(clinic), "prescription.dispatch")
-    ]
+    reasons = [e["reason"] for e in rx.audit(_tenant(clinic), "prescription.dispatch")]
     assert reasons == [None, "PROVIDER_CONFIRMED"]
-    assert rx.audit(_tenant(clinic), "integration.request")[0]["payload"]["provider"] == "simulated"
+    assert (
+        rx.audit(_tenant(clinic), "integration.request")[0]["payload"]["provider"]
+        == "simulated"
+    )
     # A second run sends nothing again.
     assert outbox.drain(_tenant(clinic), transport).sent == 0
     assert len(transport.sent) == 1
 
 
-@pytest.mark.parametrize("outcome", [Rejected("PROVIDER_4XX"), NotSent("CONNECTION_REFUSED")])
+@pytest.mark.parametrize(
+    "outcome", [Rejected("PROVIDER_4XX"), NotSent("CONNECTION_REFUSED")]
+)
 def test_a_rejection_or_unsent_request_fails(
     rx: RxApi, clinic: Clinic, outcome: TransportOutcome
 ) -> None:
@@ -151,14 +163,18 @@ def test_a_timeout_is_never_success_and_reconciliation_resolves_it(
     assert rx.row(prescription_id)["state"] == "DISPATCHED"
     [attempt] = rx.attempts(prescription_id)
     assert attempt["resolution_reason"] == "RECONCILED"
-    assert rx.audit(_tenant(clinic), "prescription.dispatch")[-1]["reason"] == "RECONCILED"
+    assert (
+        rx.audit(_tenant(clinic), "prescription.dispatch")[-1]["reason"] == "RECONCILED"
+    )
 
     # Re-running reconciliation on a resolved row changes nothing and sends nothing.
     assert outbox.reconcile(_tenant(clinic), transport).dispatched == 0
     assert len(transport.sent) == 1
 
 
-def test_reconciliation_resolves_the_other_direction_too(rx: RxApi, clinic: Clinic) -> None:
+def test_reconciliation_resolves_the_other_direction_too(
+    rx: RxApi, clinic: Clinic
+) -> None:
     prescription_id = _queued(rx, clinic)
     transport = SimulatedTransport(send_outcome=ExplicitUnknown("MALFORMED_BODY"))
     outbox.drain(_tenant(clinic), transport)
@@ -168,7 +184,9 @@ def test_reconciliation_resolves_the_other_direction_too(rx: RxApi, clinic: Clin
     assert rx.attempts(prescription_id)[0]["resolution_reason"] == "RECONCILED"
 
 
-def test_the_gate_is_re_checked_before_anything_leaves(rx: RxApi, clinic: Clinic) -> None:
+def test_the_gate_is_re_checked_before_anything_leaves(
+    rx: RxApi, clinic: Clinic
+) -> None:
     """A revocation after queueing: the drain fails the row closed and sends nothing."""
     prescription_id = _queued(rx, clinic)
     [approval] = rx.tga.list_for_patient(clinic.owner, clinic.patient_id).json()["data"]
@@ -178,14 +196,21 @@ def test_the_gate_is_re_checked_before_anything_leaves(rx: RxApi, clinic: Clinic
     assert report.gate_refused == 1 and transport.sent == []
     assert rx.row(prescription_id)["state"] == "FAILED"
     [attempt] = rx.attempts(prescription_id)
-    assert (attempt["state"], attempt["error_class"]) == ("FAILED", "TGA_APPROVAL_REVOKED")
+    assert (attempt["state"], attempt["error_class"]) == (
+        "FAILED",
+        "TGA_APPROVAL_REVOKED",
+    )
 
 
-def test_a_claimed_but_unresolved_row_is_never_sent_twice(rx: RxApi, clinic: Clinic) -> None:
+def test_a_claimed_but_unresolved_row_is_never_sent_twice(
+    rx: RxApi, clinic: Clinic
+) -> None:
     """A crash between sending and recording leaves a claimed row: only reconciliation touches it."""
     prescription_id = _queued(rx, clinic)
     report = outbox.RunReport()
-    claimed = outbox._claim(_tenant(clinic), report, limit=10)  # the crash: sent, never recorded
+    claimed = outbox._claim(
+        _tenant(clinic), report, limit=10
+    )  # the crash: sent, never recorded
     assert len(claimed) == 1
     transport = SimulatedTransport()
     assert outbox.drain(_tenant(clinic), transport).sent == 0

@@ -27,7 +27,9 @@ def test_a_nurse_cannot_dispatch(rx: RxApi, clinic: Clinic) -> None:
 
 
 @pytest.mark.parametrize("key", [None, "", "   ", "x" * 256, "bad\nkey"])
-def test_dispatch_requires_an_idempotency_key(rx: RxApi, clinic: Clinic, key: str | None) -> None:
+def test_dispatch_requires_an_idempotency_key(
+    rx: RxApi, clinic: Clinic, key: str | None
+) -> None:
     prescription_id = _signed(rx, clinic)
     response = rx.dispatch_raw(clinic.owner, prescription_id, key=key, token="x" * 43)
     assert response.status_code == 422
@@ -83,7 +85,9 @@ def test_a_covered_dispatch_is_queued_in_the_outbox_and_never_reported_sent(
     assert "client-intent-7" not in str(event)
 
 
-def test_a_retry_with_the_same_key_returns_the_first_result(rx: RxApi, clinic: Clinic) -> None:
+def test_a_retry_with_the_same_key_returns_the_first_result(
+    rx: RxApi, clinic: Clinic
+) -> None:
     """S5 / US-3: one outbox row, one `prescription.dispatch` event; the replay answers `200`."""
     prescription_id = _signed(rx, clinic)
     first = rx.dispatch_raw(clinic.owner, prescription_id, key="same")
@@ -127,17 +131,24 @@ def test_a_revoked_approval_blocks_dispatch_and_a_new_one_releases_it_without_re
     assert code(again) == "TGA_APPROVAL_REVOKED"
     assert clinic.owner.tenant_id is not None
     events = rx.audit(clinic.owner.tenant_id, "prescription.dispatch_blocked")
-    assert [e["payload"]["block_reason"] for e in events] == ["TGA_APPROVAL_REVOKED"] * 2
+    assert [e["payload"]["block_reason"] for e in events] == [
+        "TGA_APPROVAL_REVOKED"
+    ] * 2
 
     renewed = rx.approve(clinic, reference="TGA-RENEW-02")
     released = rx.dispatch_raw(clinic.owner, staged["id"], key="c")
     assert released.status_code == 202
     assert released.json()["approval_id"] == renewed["id"]
     assert len(rx.audit(clinic.owner.tenant_id, "prescription.sign")) == 1
-    assert rx.events(staged["id"])[-2:] == [("SIGNED", "BLOCKED"), ("BLOCKED", "QUEUED")]
+    assert rx.events(staged["id"])[-2:] == [
+        ("SIGNED", "BLOCKED"),
+        ("BLOCKED", "QUEUED"),
+    ]
 
 
-def test_another_tenants_prescription_cannot_be_dispatched(rx: RxApi, clinic: Clinic) -> None:
+def test_another_tenants_prescription_cannot_be_dispatched(
+    rx: RxApi, clinic: Clinic
+) -> None:
     other = rx.clinic("Other Clinic")
     foreign = rx.stage(other)
     response = rx.client.post(

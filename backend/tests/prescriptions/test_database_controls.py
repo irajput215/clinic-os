@@ -78,7 +78,9 @@ def test_an_illegal_transition_is_refused_by_the_database(
         )
 
 
-def test_only_the_prescriber_of_record_can_be_the_signer(rx: RxApi, clinic: Clinic) -> None:
+def test_only_the_prescriber_of_record_can_be_the_signer(
+    rx: RxApi, clinic: Clinic
+) -> None:
     staged = rx.stage(clinic)
     with pytest.raises(DBAPIError, match="signer_is_prescriber"):
         _raw(
@@ -110,14 +112,18 @@ def _as_app(statement: str, tenant_id: str) -> int | str:
     """Run as `clinos_app` with a tenant set; the row count, or the SQLSTATE that refused it."""
     with engine.connect() as conn, conn.begin():
         conn.execute(text("SET LOCAL ROLE clinos_app"))
-        conn.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": tenant_id})
+        conn.execute(
+            text("SELECT set_config('app.tenant_id', :t, true)"), {"t": tenant_id}
+        )
         try:
             return conn.execute(text(statement)).rowcount
         except DBAPIError as error:
             return str(getattr(error.orig, "sqlstate", ""))
 
 
-def test_history_is_append_only_and_nothing_is_hard_deleted(rx: RxApi, clinic: Clinic) -> None:
+def test_history_is_append_only_and_nothing_is_hard_deleted(
+    rx: RxApi, clinic: Clinic
+) -> None:
     prescription_id = _signed(rx, clinic)
     tenant = str(clinic.owner.tenant_id)
     assert _as_app("UPDATE prescription_events SET reason = 'X'", tenant) == "42501"

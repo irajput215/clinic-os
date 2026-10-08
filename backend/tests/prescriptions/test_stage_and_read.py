@@ -17,7 +17,9 @@ def test_a_role_without_prescription_create_cannot_stage_and_is_audited(
     assert code(response) == "PERMISSION_NOT_HELD"
     assert clinic.owner.tenant_id is not None
     denied = rx.audit(clinic.owner.tenant_id, "prescription.create")
-    assert [(e["result"], e["reason"]) for e in denied] == [("DENIED", "PERMISSION_NOT_HELD")]
+    assert [(e["result"], e["reason"]) for e in denied] == [
+        ("DENIED", "PERMISSION_NOT_HELD")
+    ]
 
 
 @pytest.mark.parametrize(
@@ -156,4 +158,6 @@ def test_prescribers_are_the_accounts_holding_prescription_sign(
     assert str(clinic.verifier.user_id) in ids  # a DOCTOR
     assert str(nurse.user_id) not in ids
     pharmacy = rx.member(clinic, "PHARMACY")
-    assert rx.client.get(f"{URL}/prescribers", headers=pharmacy.headers).status_code == 403
+    assert (
+        rx.client.get(f"{URL}/prescribers", headers=pharmacy.headers).status_code == 403
+    )
