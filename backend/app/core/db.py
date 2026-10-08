@@ -19,6 +19,7 @@ from app.core.logging import (
     current_request_id,
     record_identity,
 )
+from app.core.server_timing import instrument_engine
 from app.models import User, UserCreate
 
 
@@ -27,6 +28,7 @@ class TenantContextRequired(RuntimeError):
 
 
 engine = create_engine(str(settings.DATABASE_URL), pool_pre_ping=True)
+instrument_engine(engine)
 
 
 def _set_context(session: Session, key: str, value: str) -> None:

@@ -1,0 +1,42 @@
+name: Measure Production
+
+# Reads production's own timing (the platform's upstream time and the app's Server-Timing header)
+# from a runner. Informational: it never fails on a slow number, only on an unreachable app, and it
+# never writes anything. See docs/reference/performance.md for how to read the report.
+on:
+  workflow_dispatch:
+  # After every deploy, so each release has a measurement on record.
+  workflow_run: # zizmor: ignore[dangerous-triggers] runs main's own script, takes no input from the triggering run
+    workflows: [Deploy]
+    types: [completed]
+    branches: [main]
+  pull_request:
+    paths:
+      - .github/workflows/measure-production.yml
+      - scripts/measure-production.py
+
+permissions: {}
+
+jobs:
+  measure:
+    if: github.repository == 'irajput215/clinic-os'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: .python-version
+      - name: Measure
+        run: python scripts/measure-production.py --samples 20
+        env:
+          # Optional: one clearly named probe clinic, for the authenticated reads. Absent secrets
+          # (and every pull request from a fork) measure the unauthenticated probes only.
+          PROBE_EMAIL: ${{ secrets.PROBE_EMAIL }}
+          PROBE_PASSWORD: ${{ secrets.PROBE_PASSWORD }}

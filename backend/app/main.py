@@ -11,6 +11,7 @@ from app.core.correlation import CorrelationIdMiddleware
 from app.core.errors import install_exception_handlers
 from app.core.logging import configure_logging
 from app.core.security_headers import SecurityHeadersMiddleware
+from app.core.server_timing import ServerTimingMiddleware
 
 FRONTEND_DIR = Path(__file__).parent / "frontend"
 
@@ -50,6 +51,10 @@ app.add_middleware(SecurityHeadersMiddleware)
 # Added last, so it is the outermost user middleware: every request gets its handle before any
 # other middleware runs, and the echo header is present on a CORS refusal as well as a success.
 app.add_middleware(CorrelationIdMiddleware)
+
+# Outermost of all: it opens the request's database measurement before anything else runs, so the
+# request line written by the correlation middleware can carry it (`app/core/server_timing.py`).
+app.add_middleware(ServerTimingMiddleware)
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
 

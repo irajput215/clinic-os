@@ -11,6 +11,7 @@ from sqlmodel import Session
 from app.core import security
 from app.core.config import settings
 from app.core.db import engine
+from app.core.server_timing import expose_server_timing
 from app.models import TokenPayload, User
 from app.modules.identity_tenancy import service as identity_tenancy_service
 from app.modules.users_roles import service as users_roles_service
@@ -78,6 +79,9 @@ def get_current_user(session: SessionDep, token: TokenDep) -> User:
             detail="Inactive user",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    # A verified session may see how long its own request took; an anonymous caller may not
+    # (`app/core/server_timing.py`, "What is never recorded").
+    expose_server_timing()
     return user
 
 
