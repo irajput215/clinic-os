@@ -16,8 +16,14 @@ it signs (the mechanism is `app.core.password_bound_tokens`, shared with passwor
 
 The admin never sets or sees a password: the account is created with the hash of a random secret that
 is discarded at once, so nobody can sign in until the invitee chooses a password through the link.
+
+**Resend.** A resend gives the account a new placeholder (the hash of a new random secret) and signs
+the new link against it, so the previous link no longer matches the account and is refused exactly
+like a spent one. `placeholder_digest` is what the `staff_invitations` row keeps to know the account
+still holds the placeholder it was sent for (`models.StaffInvitation`).
 """
 
+import hashlib
 import html
 import secrets
 import uuid
@@ -46,6 +52,21 @@ def fingerprint(hashed_password: str) -> str:
 def unusable_password_hash() -> str:
     """The hash of a random secret nobody is told: the account exists but cannot sign in yet."""
     return get_password_hash(secrets.token_urlsafe(32))
+
+
+def placeholder_digest(hashed_password: str) -> str:
+    """SHA-256 of a placeholder password hash: which placeholder an invitation was sent against.
+
+    Unkeyed on purpose, so it outlives a `SECRET_KEY` rotation (which retires every link but should
+    leave the invitation resendable). It is only ever taken of the hash of a random secret nobody was
+    told; compared with the account's current hash, it answers "has anyone set a password yet?".
+    """
+    return hashlib.sha256(hashed_password.encode()).hexdigest()
+
+
+def expires_at(sent_at: datetime) -> datetime:
+    """When a link issued at `sent_at` stops working: the window `issue` signs into it."""
+    return sent_at + timedelta(hours=settings.STAFF_INVITATION_EXPIRE_HOURS)
 
 
 def issue(

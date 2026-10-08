@@ -158,3 +158,38 @@ class UserRole(SQLModel, table=True):
     granted_by: uuid.UUID = Field(foreign_key="user.id", ondelete="RESTRICT")
     granted_at: datetime = Field(default_factory=_utcnow, sa_type=_TIMESTAMPTZ)
     last_reviewed_at: datetime | None = Field(default=None, sa_type=_TIMESTAMPTZ)
+
+
+class StaffInvitation(SQLModel, table=True):
+    """Where one account's staff invitation stands: the interim home of `users.status = INVITED`.
+
+    Design: `docs/features/03-users-and-roles/03-design.md`, "As built: the `INVITED` status". The
+    design puts the status on `users`, which is T1-03 (blocked by D-003); the legacy `user` table is
+    frozen, so the module that owns the user lifecycle keeps it here, one row per invited account.
+
+    The status is derived, never stored: `INVITED` while `accepted_at` is null **and** the account
+    still holds the placeholder password whose hash `pending_password_digest` records. A password set
+    any other way (password recovery) therefore ends the invitation without the recovery route knowing
+    about this table, and a resend can never overwrite a password the person chose. The digest is of
+    the hash of a random secret nobody was told, so it discloses nothing.
+    """
+
+    __tablename__ = "staff_invitations"
+    __table_args__ = (
+        sa.CheckConstraint("expires_at > sent_at", name="expiry_after_send"),
+        sa.Index("ix_staff_invitations_tenant_id", "tenant_id"),
+    )
+
+    user_id: uuid.UUID = Field(
+        foreign_key="user.id", primary_key=True, ondelete="RESTRICT"
+    )
+    tenant_id: uuid.UUID = Field(
+        foreign_key="tenants.id", ondelete="RESTRICT", nullable=False
+    )
+    # Who sent the link that is current now: the inviter, or whoever resent it last.
+    invited_by: uuid.UUID = Field(foreign_key="user.id", ondelete="RESTRICT")
+    sent_at: datetime = Field(sa_type=_TIMESTAMPTZ)
+    expires_at: datetime = Field(sa_type=_TIMESTAMPTZ)
+    pending_password_digest: str = Field(max_length=64)
+    accepted_at: datetime | None = Field(default=None, sa_type=_TIMESTAMPTZ)
+    created_at: datetime = Field(default_factory=_utcnow, sa_type=_TIMESTAMPTZ)

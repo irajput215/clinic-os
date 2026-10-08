@@ -204,6 +204,7 @@ class RbacApi:
                 for statement in (
                     "DELETE FROM patients WHERE tenant_id = :tenant_id",
                     "DELETE FROM user_roles WHERE tenant_id = :tenant_id",
+                    "DELETE FROM staff_invitations WHERE tenant_id = :tenant_id",
                     "DELETE FROM role_permissions WHERE tenant_id = :tenant_id",
                     "DELETE FROM roles WHERE tenant_id = :tenant_id",
                     'DELETE FROM "user" WHERE tenant_id = :tenant_id',

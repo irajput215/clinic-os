@@ -226,7 +226,10 @@ PAYLOAD_ALLOW_LIST: Final[MappingProxyType[str, frozenset[str]]] = MappingProxyT
         # the envelope's `actor_id`, the roles are `added` (role **codes**), and no key is invented
         # for the expiry, which is the event's timestamp plus `STAFF_INVITATION_EXPIRE_HOURS`.
         # Only keys already in the vocabulary; a refused invitation carries `added` and no target.
-        "user.create": frozenset({"target_user_id", "added", "step_up"}),
+        # `change` (2026-10-08) marks a re-sent invitation, `INVITATION_RESENT`: it re-issues the
+        # invitation whose expiry `USER_CREATED` records, and the closed catalogue has no
+        # `USER_INVITED` (`03-users-and-roles/05-data-and-audit.md`, "Resend"; OPEN-3).
+        "user.create": frozenset({"target_user_id", "added", "change", "step_up"}),
         # A booking: the patient it is for and where it came from (`STAFF` or `PUBLIC_BOOKING`, R6).
         # Never the time, the type or a name - those live in the row the event points at.
         "appointment.create": frozenset({"patient_id", "source"}),
