@@ -188,7 +188,7 @@ function HoursForm({ current }: { current: ClinicHours }) {
               data-testid={`hours-${name.toLowerCase()}`}
               className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-line-faint border-t py-2 first-of-type:border-t-0 sm:grid-cols-[150px_minmax(0,1fr)]"
             >
-              <label className="flex min-h-11 items-center gap-2.5 text-sm font-medium sm:min-h-9">
+              <label className="flex min-h-11 items-center gap-2.5 text-sm font-medium lg:min-h-9">
                 <input
                   type="checkbox"
                   className="size-4 accent-[var(--color-clay)]"
