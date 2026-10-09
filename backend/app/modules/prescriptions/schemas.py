@@ -126,7 +126,7 @@ class PrescriptionAddendum(_PayloadChange):
     """
 
 
-#: The reasons a person may give for cancelling (decision D-008, interim; the vocabulary is OPEN with
+#: The reasons a person may give for cancelling (decision D-010, interim; the vocabulary is OPEN with
 #: the Clinical Safety Officer). `SUPERSEDED_BY_ADDENDUM` is the server's own and is not offered.
 CancelReason = Literal[
     "ENTERED_IN_ERROR", "CLINICALLY_NOT_REQUIRED", "PATIENT_DECLINED", "DUPLICATE"
@@ -199,7 +199,7 @@ class PrescriptionRead(BaseModel):
     approval_id: uuid.UUID | None
     created_at: datetime
     signed_at: datetime | None
-    #: Set when the script was cancelled: the reason code (decision D-008).
+    #: Set when the script was cancelled: the reason code (decision D-010).
     cancel_reason_code: str | None = None
     #: An addendum names the signed original it corrects (FEAT-11 R5).
     supersedes_id: uuid.UUID | None = None

@@ -11,6 +11,6 @@
 | Server-side step-up for sign and dispatch | done, interim (ADR-F002 password re-entry checked by `POST /api/v1/auth/step-up`; single use, 2 minutes, bound to user + operation + script) |
 | Real step-up factor (MFA) | open: D-003 |
 | Real pharmacy / eRx transport | open: no transport exists; dispatch is honestly `QUEUED`, see [api.md](api.md) |
-| M4 (D-008): edit draft, cancel with reason, amend by addendum, history, single read; backend deny paths first (`backend/tests/prescriptions/test_draft_cancel_addendum.py`), e2e `tests/script-corrections.spec.ts`, dialogs in `tests/layout.spec.ts` | done |
+| M4 (D-010): edit draft, cancel with reason, amend by addendum, history, single read; backend deny paths first (`backend/tests/prescriptions/test_draft_cancel_addendum.py`), e2e `tests/script-corrections.spec.ts`, dialogs in `tests/layout.spec.ts` | done |
 
 Platform DoD: [`docs/reference/definition-of-done.md`](../../../docs/reference/definition-of-done.md).

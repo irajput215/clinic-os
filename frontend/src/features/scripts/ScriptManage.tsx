@@ -39,7 +39,7 @@ import { uuid } from "@/lib/uuid"
 import { z } from "@/lib/zod"
 
 /**
- * Correcting a script (FEAT-11; docs2/sdlc/07-script-queue; decision D-008): edit a draft, amend a
+ * Correcting a script (FEAT-11; docs2/sdlc/07-script-queue; decision D-010): edit a draft, amend a
  * signed script by a new version, cancel with a reason, and read its history. Every change waits for
  * the server's answer (no optimistic update) and then redraws the queue from it.
  */

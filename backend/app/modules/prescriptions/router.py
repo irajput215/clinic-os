@@ -1,5 +1,5 @@
 """The prescriptions HTTP API - the routes agreed in `docs2/sdlc/07-script-queue/api.md`, the
-prescriber list the staging form needs, and (Milestone 4, decision D-008) the single read, the history,
+prescriber list the staging form needs, and (Milestone 4, decision D-010) the single read, the history,
 the draft edit, the cancellation and the addendum.
 
 The request path is the designs' (`11-prescribing/03-design.md` "Deny-by-default request path"):

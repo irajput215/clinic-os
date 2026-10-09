@@ -1,4 +1,4 @@
-# D-008: Correcting a prescription - who edits and cancels, the cancel reason codes, what an addendum does
+# D-010: Correcting a prescription - who edits and cancels, the cancel reason codes, what an addendum does
 
 - **Status:** **Accepted** for the mechanism (FEAT-11 R3, R5, R8, R11, US-2/5/8/10 as written) · 🔴 **OPEN -
   requires a Clinical Safety Officer decision** for the three interim choices below, each implemented

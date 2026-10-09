@@ -125,7 +125,7 @@ payload, signature or grain change after `SIGNED`. Mutating an append-only table
 Built 2026-10-08 (Milestone 4): the single read, `PATCH`, `addendum`, `cancel` and `history`, with the
 interim answers this document leaves open (cancel reason codes, who cancels, what an addendum does to
 the original) recorded in decision
-[D-008](../../reference/decisions/D-008-prescription-corrections.md). `cancel` uses the existing
+[D-010](../../reference/decisions/D-010-prescription-corrections.md). `cancel` uses the existing
 `prescription:modify` until `prescription:cancel` is decided.
 
 No `DELETE` endpoint. Per `21-technical-design.md` §7 every route declares auth, permission, tenant scope,

@@ -1,5 +1,5 @@
 """FEAT-11 R3, R5, R8, R11, US-2/5/8/10 - edit a draft, cancel with a reason, amend by addendum, read one
-prescription and its history (decision D-008).
+prescription and its history (decision D-010).
 
 Deny paths first, route by route: no permission (`403`), another tenant (`404`, never `403`), no care
 relationship (`403 AUTHZ_CARE_RELATIONSHIP_DENIED`), not the script's own people (`403`), wrong state

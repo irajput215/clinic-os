@@ -293,7 +293,7 @@ PRESCRIPTION_PERMISSIONS: Final[dict[str, str]] = {
     "stage": "prescription:create",
     "sign": "prescription:sign",
     "dispatch": "prescription:dispatch",
-    # Editing a draft and cancelling (decision D-008): the matrix's existing `prescription:modify`
+    # Editing a draft and cancelling (decision D-010): the matrix's existing `prescription:modify`
     # (`G` owner and authorised prescriber, `G own` doctor, `G draft` nurse), narrowed by the service to
     # the script's drafter or prescriber of record. `prescription:cancel` stays a candidate code: who
     # may cancel someone else's script is OPEN with the Clinical Safety Officer (FEAT-11 US-8).

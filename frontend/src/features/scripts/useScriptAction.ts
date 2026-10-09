@@ -4,7 +4,7 @@ import type { Prescription, PrescriptionState } from "@/data/scripts"
 import { currentUserQuery } from "@/lib/session"
 import type { ScriptAction } from "./ScriptCard"
 
-/** Where each correction may start from: the server's own rule (decision D-008). */
+/** Where each correction may start from: the server's own rule (decision D-010). */
 const CANCELLABLE: readonly PrescriptionState[] = [
   "DRAFT",
   "SIGNED",

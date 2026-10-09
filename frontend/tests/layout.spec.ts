@@ -481,7 +481,7 @@ test("the prescribing screens fit every width", async ({
     review,
   )
 
-  // The corrections the same dialog offers (decision D-008): the draft edit and the history.
+  // The corrections the same dialog offers (decision D-010): the draft edit and the history.
   await review.getByRole("button", { name: "Edit draft" }).click()
   const edit = page.getByRole("dialog", { name: "Edit draft" })
   await checkEveryWidth(

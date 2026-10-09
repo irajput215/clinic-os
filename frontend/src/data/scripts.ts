@@ -17,7 +17,7 @@ import type { TgaMatchResponse } from "@/data/types"
  *   GET  /prescriptions/prescribers     POST /auth/step-up (the interim password step-up)
  *   GET  /prescriptions/{id}            GET  /prescriptions/{id}/history
  *   PATCH /prescriptions/{id} (a draft) POST /prescriptions/{id}/cancel {reason_code}
- *   POST /prescriptions/{id}/addendum (Idempotency-Key; decision D-008)
+ *   POST /prescriptions/{id}/addendum (Idempotency-Key; decision D-010)
  *
  * The safety gate's answer on every actionable script comes from the server, evaluated now. The
  * server also decides at sign and at dispatch, inside the transaction, so nothing here is a control:
@@ -69,7 +69,7 @@ export const PRESCRIPTION_STATE_LABEL: Record<PrescriptionState, string> = {
 }
 
 /**
- * Why a script is cancelled: the server's closed list (decision D-008, interim; the vocabulary is the
+ * Why a script is cancelled: the server's closed list (decision D-010, interim; the vocabulary is the
  * Clinical Safety Officer's). `SUPERSEDED_BY_ADDENDUM` is the server's own and is only ever shown.
  */
 export const CANCEL_REASONS = {

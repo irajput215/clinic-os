@@ -100,13 +100,13 @@ IDEMPOTENCY_KEY_REQUIRED: Final[str] = "IDEMPOTENCY_KEY_REQUIRED"
 # FEAT-10's block reasons for the non-gate refusals at dispatch (step 9).
 ALREADY_DISPATCHED: Final[str] = "ALREADY_DISPATCHED"
 # Editing or cancelling is for the script's own people: who drafted it, or its prescriber of record
-# (FEAT-11 US-2; decision D-008).
+# (FEAT-11 US-2; decision D-010).
 NOT_DRAFTER_OR_PRESCRIBER: Final[str] = "NOT_DRAFTER_OR_PRESCRIBER"
 # An original already corrected by an addendum (one addendum per original; correct the addendum).
 ALREADY_SUPERSEDED: Final[str] = "ALREADY_SUPERSEDED"
 # The event `reason` a new addendum version starts with.
 ADDENDUM: Final[str] = "ADDENDUM"
-# Where each write may start from (FEAT-11 state machine; decision D-008). Editing is a draft's;
+# Where each write may start from (FEAT-11 state machine; decision D-010). Editing is a draft's;
 # cancelling is anything not yet handed to the outbox (`QUEUED`, in flight, is never cancelled here,
 # and a dispatched script is reversed, not cancelled); an addendum corrects a signed script that has
 # not been sent.
@@ -981,7 +981,7 @@ def dispatch(
 
 
 # --------------------------------------------------------------------------------------------
-# One prescription: read, history, edit, cancel, addendum (FEAT-11; docs2 07; decision D-008)
+# One prescription: read, history, edit, cancel, addendum (FEAT-11; docs2 07; decision D-010)
 # --------------------------------------------------------------------------------------------
 #
 # Every route below loads the row **with the actor's care relationship to its patient** in one
@@ -1245,7 +1245,7 @@ def modify(
 def cancel(
     *, actor: Actor, prescription_id: uuid.UUID, reason_code: str
 ) -> PrescriptionRead | Refusal:
-    """Cancel before dispatch with a reason **code** (FEAT-11 R11, US-8; decision D-008).
+    """Cancel before dispatch with a reason **code** (FEAT-11 R11, US-8; decision D-010).
 
     `DRAFT`, `SIGNED`, `BLOCKED` or `FAILED` -> `CANCELLED`; anything queued, sent or already terminal
     is `409`. The code goes on the row, on the history row and in the audit envelope's `reason`.
@@ -1316,7 +1316,7 @@ def addendum(
     body: PrescriptionAddendum,
     client_key: str,
 ) -> AddendumResult | Refusal:
-    """Correct a signed script by a new version, never an edit (FEAT-11 R5, US-5; decision D-008).
+    """Correct a signed script by a new version, never an edit (FEAT-11 R5, US-5; decision D-010).
 
     Only the original's prescriber of record may write it. In one transaction: the original (still
     `SIGNED`, `BLOCKED` or `FAILED`, so never sent) moves to `CANCELLED` with

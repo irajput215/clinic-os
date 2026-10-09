@@ -5,7 +5,7 @@ Revises: 44c34ed0d6b2
 Create Date: 2026-10-08
 
 FEAT-11 R5 ("`SIGNED` is immutable; a correction is an addendum") and R11 ("cancel before dispatch
-requires a reason"), decision D-008.
+requires a reason"), decision D-010.
 
 * `prescriptions.cancel_reason_code` - set exactly when a row is `CANCELLED`
   (`ck_prescriptions_cancel_reason_present`), from the interim closed vocabulary

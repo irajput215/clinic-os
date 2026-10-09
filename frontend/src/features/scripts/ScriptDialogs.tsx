@@ -410,7 +410,7 @@ export function ReviewSignDialog({
   // One intent per opening of the dialog: a retry of the same click reuses it (server idempotency).
   const [intent, setIntent] = useState(() => uuid())
   const [forScript, setForScript] = useState(script?.id)
-  // Review, or one of the corrections (decision D-008), in the same dialog: never a dialog on a dialog.
+  // Review, or one of the corrections (decision D-010), in the same dialog: never a dialog on a dialog.
   const [mode, setMode] = useState<Mode>("review")
   if (script?.id !== forScript) {
     setForScript(script?.id)

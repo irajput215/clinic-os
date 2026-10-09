@@ -28,7 +28,7 @@ intent commits before any external call).
   divergence as open; one table serves both purposes and the platform `audit_log` is the control record.
 - `schedule8_flag` is not created: the medicine catalogue that would derive the flag is not sourced
   (T-11.5 open item), and a column that is always `false` would be a false clinical claim.
-- **Cancel and addendum** (FEAT-11 R5, R11; decision D-008). `cancel_reason_code` is set exactly when
+- **Cancel and addendum** (FEAT-11 R5, R11; decision D-010). `cancel_reason_code` is set exactly when
   a row becomes `CANCELLED` (`ck_prescriptions_cancel_reason_present`) and only from the interim closed
   vocabulary `CANCEL_REASON_CODES` (the vocabulary is the Clinical Safety Officer's, OPEN).
   `supersedes_id` names the signed prescription an addendum corrects, in the same tenant; one original
@@ -93,7 +93,7 @@ ATTEMPT_TRANSITIONS: Final[dict[str, frozenset[str]]] = {
 }
 OUTCOME_CLASSES: Final[tuple[str, ...]] = ("CONFIRMED", "REJECTED", "UNKNOWN")
 
-# Why a prescription was cancelled: the interim closed vocabulary of decision D-008. FEAT-11 asks for
+# Why a prescription was cancelled: the interim closed vocabulary of decision D-010. FEAT-11 asks for
 # "a reason code, not free text" and names no codes; the vocabulary is OPEN with the Clinical Safety
 # Officer. `SUPERSEDED_BY_ADDENDUM` is written by the server only, when an addendum retires the original.
 CANCEL_REASON_CODES: Final[tuple[str, ...]] = (

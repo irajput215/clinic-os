@@ -3,7 +3,7 @@ import type { APIRequestContext } from "@playwright/test"
 import { expect, test } from "./fixtures"
 
 /**
- * Correcting a script (FEAT-11; docs2/sdlc/07-script-queue; decision D-008): a draft is edited in
+ * Correcting a script (FEAT-11; docs2/sdlc/07-script-queue; decision D-010): a draft is edited in
  * place, cancelled with a reason and its history shows both; a signed script cannot be edited, only
  * amended by a new draft version that replaces it.
  *
