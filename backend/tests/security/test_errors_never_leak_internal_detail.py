@@ -21,7 +21,7 @@ from datetime import timedelta
 
 import pytest
 from fastapi.testclient import TestClient
-from httpx import Response
+from httpx2 import Response
 from sqlalchemy.exc import DBAPIError, IntegrityError, OperationalError
 from sqlmodel import Session
 

@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from httpx import Headers
+from httpx2 import Headers
 
 from app.core.security_headers import SECURITY_HEADERS, SecurityHeadersMiddleware
 from app.core.static_cache import (

@@ -14,7 +14,7 @@ import uuid
 from datetime import date, timedelta
 from typing import Any
 
-from httpx import Response
+from httpx2 import Response
 from sqlalchemy import text
 
 from app.core.db import engine

@@ -28,6 +28,7 @@ dev = [
     "ty>=0.0.25",
     "ruff<1.0.0,>=0.2.2",
     "coverage<8.0.0,>=7.4.3",
+    "httpx2>=2.13.1",
 ]
 
 [build-system]
@@ -70,10 +71,6 @@ keep-runtime-typing = true
 # Each exception below is narrow (message and category) and says why it cannot be fixed here.
 filterwarnings = [
     "error",
-    # Third party, upstream: Starlette 1.x deprecates `httpx` for `starlette.testclient` in favour
-    # of `httpx2` (encode/starlette#3291). The fix is a new dev dependency (`httpx2`), which
-    # AGENTS.md puts behind "ask first"; drop this line once `httpx2` is in the dev group.
-    "ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning",
     # Local environment, not code: `app.core.config` warns under `FASTAPI_ENV=development` when a
     # secret is still the `changethis` placeholder, and raises outside development. A local `.env`
     # whose compose database password is `changethis` reaches the suite through `DATABASE_URL`; a
