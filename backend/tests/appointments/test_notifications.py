@@ -1,7 +1,7 @@
 """The booking emails: confirmation and reminder (`app.modules.appointments.notifications`).
 
 Contract: `docs2/sdlc/04-calendar-and-booking/api.md`, "Clinic hours, slot length and booking
-emails"; scheduling: D-007. Mail goes to the in-memory sink (`tests/conftest.py` `mail_sink`), never
+emails"; scheduling: D-009. Mail goes to the in-memory sink (`tests/conftest.py` `mail_sink`), never
 to a server. Denial and refusal paths first: email off, the job endpoint's token, skipped bookings;
 then sending, idempotency, retries, and what an email may and may not carry.
 """

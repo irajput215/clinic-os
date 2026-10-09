@@ -269,7 +269,7 @@ class AppointmentHours(SQLModel, table=True):
 
 
 class AppointmentNotification(SQLModel, table=True):
-    """The booking-email outbox (D-007): one confirmation and at most one reminder per booking.
+    """The booking-email outbox (D-009): one confirmation and at most one reminder per booking.
 
     Written on the booking's own transaction; sent by `app.modules.appointments.notifications`.
     `UNIQUE (tenant_id, appointment_id, kind)` makes a second reminder for one booking

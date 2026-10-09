@@ -1140,7 +1140,7 @@ export class InternalService {
      *
      * Send every due booking confirmation and reminder, one tenant at a time. Counts only.
      *
-     * For a scheduler (D-007). No tenant is named by the caller: the job reads the active tenants and
+     * For a scheduler (D-009). No tenant is named by the caller: the job reads the active tenants and
      * runs each in its own transaction. Idempotent: a second call sends nothing the first one sent.
      */
     public static runBookingNotifications<ThrowOnError extends boolean = true>(options?: Options<internalRunBookingNotificationsData, ThrowOnError>) {

@@ -1,4 +1,4 @@
-# D-007: Scheduled jobs (booking reminders) run from a transactional outbox, triggered by a scheduler the owner enables
+# D-009: Scheduled jobs (booking reminders) run from a transactional outbox, triggered by a scheduler the owner enables
 
 - **Status:** Accepted for the mechanism · **OPEN** for the trigger (the owner must enable it)
 - **Date:** 2026-10-08

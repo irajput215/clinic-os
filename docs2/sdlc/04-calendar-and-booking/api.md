@@ -24,7 +24,7 @@ errors with `detail.code`. A `tenant_id` in a body or query string is ignored an
 ## Clinic hours, slot length and booking emails (Milestone 4, 2026-10-08)
 
 **Status: built 2026-10-08.** `backend/app/modules/appointments/` (`models.py`, `service.py`,
-`notifications.py`, `router.py`). Scheduling decision: [D-007](../../../docs/reference/decisions/D-007-scheduled-jobs-and-booking-reminders.md).
+`notifications.py`, `router.py`). Scheduling decision: [D-009](../../../docs/reference/decisions/D-009-scheduled-jobs-and-booking-reminders.md).
 
 | Method | Path | Auth / permission | Contract |
 |---|---|---|---|

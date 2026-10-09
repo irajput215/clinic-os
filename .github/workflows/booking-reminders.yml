@@ -1,7 +1,7 @@
 name: Booking Reminders
 
 # Sends the booking confirmations and reminders that are due, by calling production's job endpoint
-# (docs/reference/decisions/D-007-scheduled-jobs-and-booking-reminders.md). Inert until the owner
+# (docs/reference/decisions/D-009-scheduled-jobs-and-booking-reminders.md). Inert until the owner
 # enables it: the repository variable BOOKING_REMINDERS_URL and the secret BOOKING_REMINDERS_TOKEN
 # (the same value as the app's BOOKING_NOTIFICATIONS_RUN_TOKEN). The endpoint is idempotent, so a
 # late or doubled run sends nothing twice. GitHub's scheduler may run late under load.

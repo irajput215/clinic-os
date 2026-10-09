@@ -5,7 +5,7 @@ Revises: b7d2e4f6a8c1
 Create Date: 2026-10-08 14:20:00.000000
 
 Contract: `docs2/sdlc/04-calendar-and-booking/api.md`, "Clinic hours, slot length and booking
-emails"; scheduling: `docs/reference/decisions/D-007-scheduled-jobs-and-booking-reminders.md`.
+emails"; scheduling: `docs/reference/decisions/D-009-scheduled-jobs-and-booking-reminders.md`.
 
 * `appointment_settings` loses `opens_at`, `closes_at` and `working_days` (one interval for every
   working day) and gains `slot_minutes` (`ck_appointment_settings_slot_minutes`, default 15).

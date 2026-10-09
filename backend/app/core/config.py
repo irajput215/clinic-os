@@ -120,7 +120,7 @@ class Settings(BaseSettings):
     SERVER_TIMING_ENABLED: bool = True
 
     # The bearer token of `POST /api/v1/internal/booking-notifications/run`, the endpoint a scheduler
-    # calls to send due booking reminders (`docs/reference/decisions/D-007-...`). Unset (the default)
+    # calls to send due booking reminders (`docs/reference/decisions/D-009-...`). Unset (the default)
     # turns the endpoint off: it answers `404`. At least 32 characters when set; never logged.
     BOOKING_NOTIFICATIONS_RUN_TOKEN: SecretStr | None = Field(
         default=None, min_length=32

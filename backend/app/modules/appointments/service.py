@@ -614,7 +614,7 @@ def _insert(
     return appointment
 
 
-# The booking emails (D-007), written on the booking's own transaction: a confirmation due now, and
+# The booking emails (D-009), written on the booking's own transaction: a confirmation due now, and
 # a reminder due 24 hours before the start when that is still ahead. Nothing about the patient is
 # stored here; the sender reads the address when it sends.
 REMINDER_LEAD: Final[timedelta] = timedelta(hours=24)

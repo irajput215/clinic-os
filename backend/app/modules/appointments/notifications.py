@@ -1,7 +1,7 @@
 """The booking emails: a confirmation when a booking is made, a reminder 24 hours before.
 
 Contract: `docs2/sdlc/04-calendar-and-booking/api.md`, "Clinic hours, slot length and booking
-emails". Scheduling: `docs/reference/decisions/D-007-scheduled-jobs-and-booking-reminders.md`.
+emails". Scheduling: `docs/reference/decisions/D-009-scheduled-jobs-and-booking-reminders.md`.
 
 The booking writes its rows into `appointment_notifications` on its own transaction
 (`service._enqueue_notifications`). This module sends what is due, one tenant per transaction::

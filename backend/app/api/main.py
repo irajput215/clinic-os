@@ -72,7 +72,7 @@ api_router.include_router(practitioners_router)
 api_router.include_router(appointments_router)
 api_router.include_router(appointments_patient_router)
 api_router.include_router(public_booking_router)
-# Milestone 4: the clinic hours and slot length, and the booking-email job a scheduler calls (D-007).
+# Milestone 4: the clinic hours and slot length, and the booking-email job a scheduler calls (D-009).
 api_router.include_router(appointment_settings_router)
 api_router.include_router(appointments_internal_router)
 api_router.include_router(auth_router)

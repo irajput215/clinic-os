@@ -399,7 +399,7 @@ def update_appointment_settings(
     )
 
 
-# -- the booking-email job (D-007) -----------------------------------------------------------------
+# -- the booking-email job (D-009) -----------------------------------------------------------------
 
 
 def _digest(value: str) -> bytes:
@@ -439,7 +439,7 @@ def _run_token(authorization: Annotated[str | None, Header()] = None) -> None:
 def run_booking_notifications() -> NotificationRunReport:
     """Send every due booking confirmation and reminder, one tenant at a time. Counts only.
 
-    For a scheduler (D-007). No tenant is named by the caller: the job reads the active tenants and
+    For a scheduler (D-009). No tenant is named by the caller: the job reads the active tenants and
     runs each in its own transaction. Idempotent: a second call sends nothing the first one sent.
     """
     try:
