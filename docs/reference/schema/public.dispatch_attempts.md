@@ -126,7 +126,9 @@ erDiagram
   uuid verified_by
 }
 "public.prescriptions" {
+  varchar_64_ addendum_key
   uuid approval_id FK
+  varchar_64_ cancel_reason_code
   varchar conventional_therapy
   timestamp_with_time_zone created_at
   date date_of_service
@@ -143,6 +145,7 @@ erDiagram
   timestamp_with_time_zone signed_at
   uuid signed_by
   varchar state
+  uuid supersedes_id FK
   uuid tenant_id FK
   varchar tga_category
   varchar triage_outcome

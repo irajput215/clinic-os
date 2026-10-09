@@ -15,7 +15,7 @@
 | [public.patients](public.patients.md) | 23 |  | BASE TABLE |
 | [public.permissions](public.permissions.md) | 3 |  | BASE TABLE |
 | [public.prescription_events](public.prescription_events.md) | 8 |  | BASE TABLE |
-| [public.prescriptions](public.prescriptions.md) | 21 |  | BASE TABLE |
+| [public.prescriptions](public.prescriptions.md) | 24 |  | BASE TABLE |
 | [public.role_permissions](public.role_permissions.md) | 3 |  | BASE TABLE |
 | [public.roles](public.roles.md) | 7 |  | BASE TABLE |
 | [public.signup_requests](public.signup_requests.md) | 11 |  | BASE TABLE |
@@ -290,6 +290,7 @@ erDiagram
 "public.prescriptions" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.prescriptions" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
 "public.prescriptions" }o--|| "public.tga_approvals" : "FOREIGN KEY (tenant_id, approval_id) REFERENCES tga_approvals(tenant_id, id) ON DELETE RESTRICT"
+"public.prescriptions" }o--|| "public.prescriptions" : "FOREIGN KEY (tenant_id, supersedes_id) REFERENCES prescriptions(tenant_id, id) ON DELETE RESTRICT"
 "public.role_permissions" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.role_permissions" }o--|| "public.permissions" : "FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE RESTRICT"
 "public.role_permissions" }o--|| "public.roles" : "FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE RESTRICT"
@@ -458,7 +459,9 @@ erDiagram
   varchar to_state
 }
 "public.prescriptions" {
+  varchar_64_ addendum_key
   uuid approval_id FK
+  varchar_64_ cancel_reason_code
   varchar conventional_therapy
   timestamp_with_time_zone created_at
   date date_of_service
@@ -475,6 +478,7 @@ erDiagram
   timestamp_with_time_zone signed_at
   uuid signed_by
   varchar state
+  uuid supersedes_id FK
   uuid tenant_id FK
   varchar tga_category
   varchar triage_outcome
