@@ -198,11 +198,11 @@ function HoursForm({ current }: { current: ClinicHours }) {
                 {name}
               </label>
               {open ? (
-                <div className="col-span-2 flex flex-wrap items-center gap-2 sm:col-span-1">
+                <div className="col-span-2 grid max-w-[340px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sm:col-span-1">
                   <input
                     type="time"
                     step={300}
-                    className="field-input w-[124px]"
+                    className="field-input min-w-0 px-2 text-sm"
                     aria-label={`${name} opens`}
                     aria-invalid={dayErrors?.opens_at ? "true" : undefined}
                     {...form.register(`days.${index}.opens_at`)}
@@ -211,7 +211,7 @@ function HoursForm({ current }: { current: ClinicHours }) {
                   <input
                     type="time"
                     step={300}
-                    className="field-input w-[124px]"
+                    className="field-input min-w-0 px-2 text-sm"
                     aria-label={`${name} closes`}
                     aria-invalid={dayErrors?.closes_at ? "true" : undefined}
                     {...form.register(`days.${index}.closes_at`)}
