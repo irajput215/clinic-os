@@ -34,7 +34,7 @@ async function outlast429(send: () => Promise<APIResponse>) {
   }
 }
 
-test("an owner invites a doctor, who sets a password once and lands in the clinic", async ({
+test("an owner invites a doctor, resends the invite, and the new link signs them in once", async ({
   signedIn: page,
   clinic: owner,
   request,
@@ -81,7 +81,10 @@ test("an owner invites a doctor, who sets a password once and lands in the clini
   const row = table.getByTestId(`staff-${invitee.email}`)
   await expect(row).toContainText(invitee.fullName, slow)
   await expect(row).toContainText("Doctor")
-  await expect(row).toContainText("Active")
+  // Not signed up yet: "Invited", with when the link stops working (72 hours from now).
+  await expect(row).toContainText("Invited")
+  await expect(row).toContainText("expires")
+  await expect(row).not.toContainText("Active")
 
   // The same address again is refused at the field, in words that name no organisation.
   await page.getByRole("button", { name: "Invite staff member" }).click()
@@ -92,10 +95,25 @@ test("an owner invites a doctor, who sets a password once and lands in the clini
   await expect(dialog.getByText("can't be invited")).toBeVisible(slow)
   await dialog.getByRole("button", { name: "Cancel" }).click()
 
-  // The person opens the emailed link in a browser of their own.
-  const html = await waitForEmailHtml(request, invitee.email)
+  // The first email arrives; then the owner resends the invite, which mails a second link and
+  // retires the first.
+  const firstLink = emailedPath(
+    await waitForEmailHtml(request, invitee.email),
+    "/accept-invite",
+  )
+  await row
+    .getByRole("button", { name: `Resend invite to ${invitee.fullName}` })
+    .click()
+  await expect(
+    page.getByText(`New invitation sent to ${invitee.email}`),
+  ).toBeVisible(slow)
+  await expect(row).toContainText("Invited")
+
+  // The person opens the newest emailed link in a browser of their own.
+  const html = await waitForEmailHtml(request, invitee.email, 2)
   expect(html).toContain(invitee.fullName)
   const link = emailedPath(html, "/accept-invite")
+  expect(link).not.toBe(firstLink)
   const context = await browser.newContext()
   const theirs = await context.newPage()
   await theirs.goto(link)
@@ -135,10 +153,10 @@ test("an owner invites a doctor, who sets a password once and lands in the clini
   await expect(nav.getByRole("link", { name: "Administration" })).toHaveCount(0)
   await context.close()
 
-  // The link works once.
+  // The link the resend retired is refused (and the new one, now spent, would be too).
   const again = await browser.newContext()
   const replay = await again.newPage()
-  await replay.goto(link)
+  await replay.goto(firstLink)
   await replay.getByLabel("Password", { exact: true }).fill(newPassword())
   await replay.getByLabel("Confirm password").fill("mismatch-on-purpose")
   await replay.getByRole("button", { name: "Set password and sign in" }).click()
@@ -155,7 +173,15 @@ test("an owner invites a doctor, who sets a password once and lands in the clini
   ).toBeVisible()
   await again.close()
 
-  // Back in Administration: Manage access opens User access on the new account.
+  // Back in Administration the person is active, with nothing left to resend.
+  await page.reload()
+  await expect(row).toContainText("Active", slow)
+  await expect(row).not.toContainText("Invited")
+  await expect(
+    row.getByRole("button", { name: `Resend invite to ${invitee.fullName}` }),
+  ).toHaveCount(0)
+
+  // Manage access opens User access on the new account.
   await row
     .getByRole("button", { name: `Manage access for ${invitee.fullName}` })
     .click()
@@ -222,20 +248,51 @@ test("an administrator can only offer the roles whose permissions they hold", as
 
 test("staff and the invitation page fit a phone screen without sideways scrolling", async ({
   signedIn: page,
+  clinic,
+  request,
   browser,
 }) => {
-  await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto("/admin")
-  await expect(page.getByTestId("staff-table")).toBeVisible(slow)
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - window.innerWidth,
+  // An outstanding invitation with a long name: the widest row the table has (status with its
+  // expiry, "Resend invite" beside "Manage access").
+  const auth = { Authorization: `Bearer ${clinic.token}` }
+  const roles = await outlast429(() =>
+    request.get("/api/v1/roles", { headers: auth }),
   )
-  expect(overflow, "/admin staff").toBeLessThanOrEqual(0)
-  // The table fits its card too, rather than scrolling sideways inside it.
-  const tableOverflow = await page
-    .getByTestId("staff-table")
-    .evaluate((t) => t.scrollWidth - (t.parentElement?.clientWidth ?? 0))
-  expect(tableOverflow, "staff table").toBeLessThanOrEqual(0)
+  const nurse = (
+    (await roles.json()) as { data: { id: string; code: string }[] }
+  ).data.find((role) => role.code === "NURSE")
+  const name = `Alexandra Featherstonehaugh-Invitee ${run()}`
+  const invited = await outlast429(() =>
+    request.post("/api/v1/users/staff", {
+      headers: auth,
+      data: {
+        email: `wide-${run()}@e2e.example.com`,
+        full_name: name,
+        role_ids: [nurse?.id],
+      },
+    }),
+  )
+  expect(invited.status(), await invited.text()).toBe(201)
+
+  await page.goto("/admin")
+  const table = page.getByTestId("staff-table")
+  await expect(
+    table.getByRole("button", { name: `Resend invite to ${name}` }),
+  ).toBeVisible(slow)
+  // Every width the app supports: the table fits its card rather than scrolling (or clipping)
+  // sideways inside it, and the page itself never scrolls sideways.
+  for (const width of [1440, 1280, 1024, 768, 390, 360]) {
+    await page.setViewportSize({ width, height: 844 })
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    )
+    expect(overflow, `/admin staff at ${width}px`).toBeLessThanOrEqual(0)
+    const tableOverflow = await table.evaluate(
+      (t) => t.scrollWidth - (t.parentElement?.clientWidth ?? 0),
+    )
+    expect(tableOverflow, `staff table at ${width}px`).toBeLessThanOrEqual(0)
+  }
+  await page.setViewportSize({ width: 390, height: 844 })
 
   await page.getByRole("button", { name: "Invite staff member" }).click()
   const dialog = page.getByRole("dialog", { name: "Invite a staff member" })

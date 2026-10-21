@@ -18,6 +18,7 @@
 | [public.prescriptions](public.prescriptions.md) | 21 |  | BASE TABLE |
 | [public.role_permissions](public.role_permissions.md) | 3 |  | BASE TABLE |
 | [public.roles](public.roles.md) | 7 |  | BASE TABLE |
+| [public.staff_invitations](public.staff_invitations.md) | 8 |  | BASE TABLE |
 | [public.step_up_grants](public.step_up_grants.md) | 9 |  | BASE TABLE |
 | [public.tenants](public.tenants.md) | 8 |  | BASE TABLE |
 | [public.tga_approval_events](public.tga_approval_events.md) | 9 |  | BASE TABLE |
@@ -292,6 +293,9 @@ erDiagram
 "public.role_permissions" }o--|| "public.permissions" : "FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE RESTRICT"
 "public.role_permissions" }o--|| "public.roles" : "FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE RESTRICT"
 "public.roles" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.staff_invitations" }o--|| "public.user" : "FOREIGN KEY (invited_by) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
+"public.staff_invitations" |o--|| "public.user" : "FOREIGN KEY (user_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
+"public.staff_invitations" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.step_up_grants" }o--|| "public.user" : "FOREIGN KEY (user_id) REFERENCES #quot;user#quot;(id) ON DELETE CASCADE"
 "public.step_up_grants" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE"
 "public.tga_approval_events" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
@@ -488,6 +492,16 @@ erDiagram
   varchar name
   uuid tenant_id FK
   timestamp_with_time_zone updated_at
+}
+"public.staff_invitations" {
+  timestamp_with_time_zone accepted_at
+  timestamp_with_time_zone created_at
+  timestamp_with_time_zone expires_at
+  uuid invited_by FK
+  varchar_64_ pending_password_digest
+  timestamp_with_time_zone sent_at
+  uuid tenant_id FK
+  uuid user_id FK
 }
 "public.step_up_grants" {
   timestamp_with_time_zone consumed_at

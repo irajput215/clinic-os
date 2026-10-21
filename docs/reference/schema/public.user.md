@@ -8,7 +8,7 @@
 | email | varchar(255) |  | false |  |  |  |
 | full_name | varchar(255) |  | true |  |  |  |
 | hashed_password | varchar |  | false |  |  |  |
-| id | uuid |  | false | [public.care_relationships](public.care_relationships.md) [public.clinical_record_versions](public.clinical_record_versions.md) [public.clinical_records](public.clinical_records.md) [public.step_up_grants](public.step_up_grants.md) [public.user_roles](public.user_roles.md) |  |  |
+| id | uuid |  | false | [public.care_relationships](public.care_relationships.md) [public.clinical_record_versions](public.clinical_record_versions.md) [public.clinical_records](public.clinical_records.md) [public.staff_invitations](public.staff_invitations.md) [public.step_up_grants](public.step_up_grants.md) [public.user_roles](public.user_roles.md) |  |  |
 | is_active | boolean |  | false |  |  |  |
 | is_superuser | boolean |  | false |  |  |  |
 | tenant_id | uuid |  | true |  | [public.tenants](public.tenants.md) |  |
@@ -41,6 +41,8 @@ erDiagram
 "public.care_relationships" }o--|| "public.user" : "FOREIGN KEY (practitioner_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
 "public.clinical_record_versions" }o--|| "public.user" : "FOREIGN KEY (author_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
 "public.clinical_records" }o--|| "public.user" : "FOREIGN KEY (author_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
+"public.staff_invitations" }o--|| "public.user" : "FOREIGN KEY (invited_by) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
+"public.staff_invitations" |o--|| "public.user" : "FOREIGN KEY (user_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
 "public.step_up_grants" }o--|| "public.user" : "FOREIGN KEY (user_id) REFERENCES #quot;user#quot;(id) ON DELETE CASCADE"
 "public.user_roles" }o--|| "public.user" : "FOREIGN KEY (granted_by) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
 "public.user_roles" }o--|| "public.user" : "FOREIGN KEY (user_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
@@ -92,6 +94,16 @@ erDiagram
   varchar record_type
   timestamp_with_time_zone signed_at
   uuid tenant_id FK
+}
+"public.staff_invitations" {
+  timestamp_with_time_zone accepted_at
+  timestamp_with_time_zone created_at
+  timestamp_with_time_zone expires_at
+  uuid invited_by FK
+  varchar_64_ pending_password_digest
+  timestamp_with_time_zone sent_at
+  uuid tenant_id FK
+  uuid user_id FK
 }
 "public.step_up_grants" {
   timestamp_with_time_zone consumed_at

@@ -3,23 +3,27 @@ import { type APIRequestContext, expect } from "@playwright/test"
 /** Mailpit catches every email the backend sends in local and CI runs (compose.yml). */
 const MAILPIT = process.env.MAILPIT_HOST ?? "http://localhost:8025"
 
-/** The newest email Mailpit caught for `to`, as HTML. Polls: delivery is asynchronous. */
+/**
+ * The newest email Mailpit caught for `to`, as HTML, once at least `count` have arrived (so a test
+ * that expects a second email never reads the first). Polls: delivery is asynchronous.
+ */
 export const waitForEmailHtml = async (
   request: APIRequestContext,
   to: string,
+  count = 1,
 ) => {
   let html: string | undefined
   await expect
     .poll(
       async () => {
         const search = await request.get(`${MAILPIT}/api/v1/search`, {
-          params: { query: `to:"${to}"`, limit: 1 },
+          params: { query: `to:"${to}"`, limit: count },
         })
         if (!search.ok()) return false
         const { messages } = (await search.json()) as {
           messages: { ID: string }[]
         }
-        if (!messages[0]) return false
+        if (messages.length < count || !messages[0]) return false
         const view = await request.get(`${MAILPIT}/view/${messages[0].ID}.html`)
         html = await view.text()
         return view.ok()

@@ -1347,6 +1347,28 @@ export type SoapNote = {
 };
 
 /**
+ * StaffInvitationRead
+ *
+ * An outstanding invitation: when the current link was sent and when it stops working.
+ *
+ * `expired` is decided by the server's clock, so a screen never has to trust the device's.
+ */
+export type StaffInvitationRead = {
+    /**
+     * Sent At
+     */
+    sent_at: string;
+    /**
+     * Expires At
+     */
+    expires_at: string;
+    /**
+     * Expired
+     */
+    expired: boolean;
+};
+
+/**
  * StaffInvite
  *
  * The body of `POST /api/v1/users/staff`: who to invite and the role(s) they start with.
@@ -1379,7 +1401,8 @@ export type StaffInvite = {
  * One account of the caller's organisation (`GET`/`POST /api/v1/users/staff`).
  *
  * No `tenant_id` (the caller's own), no `is_superuser` (a platform attribute an organisation does
- * not administer) and no credential material.
+ * not administer) and no credential material. `invitation` is present only while the status is
+ * `INVITED`.
  */
 export type StaffMemberRead = {
     /**
@@ -1398,6 +1421,11 @@ export type StaffMemberRead = {
      * Is Active
      */
     is_active: boolean;
+    /**
+     * Status
+     */
+    status: 'INVITED' | 'ACTIVE' | 'INACTIVE';
+    invitation: StaffInvitationRead | null;
     /**
      * Created At
      */
@@ -2609,6 +2637,48 @@ export type usersInviteStaffResponses = {
 };
 
 export type usersInviteStaffResponse = usersInviteStaffResponses[keyof usersInviteStaffResponses];
+
+export type usersResendInvitationData = {
+    body?: never;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/v1/users/staff/{user_id}/invitation';
+};
+
+export type usersResendInvitationErrors = {
+    /**
+     * The account is absent, or belongs to another organisation
+     */
+    404: unknown;
+    /**
+     * Refused: no invitation is outstanding (it was accepted, the person never needed one, or the account is deactivated)
+     */
+    409: unknown;
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+    /**
+     * Outgoing mail is not configured, so no invitation can be sent
+     */
+    503: unknown;
+};
+
+export type usersResendInvitationError = usersResendInvitationErrors[keyof usersResendInvitationErrors];
+
+export type usersResendInvitationResponses = {
+    /**
+     * Successful Response
+     */
+    200: StaffMemberRead;
+};
+
+export type usersResendInvitationResponse = usersResendInvitationResponses[keyof usersResendInvitationResponses];
 
 export type usersAcceptInvitationData = {
     body: InvitationAccept;

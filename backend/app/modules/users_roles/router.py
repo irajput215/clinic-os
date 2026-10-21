@@ -133,8 +133,10 @@ so the literal `me` segment is never captured by `/users/{user_id}/permissions` 
 - Ownership rule: every returned account's `tenant_id` equals the session's tenant; another tenant's
   accounts are absent, not denied
 - Input schema: `skip` (>= 0, default 0) and `limit` (1 to 100, default 50) query parameters
-- Output schema: `StaffPublic` - `{data: [{id, email, full_name, is_active, created_at, roles:
-  [{role_id, code, name}]}], count}`, ordered by name, then email, then id
+- Output schema: `StaffPublic` - `{data: [{id, email, full_name, is_active, status, invitation,
+  created_at, roles: [{role_id, code, name}]}], count}`, ordered by name, then email, then id.
+  `status` is `INVITED`, `ACTIVE` or `INACTIVE`; `invitation` (`{sent_at, expires_at, expired}`) is
+  present only while `INVITED`
 - Audit: none - the closed action catalogue names no event for a user read (as for the role reads)
 - Rate limit: the administrative class, 20/min per session
 - Errors: `401`, `403` (`PERMISSION_NOT_HELD`, `NO_ORGANISATION`, `TENANT_NOT_ACTIVE`), `422`, `429`;
@@ -160,6 +162,24 @@ so the literal `me` segment is never captured by `/users/{user_id}/permissions` 
   same answer whichever organisation holds the address), `422`, `429`, `503`
   (`EMAIL_NOT_CONFIGURED`: no outgoing mail, so nothing is created); fails closed = yes
 - Step-up: deferred, as for the role grant - blocked by D-003
+
+#### `POST /api/v1/users/staff/{user_id}/invitation`
+- Authentication: Yes
+- Permission: `users:manage`, plus R3 over the union of the bundles of the roles the person holds now
+  (exactly the invitation's check)
+- Tenant scope: both - the session resolves the tenant, the account is matched against it
+- Ownership rule: the account's `tenant_id` equals the session's tenant, otherwise `404`; its status
+  must be `INVITED`, otherwise `409 INVITATION_NOT_PENDING`
+- Input schema: none - `user_id` is a UUID path parameter; there is no body
+- Output schema: `StaffMemberRead`, `200`, with the new `invitation`
+- Audit: `user.create` `SUCCESS` with `change = INVITATION_RESENT` and the target, on the transaction
+  that retires the old link; a refusal writes `user.create` `DENIED` with the same `change` and
+  `PERMISSION_NOT_HELD`, `GRANT_EXCEEDS_ACTOR` or `INVITATION_NOT_PENDING`. A `404` writes nothing
+- Rate limit: the administrative class, 20/min per session, like the invitation
+- Errors: `401`, `403` (`PERMISSION_NOT_HELD`, `GRANT_EXCEEDS_ACTOR`, `NO_ORGANISATION`,
+  `TENANT_NOT_ACTIVE`), `404`, `409` (`INVITATION_NOT_PENDING`), `422` (malformed UUID), `429`, `503`
+  (`EMAIL_NOT_CONFIGURED`: nothing changes); fails closed = yes
+- Step-up: deferred, as for the invitation - blocked by D-003
 
 #### `POST /api/v1/users/invitations/accept`
 - Authentication: No - the emailed token is the credential. It is purpose-bound, expires after
@@ -202,6 +222,7 @@ from app.modules.users_roles.catalog import (
     EMAIL_NOT_CONFIGURED,
     EMAIL_UNAVAILABLE,
     INVITATION_INVALID,
+    INVITATION_NOT_PENDING,
     LAST_ADMINISTRATOR,
     USERS_ROLES_PERMISSIONS,
 )
@@ -452,6 +473,64 @@ def invite_staff(
             detail={
                 "code": EMAIL_UNAVAILABLE,
                 "message": "This email address can't be invited. It may already have an account.",
+            },
+        )
+    assert result.member is not None
+    return result.member
+
+
+@staff_router.post(
+    "/{user_id}/invitation",
+    response_model=StaffMemberRead,
+    responses={
+        status.HTTP_404_NOT_FOUND: {
+            "description": "The account is absent, or belongs to another organisation"
+        },
+        status.HTTP_409_CONFLICT: {
+            "description": (
+                "Refused: no invitation is outstanding (it was accepted, the person never needed "
+                "one, or the account is deactivated)"
+            )
+        },
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "description": "Outgoing mail is not configured, so no invitation can be sent"
+        },
+    },
+)
+def resend_invitation(*, actor: ActorDep, user_id: uuid.UUID) -> StaffMemberRead:
+    """Resend an invitation: email a fresh link, retire the previous one and restart the window.
+
+    Checked exactly like sending one: `users:manage`, then R3 over the roles the person holds now
+    (`403 GRANT_EXCEEDS_ACTOR`). Only an outstanding invitation can be resent (`409`).
+    """
+    decision = service.can(actor, USERS_ROLES_PERMISSIONS["resend_invitation"])
+    if not decision.allowed:
+        service.record_invitation_denial(
+            actor=actor, reason=decision.code.value, resend=True
+        )
+        service.enforce(decision)
+    if not settings.emails_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": EMAIL_NOT_CONFIGURED,
+                "message": "Outgoing email is not configured, so invitations can't be sent.",
+            },
+        )
+    result = service.resend_invitation(actor=actor, user_id=user_id)
+    if result.outcome is service.ResendOutcome.NOT_FOUND:
+        raise _not_found("Staff member")
+    if result.denial is not None:
+        service.enforce(result.denial)
+    if result.outcome is service.ResendOutcome.NOT_PENDING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": INVITATION_NOT_PENDING,
+                "message": (
+                    "There is no invitation to resend: this person has already set a password, "
+                    "or their account is deactivated."
+                ),
             },
         )
     assert result.member is not None

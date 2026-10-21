@@ -88,6 +88,13 @@ export const staffQuery = (page: number) =>
 export const inviteStaff = async (body: StaffInvite) =>
   (await UsersService.inviteStaff({ body })).data
 
+/**
+ * `POST /users/staff/{user_id}/invitation`: email the person a fresh link and retire the one they
+ * have. The server decides whether there is an invitation to resend and whether the caller may.
+ */
+export const resendInvitation = async (userId: string) =>
+  (await UsersService.resendInvitation({ path: { user_id: userId } })).data
+
 export const ACCOUNTS_PAGE_SIZE = 50
 
 export const accountsQuery = (page: number) =>
@@ -301,6 +308,8 @@ export function describeAccessError(error: unknown): string | undefined {
     return "This address can't be invited. It may already have an account, here or at another clinic."
   if (code === "EMAIL_NOT_CONFIGURED")
     return "Invitations can't be sent because outgoing email isn't set up on this server. Nothing was created."
+  if (code === "INVITATION_NOT_PENDING")
+    return "There's no invitation to resend: this person has already set a password, or their account is deactivated."
   if (code === "LAST_ADMINISTRATOR")
     return "This is the organisation's last account that can manage users. Give another account an administrator role before revoking this one."
   return undefined

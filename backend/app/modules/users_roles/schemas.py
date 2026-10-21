@@ -21,7 +21,7 @@ SQLModel annotates `model_config` as its own type, so a plain `ConfigDict` is re
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import EmailStr, ModelWrapValidatorHandler, PrivateAttr, model_validator
 from sqlmodel import Field, SQLModel
@@ -142,11 +142,30 @@ class StaffRoleRead(SQLModel):
     name: str
 
 
+class StaffInvitationRead(SQLModel):
+    """An outstanding invitation: when the current link was sent and when it stops working.
+
+    `expired` is decided by the server's clock, so a screen never has to trust the device's.
+    """
+
+    model_config = SQLModelConfig(extra="forbid")
+
+    sent_at: datetime
+    expires_at: datetime
+    expired: bool
+
+
+#: Where a staff member stands (`03-design.md` `users.status`, as far as it is built): `INVITED`
+#: until the person chooses a password through their link, `INACTIVE` once deactivated.
+StaffStatus = Literal["INVITED", "ACTIVE", "INACTIVE"]
+
+
 class StaffMemberRead(SQLModel):
     """One account of the caller's organisation (`GET`/`POST /api/v1/users/staff`).
 
     No `tenant_id` (the caller's own), no `is_superuser` (a platform attribute an organisation does
-    not administer) and no credential material.
+    not administer) and no credential material. `invitation` is present only while the status is
+    `INVITED`.
     """
 
     model_config = SQLModelConfig(extra="forbid")
@@ -155,6 +174,8 @@ class StaffMemberRead(SQLModel):
     email: str
     full_name: str | None
     is_active: bool
+    status: StaffStatus
+    invitation: StaffInvitationRead | None
     created_at: datetime | None
     roles: list[StaffRoleRead]
 

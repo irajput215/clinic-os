@@ -458,11 +458,30 @@ test("administration and settings fit every width", async ({
   // admin and staff specs spend the shared owner's budget in the same minute (CI shard 3 saw 429s on
   // `/users/staff` and `/permissions`). One signup and one sign-in, inside both limits.
   const owner = await signUp(request, { clinic: true })
-  await openSignedIn(page, await signInWithApi(request, owner), "/admin")
+  const token = await signInWithApi(request, owner)
+  // One outstanding invitation, so the widest row (status with its expiry, and "Resend invite"
+  // beside "Manage access") is on the page at every width.
+  const auth = { Authorization: `Bearer ${token}` }
+  const roles = await request.get("/api/v1/roles", { headers: auth })
+  expect(roles.ok(), await roles.text()).toBeTruthy()
+  const nurse = (
+    (await roles.json()) as { data: { id: string; code: string }[] }
+  ).data.find((role) => role.code === "NURSE")
+  const invited = await request.post("/api/v1/users/staff", {
+    headers: auth,
+    data: {
+      email: `layout-invitee-${Date.now()}@e2e.example.com`,
+      full_name: "Kiri Longname-Invitee",
+      role_ids: [nurse?.id],
+    },
+  })
+  expect(invited.status(), await invited.text()).toBe(201)
+  await openSignedIn(page, token, "/admin")
   await checkEveryWidth(page, testInfo, "admin-staff", [
     h1(page, "Administration"),
     button(page, "Invite staff member"),
     page.getByTestId("staff-table"),
+    button(page, "Resend invite to Kiri Longname-Invitee"),
   ])
 
   await button(page, "Invite staff member").click()

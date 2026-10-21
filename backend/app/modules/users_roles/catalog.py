@@ -245,6 +245,9 @@ USERS_ROLES_PERMISSIONS: Final[dict[str, str]] = {
     "revoke_role": ADMINISTRATION_PERMISSION,
     "list_staff": ADMINISTRATION_PERMISSION,
     "invite_staff": ADMINISTRATION_PERMISSION,
+    # Re-sending an invitation is re-inviting the person: the same permission, and the same R3 check
+    # over the roles they hold (`03-design.md`, "As built: the `INVITED` status").
+    "resend_invitation": ADMINISTRATION_PERMISSION,
 }
 
 # R8's refusal reason. `01-requirements.md` R8 fixes the rule and the status (`409`); it does not name
@@ -326,6 +329,12 @@ INVITATION_INVALID: Final[str] = "INVITATION_INVALID"
 # Inviting needs outgoing mail: the invitee sets their own password through the emailed link, so an
 # invitation that cannot be sent is refused before anything is written.
 EMAIL_NOT_CONFIGURED: Final[str] = "EMAIL_NOT_CONFIGURED"
+# A resend for someone whose status is not `INVITED`: they accepted (or set a password another way),
+# were never invited, or are deactivated. Nothing is sent and no password is touched.
+INVITATION_NOT_PENDING: Final[str] = "INVITATION_NOT_PENDING"
+# The `change` a resend carries on its `user.create` event, which is what tells it apart from the
+# account's creation (`05-data-and-audit.md`, "Resend").
+INVITATION_RESENT: Final[str] = "INVITATION_RESENT"
 
 # The permission each appointments route requires (`docs2/sdlc/04-calendar-and-booking/api.md`, agreed
 # 2026-10-07). **No new code**: a booking is part of a patient's care, so reading the calendar is

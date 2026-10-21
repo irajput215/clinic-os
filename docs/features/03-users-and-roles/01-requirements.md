@@ -114,3 +114,4 @@ not in the 19. They are recorded here as **candidates, not granted**:
 | OPEN-4 | Whether a tenant contract mandates a specific authenticator class for Compliance/Auditor | Head of Legal and Compliance | REQUIRES LEGAL/REGULATORY VALIDATION |
 | OPEN-5 | The access-review cadence and the owner of an unreviewed account | Compliance Lead | OPEN |
 | OPEN-6 | Whether `permission:grant` / `permission:revoke` are distinct codes or the existing `users:manage` boundary | Security Lead | OPEN |
+| OPEN-7 | Whether an outstanding invitation can be revoked before it is accepted, and what that does to the account (deactivate it, or remove a never-used account). No requirement, story or endpoint defines it; R10 only bounds the window. Built today: resend (`03-design.md`, "As built: the `INVITED` status"); an expired invitation is harmless and resendable | Engineering Lead + Security Lead | OPEN |

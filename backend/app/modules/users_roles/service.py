@@ -36,10 +36,11 @@ existed when it ran.
 import uuid
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Final
 
-from sqlalchemy import and_, text
+from sqlalchemy import and_, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.util import AliasedClass
@@ -61,12 +62,20 @@ from app.modules.users_roles.catalog import (
     BOOTSTRAP_ROLE_CODE,
     CLIENT_TENANT_ID_IGNORED,
     EMAIL_UNAVAILABLE,
+    INVITATION_NOT_PENDING,
+    INVITATION_RESENT,
     PERMISSION_CATALOGUE,
     SYSTEM_ROLE_CATALOGUE,
     USER_CREATE,
     USER_PERMISSION_CHANGE,
 )
-from app.modules.users_roles.models import Permission, Role, RolePermission, UserRole
+from app.modules.users_roles.models import (
+    Permission,
+    Role,
+    RolePermission,
+    StaffInvitation,
+    UserRole,
+)
 from app.modules.users_roles.policy import (
     Actor,
     Decision,
@@ -82,10 +91,12 @@ from app.modules.users_roles.schemas import (
     PermissionsPublic,
     RoleRead,
     RolesPublic,
+    StaffInvitationRead,
     StaffInvite,
     StaffMemberRead,
     StaffPublic,
     StaffRoleRead,
+    StaffStatus,
     UserPermissionsRead,
     UserRoleRead,
     UserRolesPublic,
@@ -97,6 +108,8 @@ __all__ = [
     "ResourceRef",
     "InvitationOutcome",
     "InvitationResult",
+    "ResendOutcome",
+    "ResendResult",
     "RevokeOutcome",
     "accept_invitation",
     "actor_for",
@@ -119,6 +132,7 @@ __all__ = [
     "queue_display_names",
     "read_user_roles",
     "record_invitation_denial",
+    "resend_invitation",
     "resolve_permissions",
     "revoke_role",
     "seed_tenant_roles",
@@ -846,12 +860,45 @@ def _staff_order(member: type[User] | AliasedClass[User]) -> tuple[Any, ...]:
     )
 
 
-def _staff_member(user: User, roles: list[StaffRoleRead]) -> StaffMemberRead:
+def _outstanding(user: User, invitation: StaffInvitation | None) -> bool:
+    """Whether this account's invitation is still waiting for the person to choose a password.
+
+    Unaccepted is not enough: the account must still hold the placeholder the current link was sent
+    against. A password set any other way (password recovery) ends the invitation here too, and a
+    deactivated account has no invitation to answer.
+    """
+    return (
+        invitation is not None
+        and user.is_active
+        and invitation.accepted_at is None
+        and invitation.pending_password_digest
+        == invitations.placeholder_digest(user.hashed_password)
+    )
+
+
+def _staff_member(
+    user: User,
+    roles: list[StaffRoleRead],
+    invitation: StaffInvitation | None = None,
+    *,
+    now: datetime | None = None,
+) -> StaffMemberRead:
+    pending: StaffInvitationRead | None = None
+    status: StaffStatus = "ACTIVE" if user.is_active else "INACTIVE"
+    if invitation is not None and _outstanding(user, invitation):
+        status = "INVITED"
+        pending = StaffInvitationRead(
+            sent_at=invitation.sent_at,
+            expires_at=invitation.expires_at,
+            expired=invitation.expires_at <= (now or datetime.now(UTC)),
+        )
     return StaffMemberRead(
         id=user.id,
         email=user.email,
         full_name=user.full_name,
         is_active=user.is_active,
+        status=status,
+        invitation=pending,
         created_at=user.created_at,
         roles=roles,
     )
@@ -867,8 +914,9 @@ def list_staff(*, tenant_id: uuid.UUID, skip: int, limit: int) -> StaffPublic:
     organisation's total, which `skip`/`limit` do not change.
 
     One statement: the page of accounts (with the organisation's total as a window count, taken
-    before `OFFSET`/`LIMIT`) joined to the roles each holds. Only a page past the end, which has no
-    row to carry the total, counts separately.
+    before `OFFSET`/`LIMIT`) joined to its invitation state and the roles each holds. Only a page past
+    the end, which has no row to carry the total, counts separately. Each account's status
+    (`INVITED`, `ACTIVE`, `INACTIVE`) is derived from that one row (`_outstanding`).
     """
     with tenant_transaction(tenant_id=tenant_id) as session:
         scope = col(User.tenant_id) == tenant_id
@@ -882,7 +930,14 @@ def list_staff(*, tenant_id: uuid.UUID, skip: int, limit: int) -> StaffPublic:
         )
         member = aliased(User, page)
         rows = session.exec(
-            select(member, page.c.total, Role)
+            select(member, page.c.total, StaffInvitation, Role)
+            .outerjoin(
+                StaffInvitation,
+                and_(
+                    col(StaffInvitation.user_id) == member.id,
+                    col(StaffInvitation.tenant_id) == tenant_id,
+                ),
+            )
             .outerjoin(
                 UserRole,
                 and_(
@@ -900,11 +955,13 @@ def list_staff(*, tenant_id: uuid.UUID, skip: int, limit: int) -> StaffPublic:
             .order_by(*_staff_order(member))
         ).all()
         users: dict[uuid.UUID, User] = {}
+        invited: dict[uuid.UUID, StaffInvitation | None] = {}
         held: dict[uuid.UUID, list[StaffRoleRead]] = {}
         count = 0
-        for user, total, role in rows:
+        for user, total, invitation, role in rows:
             count = total
             users.setdefault(user.id, user)
+            invited.setdefault(user.id, invitation)
             roles = held.setdefault(user.id, [])
             # An account with no role joins to none (`OUTER JOIN`).
             if role is not None:
@@ -917,8 +974,12 @@ def list_staff(*, tenant_id: uuid.UUID, skip: int, limit: int) -> StaffPublic:
             ).one()
         for roles in held.values():
             roles.sort(key=lambda entry: (entry.name, entry.code))
+        now = datetime.now(UTC)
         return StaffPublic(
-            data=[_staff_member(user, held[user.id]) for user in users.values()],
+            data=[
+                _staff_member(user, held[user.id], invited[user.id], now=now)
+                for user in users.values()
+            ],
             count=count,
         )
 
@@ -1034,8 +1095,34 @@ def _record_invitation_refusal(
     )
 
 
-def record_invitation_denial(*, actor: Actor, reason: str) -> None:
-    """Audit an invitation the policy layer refused before the service ran (`PERMISSION_NOT_HELD`).
+def _record_resend_refusal(
+    session: Session, *, reason: str, target_user_id: uuid.UUID | None
+) -> None:
+    """A refused resend: `user.create` `DENIED`, told apart from an invitation by `change`.
+
+    The target is named only once it is known to be this organisation's account; a refusal decided
+    before the lookup (`PERMISSION_NOT_HELD`) names none, so the trail never records an id the
+    caller merely typed.
+    """
+    payload: dict[str, Any] = {"change": INVITATION_RESENT, "step_up": False}
+    if target_user_id is not None:
+        payload["target_user_id"] = str(target_user_id)
+    audit.record(
+        session,
+        audit.AuditEvent(
+            action=USER_CREATE,
+            result="DENIED",
+            reason=reason,
+            resource_id=target_user_id,
+            payload=payload,
+        ),
+    )
+
+
+def record_invitation_denial(
+    *, actor: Actor, reason: str, resend: bool = False
+) -> None:
+    """Audit an invitation (or a resend) the policy layer refused before the service ran.
 
     Its own transaction, because nothing else is written: the refusal happened before any change.
     A failure here propagates, so a refusal that cannot be audited fails closed.
@@ -1043,7 +1130,10 @@ def record_invitation_denial(*, actor: Actor, reason: str) -> None:
     with tenant_transaction(
         tenant_id=actor.tenant_id, actor_id=actor.user_id, actor_role=actor.actor_role
     ) as session:
-        _record_invitation_refusal(session, reason=reason, role_codes=())
+        if resend:
+            _record_resend_refusal(session, reason=reason, target_user_id=None)
+        else:
+            _record_invitation_refusal(session, reason=reason, role_codes=())
 
 
 def invite_staff(
@@ -1130,6 +1220,18 @@ def invite_staff(
             )
             session.add(user)
             session.flush()
+            sent_at = datetime.now(UTC)
+            invitation = StaffInvitation(
+                user_id=user.id,
+                tenant_id=actor.tenant_id,
+                invited_by=actor.user_id,
+                sent_at=sent_at,
+                expires_at=invitations.expires_at(sent_at),
+                pending_password_digest=invitations.placeholder_digest(
+                    user.hashed_password
+                ),
+            )
+            session.add(invitation)
             for role in roles:
                 session.add(
                     UserRole(
@@ -1179,7 +1281,7 @@ def invite_staff(
                     session, tenant_id=actor.tenant_id
                 ),
                 token=invitations.issue(
-                    user_id=user.id, hashed_password=user.hashed_password
+                    user_id=user.id, hashed_password=user.hashed_password, now=sent_at
                 ),
             )
             return InvitationResult(
@@ -1190,6 +1292,8 @@ def invite_staff(
                         StaffRoleRead(role_id=role.id, code=role.code, name=role.name)
                         for role in sorted(roles, key=lambda r: (r.name, r.code))
                     ],
+                    invitation,
+                    now=sent_at,
                 ),
             )
     except IntegrityError:
@@ -1197,6 +1301,159 @@ def invite_staff(
         # invitations): the unique index refused the second insert and everything rolled back.
         # The answer is the one a sequential duplicate gets.
         return InvitationResult(InvitationOutcome.EMAIL_UNAVAILABLE)
+
+
+class ResendOutcome(StrEnum):
+    """What one resend attempt did, so the router maps it to a status without re-deciding.
+
+    `NOT_FOUND` is the one answer for an absent account and another tenant's (`404`, R6).
+    `GRANT_EXCEEDS_ACTOR` is R3 over the roles the person holds now (`403`). `NOT_PENDING` is the
+    refusal for anyone whose status is not `INVITED` (`409`): accepted, never invited, or
+    deactivated.
+    """
+
+    RESENT = "RESENT"
+    NOT_FOUND = "NOT_FOUND"
+    GRANT_EXCEEDS_ACTOR = "GRANT_EXCEEDS_ACTOR"
+    NOT_PENDING = "NOT_PENDING"
+
+
+@dataclass(frozen=True)
+class ResendResult:
+    outcome: ResendOutcome
+    member: StaffMemberRead | None = None
+    denial: Decision | None = None
+
+
+def resend_invitation(*, actor: Actor, user_id: uuid.UUID) -> ResendResult:
+    """Email a fresh invitation link and retire the previous one (`POST .../invitation`).
+
+    The deny-by-default order, each refusal decided before anything changes:
+
+    1. The account must be this organisation's (`404` otherwise; another tenant's looks absent).
+       It is locked, so a resend and an acceptance of the old link cannot interleave.
+    2. R3, as for the invitation itself: the union of the bundles of the roles the person holds now
+       must be held by the actor (`403 GRANT_EXCEEDS_ACTOR`). Re-sending a link is re-inviting the
+       person into those roles, so whoever could not have invited them cannot re-send it.
+    3. The status must be `INVITED` (`409 INVITATION_NOT_PENDING`): accepted, a password set through
+       recovery, never invited (the organisation's founder) and deactivated are all refused. This is
+       also what stops a resend from replacing a password the person chose.
+
+    Then the account gets a new placeholder password, so the previous link no longer matches it and
+    is refused like a spent one; the row records the new placeholder, the sender and a new window;
+    `user.create` `SUCCESS` with `change = INVITATION_RESENT` is written; and the email goes last,
+    inside the transaction, so a send that raises rolls everything back and the old link still works.
+    A refusal at step 2 or 3 writes its `DENIED` event on this transaction and nothing else.
+    """
+    with tenant_transaction(
+        tenant_id=actor.tenant_id,
+        actor_id=actor.user_id,
+        actor_role=actor.actor_role,
+    ) as session:
+        user = session.exec(
+            select(User)
+            .where(User.id == user_id, User.tenant_id == actor.tenant_id)
+            .with_for_update()
+        ).first()
+        if user is None:
+            return ResendResult(ResendOutcome.NOT_FOUND)
+
+        # The roles the person holds and every permission they confer, in one statement.
+        held_rows = session.exec(
+            select(Role, Permission)
+            .join(
+                UserRole,
+                and_(
+                    col(UserRole.role_id) == col(Role.id),
+                    col(UserRole.tenant_id) == actor.tenant_id,
+                ),
+            )
+            .outerjoin(
+                RolePermission,
+                and_(
+                    col(RolePermission.role_id) == col(Role.id),
+                    col(RolePermission.tenant_id) == actor.tenant_id,
+                ),
+            )
+            .outerjoin(
+                Permission, col(Permission.id) == col(RolePermission.permission_id)
+            )
+            .where(
+                col(UserRole.user_id) == user.id,
+                col(Role.tenant_id) == actor.tenant_id,
+            )
+        ).all()
+        roles = {role.id: role for role, _permission in held_rows}
+        conferred = {
+            permission.code for _role, permission in held_rows if permission is not None
+        }
+        grant = can_grant(actor, permission_codes=conferred)
+        if not grant.allowed:
+            _record_resend_refusal(
+                session, reason=grant.code.value, target_user_id=user.id
+            )
+            return ResendResult(ResendOutcome.GRANT_EXCEEDS_ACTOR, denial=grant)
+
+        invitation = session.exec(
+            select(StaffInvitation).where(
+                StaffInvitation.user_id == user.id,
+                StaffInvitation.tenant_id == actor.tenant_id,
+            )
+        ).first()
+        if invitation is None or not _outstanding(user, invitation):
+            _record_resend_refusal(
+                session, reason=INVITATION_NOT_PENDING, target_user_id=user.id
+            )
+            return ResendResult(ResendOutcome.NOT_PENDING)
+
+        sent_at = datetime.now(UTC)
+        user.hashed_password = invitations.unusable_password_hash()
+        session.add(user)
+        invitation.invited_by = actor.user_id
+        invitation.sent_at = sent_at
+        invitation.expires_at = invitations.expires_at(sent_at)
+        invitation.pending_password_digest = invitations.placeholder_digest(
+            user.hashed_password
+        )
+        session.add(invitation)
+        session.flush()
+
+        audit.record(
+            session,
+            audit.AuditEvent(
+                action=USER_CREATE,
+                result="SUCCESS",
+                resource_id=user.id,
+                payload={
+                    "target_user_id": str(user.id),
+                    "change": INVITATION_RESENT,
+                    "step_up": False,
+                },
+            ),
+        )
+
+        invitations.send_invitation_email(
+            email_to=user.email,
+            full_name=user.full_name or user.email,
+            organisation=identity_tenancy.tenant_display_name(
+                session, tenant_id=actor.tenant_id
+            ),
+            token=invitations.issue(
+                user_id=user.id, hashed_password=user.hashed_password, now=sent_at
+            ),
+        )
+        return ResendResult(
+            ResendOutcome.RESENT,
+            _staff_member(
+                user,
+                [
+                    StaffRoleRead(role_id=role.id, code=role.code, name=role.name)
+                    for role in sorted(roles.values(), key=lambda r: (r.name, r.code))
+                ],
+                invitation,
+                now=sent_at,
+            ),
+        )
 
 
 def accept_invitation(*, token: str, new_password: str) -> InvitationAccepted | None:
@@ -1232,6 +1489,17 @@ def accept_invitation(*, token: str, new_password: str) -> InvitationAccepted | 
             return None
         user.hashed_password = get_password_hash(new_password)
         session.add(user)
+        # The invitation is answered. An account invited before `staff_invitations` existed has no
+        # row, and the update then touches nothing.
+        session.exec(
+            update(StaffInvitation)
+            .where(
+                col(StaffInvitation.user_id) == user.id,
+                col(StaffInvitation.tenant_id) == tenant_id,
+                col(StaffInvitation.accepted_at).is_(None),
+            )
+            .values(accepted_at=datetime.now(UTC))
+        )
         return InvitationAccepted(email=user.email)
 
 

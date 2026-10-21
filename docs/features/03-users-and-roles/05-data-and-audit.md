@@ -30,6 +30,8 @@ only.
 | `permissions.code`, `permissions.description` | CONFIDENTIAL | yes | no | `04 §3.3` classifies each permission code CONFIDENTIAL |
 | `role_permissions.*` | CONFIDENTIAL | aggregate only | aggregate only | grant metadata, no personal information |
 | `user_roles.granted_by`, `granted_at` | SENSITIVE | pseud | never | actor and timeline evidence |
+| `staff_invitations.sent_at`, `expires_at`, `accepted_at`, `invited_by` | SENSITIVE | pseud | never | onboarding timeline; the interim home of `users.status = INVITED` (`03-design.md`) |
+| `staff_invitations.pending_password_digest` | INTERNAL | never | never | SHA-256 of the hash of a random secret nobody holds; never a digest of a password a person chose |
 | `user_roles.last_reviewed_at` | SENSITIVE | yes | never | access-review evidence (`22` US-30) |
 | Audit `reason` (free text) | SENSITIVE | never | never | may contain clinical detail; captured but never logged (`12 §3`) |
 
@@ -66,6 +68,16 @@ envelope's `actor_id`, and the invitation expiry is the event's timestamp plus
 `user.permission_change` `GRANT`. Refusals write `user.create` `DENIED` with `PERMISSION_NOT_HELD`,
 `GRANT_EXCEEDS_ACTOR`, `EMAIL_UNAVAILABLE` or `CLIENT_TENANT_ID_IGNORED` (the last alongside the
 successful create). Accepting the invitation writes nothing: the catalogue has no credential event.
+
+**Resend (2026-10-08).** Re-sending an invitation emits `user.create` again, because it re-issues the
+invitation whose expiry `USER_CREATED` records, and the closed catalogue has no `USER_INVITED`
+(OPEN-3). It is told apart from a creation by the payload key `change = INVITATION_RESENT` (`change` is
+already in the payload vocabulary; it is added to `user.create`'s allow-list and nothing else is):
+`SUCCESS` carries `target_user_id`, `change` and `step_up`, in the transaction that retires the old link.
+A refusal writes `user.create` `DENIED` with `change = INVITATION_RESENT` and the reason
+`PERMISSION_NOT_HELD`, `GRANT_EXCEEDS_ACTOR` (with `target_user_id`) or `INVITATION_NOT_PENDING` (with
+`target_user_id`). An absent or another organisation's account (`404`) writes nothing, as for the role
+routes. Should OPEN-3 decide that `USER_INVITED` is distinct, these events move to it.
 
 A refused create, grant or assignment writes a denial event with `result = DENIED` and a reason code
 (`PERMISSION_NOT_HELD`, `GRANT_EXCEEDS_ACTOR`, `CROSS_TENANT`, `STEP_UP_REQUIRED`). The audit store is
