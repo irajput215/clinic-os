@@ -320,7 +320,7 @@ reference; the file name is the repo-side artefact.
   - Evidence: test output including the negative (no second chart) case
   - Blocked by: none for the union rule; the refusal threshold is **OPEN** (Head of Product)
 
-- [x] **T1-34 — Treating-relationship rule and the care-relationship source**
+- [x] **T1-34 - Treating-relationship rule and the care-relationship source**
   - Acceptance: a clinician with no active care relationship receives `403` with the care-relationship reason class and an audited denial; an accepted read records the relationship id and the purpose; the rule runs under the same RLS policy as the request and never widens to the tenant.
   - Verify: `uv run pytest tests/api/test_patients_relationship.py -v`
   - Files: `backend/app/core/policy.py`; `backend/app/modules/patients/service.py`; `backend/tests/api/test_patients_relationship.py`

@@ -1,4 +1,4 @@
-"""T1-34 — the treating-relationship rule on the patient routes, and the care team that feeds it.
+"""T1-34 - the treating-relationship rule on the patient routes, and the care team that feeds it.
 
 Acceptance (`docs/tasks/01-phase-1-foundations.md` T1-34): *a clinician with no active care
 relationship receives `403` with the care-relationship reason class and an audited denial; an accepted

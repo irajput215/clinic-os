@@ -142,7 +142,7 @@ def test_the_five_declared_paths_are_served() -> None:
     # * `GET /api/v1/patients/{patient_id}/appointments` — feature 04 calendar and booking
     #   (`docs2/sdlc/04-calendar-and-booking/api.md`, agreed 2026-10-07);
     # * `GET`/`POST /api/v1/patients/{patient_id}/care-relationships` and
-    #   `POST .../care-relationships/{care_relationship_id}/end` — the care team, task T1-34
+    #   `POST .../care-relationships/{care_relationship_id}/end` - the care team, task T1-34
     #   (`docs2/sdlc/02-patients/api.md`, "Care team"; decision D-007).
     #
     # The census stays exact, which is the property this test exists to protect: a route under

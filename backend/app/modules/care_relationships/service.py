@@ -1,4 +1,4 @@
-"""Care relationships service facade — the treating-relationship rule's data source, and its upkeep.
+"""Care relationships service facade - the treating-relationship rule's data source, and its upkeep.
 
 Design: the rule is `hasActiveCareRelationship(actor, patient_id)` in the central policy layer
 (`docs/features/06-clinical-records/03-design.md`, "Treating-relationship check";
@@ -24,7 +24,7 @@ found. The answer carries what the audit envelope records: `care_relationship_id
 
 ## The interval
 
-`active_from <= now() AND (active_to IS NULL OR active_to > now())` — half-open `[active_from,
+`active_from <= now() AND (active_to IS NULL OR active_to > now())` - half-open `[active_from,
 active_to)`, the boundary D-006 fixes as the interim fail-safe. `now()` is the transaction's own clock,
 so the rule and the read it guards agree on "now". An ended relationship (`active_to <= now`) and a
 future-dated one (`active_from > now`) are both **inactive**. If more than one interval is active for

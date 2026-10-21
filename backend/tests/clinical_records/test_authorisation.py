@@ -1,4 +1,4 @@
-"""S6, R2, R11 — deny by default: authentication, permission, and the treating-relationship rule.
+"""S6, R2, R11 - deny by default: authentication, permission, and the treating-relationship rule.
 
 Design: `docs/features/06-clinical-records/03-design.md` §"Deny-by-default request path". The order is
 literal: authenticate → resolve the tenant from the session → check the permission → resolve the

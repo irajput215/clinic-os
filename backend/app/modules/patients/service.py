@@ -697,7 +697,7 @@ def update_patient(
     never overwritten with a default and a `PATCH` cannot clear a NOT NULL column.
 
     **The audit event is written on this transaction (INV-4)**, and it carries the *names* of the
-    fields the client sent — never their values. A patient that is not the caller's own (absent, or
+    fields the client sent - never their values. A patient that is not the caller's own (absent, or
     another tenant's) is `404` and audited `DENIED`; one of the caller's own that a relationship-bound
     grant cannot reach is `403 AUTHZ_CARE_RELATIONSHIP_DENIED`, audited the same way, and no row is
     touched in either case (T1-34).

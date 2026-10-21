@@ -1,8 +1,8 @@
 """Schemas for the care-relationship resolver and its interim upkeep routes.
 
-The design names no care-relationship endpoint — the table is read by the policy layer
+The design names no care-relationship endpoint - the table is read by the policy layer
 (`docs/features/05-patients/03-design.md` "Treating-relationship rule";
-`06-clinical-records/03-design.md` "Treating-relationship check") — and the source of truth is **OPEN**
+`06-clinical-records/03-design.md` "Treating-relationship check") - and the source of truth is **OPEN**
 (open-questions.md C13). Decision D-007 records the interim upkeep routes these shapes serve
 (`docs2/sdlc/02-patients/api.md`, "Care team").
 
