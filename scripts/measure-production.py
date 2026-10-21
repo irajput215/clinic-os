@@ -16,7 +16,7 @@ Standard library only: it runs on a bare CI runner. Every request is a read; not
 except the probe account's own sign-in, and its one-time registration.
 
 **The probe account is verified once, by a person.** Signup is verified by email
-(`docs/reference/decisions/D-007-signup-email-verification.md`) and this script cannot read the
+(`docs/reference/decisions/D-008-signup-email-verification.md`) and this script cannot read the
 probe's mailbox. The first run that finds no account registers the probe clinic, which emails a link
 to ``PROBE_EMAIL``; the owner of that mailbox opens it once ("Confirm and sign in"). Until then
 the report says the probe is waiting for verification and skips the authenticated reads; every run
@@ -153,7 +153,7 @@ def sign_in(base_url: str) -> tuple[str | None, str]:
 
     The probe clinic is the only tenant this script ever touches. It is created through the public
     signup, exactly as a clinic would be, and holds no patients. Signup creates nothing until its
-    emailed link is used (D-007), so a run that has to register answers no token and says why; a
+    emailed link is used (D-008), so a run that has to register answers no token and says why; a
     run after the owner verified the probe signs in. The second element is the report's note when
     there is no token.
     """

@@ -53,7 +53,7 @@ setup("sign up a clinic and add patients", async ({ request, baseURL }) => {
     },
   })
   expect(signup.status(), await signup.text()).toBe(202)
-  // Nothing exists until the emailed link is used (D-007); using it signs the owner in, so the
+  // Nothing exists until the emailed link is used (D-008); using it signs the owner in, so the
   // setup spends no sign-in of its own on the owner.
   const access_token = await verifySignupByEmail(request, clinic.email)
   const auth = { authorization: `Bearer ${access_token}` }

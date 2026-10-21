@@ -612,7 +612,7 @@ export type NewPassword = {
 /**
  * OrganisationSignup
  *
- * The body of `POST /api/v1/users/signup` (D-007). Strict: any other key is `422`.
+ * The body of `POST /api/v1/users/signup` (D-008). Strict: any other key is `422`.
  *
  * The field rules are the ones `UserRegister` had (password 8 to 128 characters, the rest at most
  * 255). `clinic_name` registers an organisation; without it the account belongs to none, which is

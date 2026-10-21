@@ -5,7 +5,7 @@ Revises: 94d4331e9eb0
 Create Date: 2026-10-08 14:15:21.135155
 
 Organisation signup verified by email
-(`docs/reference/decisions/D-007-signup-email-verification.md`): a signup writes one row here and
+(`docs/reference/decisions/D-008-signup-email-verification.md`): a signup writes one row here and
 nothing else; the emailed link turns it into the organisation, the account and the owner's grant, and
 deletes every row for the address. Expired rows are deleted by the next signup.
 

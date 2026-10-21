@@ -164,7 +164,7 @@ def delete_user_me(session: SessionDep, current_user: ActiveTenantUser) -> Any:
 
 
 # Organisation signup (`POST /users/signup`) moved to `app.modules.users_roles.router` with email
-# verification (`docs/reference/decisions/D-007-signup-email-verification.md`): `users_roles` owns the
+# verification (`docs/reference/decisions/D-008-signup-email-verification.md`): `users_roles` owns the
 # user lifecycle and every `/users/*` route (`docs/reference/build-contract.md` §7).
 
 

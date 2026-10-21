@@ -345,7 +345,7 @@ def test_register_user(
     password = random_lower_string()
     full_name = random_lower_string()
     data = {"email": username, "password": password, "full_name": full_name}
-    # D-007: the account exists once the emailed link is used, with the password chosen at signup.
+    # D-008: the account exists once the emailed link is used, with the password chosen at signup.
     signed_up = sign_up(client, data)
     me = client.get(f"{settings.API_V1_STR}/users/me", headers=signed_up.headers)
     assert me.status_code == 200
@@ -365,7 +365,7 @@ def test_register_user(
 def test_register_user_with_a_taken_address_is_not_an_error(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """D-007: a taken address gets the signup's one answer, and its owner a notice, never a link.
+    """D-008: a taken address gets the signup's one answer, and its owner a notice, never a link.
 
     The full equivalence (status, body, statements) is `tests/users/test_signup.py`.
     """

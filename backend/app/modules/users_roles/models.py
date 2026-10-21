@@ -196,9 +196,9 @@ class StaffInvitation(SQLModel, table=True):
 
 
 class SignupRequest(SQLModel, table=True):
-    """One organisation signup waiting for its emailed link to be used (D-007).
+    """One organisation signup waiting for its emailed link to be used (D-008).
 
-    `docs/reference/decisions/D-007-signup-email-verification.md`. Nothing else exists until the link
+    `docs/reference/decisions/D-008-signup-email-verification.md`. Nothing else exists until the link
     is used: no tenant, no account, no grant. Verification copies the request into the account and
     deletes every request for the address; an expired request is deleted by the next signup.
 

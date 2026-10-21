@@ -178,7 +178,7 @@ admin_rate_limit = rate_limit(scope="admin", limit=20, window_seconds=60)
 # shell asks for it on every page load, and in the administrative class it spent the budget an
 # administrator needs for the administration screen itself.
 read_rate_limit = rate_limit(scope="read", limit=300, window_seconds=60)
-# Organisation signup (D-007). Unauthenticated, and every request sends an email, so it is limited
+# Organisation signup (D-008). Unauthenticated, and every request sends an email, so it is limited
 # like login (20/min per client address). Resending a request's email and spending its link each have
 # a window of their own at the same rate: the link is a signed token, so the verify limit bounds load,
 # not guessing.

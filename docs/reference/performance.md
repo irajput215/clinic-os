@@ -52,7 +52,7 @@ production.
 `scripts/measure-production.py` after every deploy and on demand. It reads production only. With the
 optional `PROBE_EMAIL` / `PROBE_PASSWORD` repository secrets it also signs in as one probe clinic
 ("Performance probe (synthetic, no patients)", registered through the public signup on first use;
-since D-007 the owner of `PROBE_EMAIL` opens the emailed link once, and until then the report says
+since D-008 the owner of `PROBE_EMAIL` opens the emailed link once, and until then the report says
 so and skips the authenticated reads) and
 measures the authenticated reads; it never touches another tenant.
 
@@ -222,7 +222,7 @@ hot endpoint in `tests/performance/test_round_trips.py`.
 3. **Probe account for authenticated production timing** (optional). Add repository secrets
    `PROBE_EMAIL` and `PROBE_PASSWORD` (a new address you can read and a strong password); Measure
    Production then registers one clinic named "Performance probe (synthetic, no patients)" on first
-   use. Signup is verified by email (D-007) and the script cannot read that mailbox, so open the
+   use. Signup is verified by email (D-008) and the script cannot read that mailbox, so open the
    emailed link once ("Confirm and sign in"); from the next run on it times the authenticated reads
    after every deploy.
 4. **Query statistics** (optional): enable `pg_stat_statements` on `neondb` from the Neon console SQL

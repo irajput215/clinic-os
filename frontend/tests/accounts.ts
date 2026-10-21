@@ -15,7 +15,7 @@ const run = () => randomBytes(4).toString("hex")
 /**
  * Spend the verification link a signup emailed to `email` (read from Mailpit), which creates the
  * account (and its organisation) and answers a session for it
- * (`docs/reference/decisions/D-007-signup-email-verification.md`). Uses the newest email, so call
+ * (`docs/reference/decisions/D-008-signup-email-verification.md`). Uses the newest email, so call
  * it after the last resend.
  */
 export async function verifySignupByEmail(

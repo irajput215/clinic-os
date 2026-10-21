@@ -84,7 +84,7 @@ page says **Check your email**: nothing exists yet. Open Mailpit (<http://localh
 organisation, makes you its administrator and signs you in. The link works once and for 24 hours
 (`SIGNUP_VERIFICATION_EXPIRE_HOURS`); **Send the email again** on the signup page sends a fresh one.
 An address that already has an account gets the same page, and its mailbox a "You already have an
-account" notice instead of a link ([D-007](docs/reference/decisions/D-007-signup-email-verification.md)).
+account" notice instead of a link ([D-008](docs/reference/decisions/D-008-signup-email-verification.md)).
 Without outgoing mail (no Mailpit, no `SMTP_HOST`) signup is refused (`503 EMAIL_NOT_CONFIGURED`)
 and nothing is created. The public booking page is
 `/book/<clinic-slug>`. `FIRST_SUPERUSER` is the platform superuser (account administration), not a

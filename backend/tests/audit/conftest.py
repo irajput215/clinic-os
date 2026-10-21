@@ -67,7 +67,7 @@ def audit_count(tenant_id: uuid.UUID) -> int:
 
 
 #: Every organisation's trail opens with its own creation: verifying the signup writes `user.create`
-#: for the founder (`docs/reference/decisions/D-007-signup-email-verification.md`). It is the chain's
+#: for the founder (`docs/reference/decisions/D-008-signup-email-verification.md`). It is the chain's
 #: genesis event, so a case's own events start at chain sequence `FOUNDING_EVENTS + 1`.
 FOUNDING_EVENTS = 1
 

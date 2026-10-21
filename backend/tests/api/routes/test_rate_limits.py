@@ -65,7 +65,7 @@ def test_reset_password_is_rate_limited(client: TestClient) -> None:
 
 def test_signup_is_rate_limited(client: TestClient) -> None:
     """Signup is unauthenticated and every attempt sends an email, so it is limited like login:
-    the twenty-first attempt in a minute is refused before it runs (D-007)."""
+    the twenty-first attempt in a minute is refused before it runs (D-008)."""
     payload = {
         "email": settings.FIRST_SUPERUSER,
         "password": "correct-horse-battery-staple",

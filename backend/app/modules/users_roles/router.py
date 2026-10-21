@@ -186,7 +186,7 @@ so the literal `me` segment is never captured by `/users/{user_id}/permissions` 
 - Permission: none; Tenant scope: none - no organisation exists until the link is used
 - Input schema: `OrganisationSignup` - `{email, password, full_name?, clinic_name?}`; any other key `422`
 - Output schema: `SignupAccepted` - `{request_id, expires_in_hours}`, `202`, **the same for every
-  address**: a new one is emailed a verification link, one that has an account a notice (D-007)
+  address**: a new one is emailed a verification link, one that has an account a notice (D-008)
 - Audit: none - no tenant exists, and the audit log is tenant-scoped; the request row is the record
 - Rate limit: 20/min per client address (`signup`)
 - Errors: `403` (registration closed), `422`, `429`, `503` (`EMAIL_NOT_CONFIGURED`: nothing is
@@ -312,7 +312,7 @@ invitations_router = APIRouter(
     dependencies=[Depends(invitation_accept_rate_limit)],
 )
 
-# Organisation signup (D-007). Unauthenticated; each route carries its own per-address limit, so
+# Organisation signup (D-008). Unauthenticated; each route carries its own per-address limit, so
 # the router has none of its own. Mounted before the legacy `/users/{user_id}` routes.
 signup_router = APIRouter(prefix="/users/signup", tags=["users"])
 
@@ -614,7 +614,7 @@ def _require_open_registration_and_mail() -> None:
     },
 )
 def register_user(*, body: OrganisationSignup) -> SignupAccepted:
-    """Register an organisation: email a link that creates it (D-007).
+    """Register an organisation: email a link that creates it (D-008).
 
     The answer is the same for every address. A new address is emailed a single-use link that
     creates the organisation and signs its owner in; an address that already has an account is

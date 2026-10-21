@@ -1,6 +1,6 @@
 """Organisation signup verified by email: `POST /users/signup`, `/signup/resend`, `/signup/verify`.
 
-Decision: `docs/reference/decisions/D-007-signup-email-verification.md`; contract:
+Decision: `docs/reference/decisions/D-008-signup-email-verification.md`; contract:
 `docs2/sdlc/01-auth-and-shell/api.md`. Nothing exists until the emailed link is used; every address
 gets the same answer and the same work; a taken address's owner gets a notice, never a link.
 
@@ -180,7 +180,7 @@ def test_a_taken_address_gets_the_same_answer_and_a_notice(
     assert set(fresh.json()) == set(taken.json()) == {"request_id", "expires_in_hours"}
     assert fresh.json()["expires_in_hours"] == taken.json()["expires_in_hours"]
     assert set(fresh.headers) == set(taken.headers)
-    # The same database work on both paths (the Argon2 hash is on both too; see D-007), and no
+    # The same database work on both paths (the Argon2 hash is on both too; see D-008), and no
     # `Server-Timing` on an unauthenticated route to measure it with.
     assert fresh_statements == taken_statements
     assert "server-timing" not in {key.lower() for key in taken.headers}

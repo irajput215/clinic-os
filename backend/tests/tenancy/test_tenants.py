@@ -275,7 +275,7 @@ def test_a_failure_after_the_account_is_created_leaves_nothing_behind(
     role bundles and the grant. Before this change the tenant was committed before the account and the
     grant ran in a third transaction, so this failure left an organisation with no administrator.
 
-    Since D-007 that unit runs when the emailed link is used, so the failure is injected there, and
+    Since D-008 that unit runs when the emailed link is used, so the failure is injected there, and
     the link survives it: the request is untouched and the same link still works afterwards.
     """
     monkeypatch.setattr(settings, "USERS_OPEN_REGISTRATION", True)

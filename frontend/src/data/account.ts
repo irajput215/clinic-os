@@ -16,7 +16,7 @@ export interface OrganisationSignup {
 }
 
 /**
- * `POST /users/signup` with a `clinic_name` (D-007): the server emails a link and creates nothing
+ * `POST /users/signup` with a `clinic_name` (D-008): the server emails a link and creates nothing
  * yet. It answers every address the same way (a taken one is emailed a notice instead), so the
  * answer says only which attempt this was, for "Send the email again".
  */

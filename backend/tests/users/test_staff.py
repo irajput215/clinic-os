@@ -89,7 +89,7 @@ def _audit(
 ) -> list[dict[str, Any]]:
     """The tenant's events for one action, oldest first, read as the owner (bypasses RLS).
 
-    Leaves out the organisation's own creation (D-007: verifying the signup writes `user.create`
+    Leaves out the organisation's own creation (D-008: verifying the signup writes `user.create`
     with the founder as actor and target), so what remains is this test's own work.
     """
     with engine.connect() as conn:

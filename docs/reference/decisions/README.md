@@ -25,8 +25,8 @@ that is a defect.
 | [D-003](D-003-identity-model.md) | Identity is self-hosted password auth, not a managed OIDC provider | **OPEN — requires a decision** | **Yes — Gate 3** |
 | [D-004](D-004-deployment-target.md) | Deployment target is unresolved between compose and the source's AWS shape | **OPEN — requires a decision** | **Yes — Gate 6** |
 | [D-005](D-005-route-path-convention.md) | Routes carry the `/api/v1` prefix; provider webhooks are the one exception | **Accepted** | No |
-| [D-007](D-007-signup-email-verification.md) | Organisation signup is verified by email; one answer for every address; the organisation is created on verification | **Accepted** | No |
 | [D-006](D-006-approval-grain-and-validity-boundary.md) | Approval grain enforced by a partial GiST exclusion constraint; `valid_to` boundary is half-open **as an interim fail-safe** | **Accepted** for the mechanism · 🔴 **OPEN** for the boundary | **Gate 2** (mechanism) · **Gate 4 re-run** (boundary) |
+| [D-008](D-008-signup-email-verification.md) | Organisation signup is verified by email; one answer for every address; the organisation is created on verification | **Accepted** | No |
 
 Two records resolve contradictions **inside** the source contract rather than divergences from it. They
 are recorded here because a contradiction the source cannot settle is the implementer's decision whether

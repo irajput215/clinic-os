@@ -1,6 +1,6 @@
-"""Organisation signup, verified by email, with one answer for every address (D-007).
+"""Organisation signup, verified by email, with one answer for every address (D-008).
 
-Decision: `docs/reference/decisions/D-007-signup-email-verification.md`. Contract:
+Decision: `docs/reference/decisions/D-008-signup-email-verification.md`. Contract:
 `docs2/sdlc/01-auth-and-shell/api.md` (`POST /users/signup`, `/signup/resend`, `/signup/verify`).
 
 1. **Request** (`request_signup`). Every address gets the same answer and the same work, in one

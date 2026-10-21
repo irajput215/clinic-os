@@ -76,7 +76,7 @@ const FIELDS: readonly FieldName[] = [
  * Practice Owner (`docs/reference/business-flow.md` step 1). Staff are invited afterwards.
  *
  * Nothing is created until the person opens the link the server emails
- * (`docs/reference/decisions/D-007-signup-email-verification.md`). The server answers every address
+ * (`docs/reference/decisions/D-008-signup-email-verification.md`). The server answers every address
  * the same way, so this page never says whether the address already has an account: "Check your
  * email" covers both the link and the notice an existing account's owner receives instead.
  */

@@ -1,4 +1,4 @@
-"""Test-only helper: register through the real signup flow, emailed link included (D-007).
+"""Test-only helper: register through the real signup flow, emailed link included (D-008).
 
 A signup creates nothing until its emailed link is used, so a test that needs an organisation posts
 `POST /users/signup`, reads the link out of the email the app tried to send (captured, never sent),

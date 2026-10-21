@@ -166,7 +166,7 @@ export class UsersService {
     /**
      * Register User
      *
-     * Register an organisation: email a link that creates it (D-007).
+     * Register an organisation: email a link that creates it (D-008).
      *
      * The answer is the same for every address. A new address is emailed a single-use link that
      * creates the organisation and signs its owner in; an address that already has an account is

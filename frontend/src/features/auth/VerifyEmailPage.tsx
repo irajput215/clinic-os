@@ -16,7 +16,7 @@ import {
 
 /**
  * Where a signup's emailed link lands: `{FRONTEND_HOST}/verify-email?token=...`
- * (`docs/reference/decisions/D-007-signup-email-verification.md`). One button spends the link,
+ * (`docs/reference/decisions/D-008-signup-email-verification.md`). One button spends the link,
  * which creates the organisation and its owner and signs the person in. It is a button, not an
  * automatic request on load, so a mail scanner that opens links cannot spend it. The token is sent
  * only in the request body; it is never logged or shown.

@@ -1,4 +1,4 @@
-# D-007: Organisation signup is verified by email and does not disclose which addresses have accounts
+# D-008: Organisation signup is verified by email and does not disclose which addresses have accounts
 
 - **Status:** Accepted (engineering decision, 2026-10-08; for owner review with Milestone 4)
 - **Date:** 2026-10-08
