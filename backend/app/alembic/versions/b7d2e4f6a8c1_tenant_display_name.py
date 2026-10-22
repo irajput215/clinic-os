@@ -1,7 +1,7 @@
 """tenants.display_name: the clinic's public name
 
 Revision ID: b7d2e4f6a8c1
-Revises: 6045114a607a
+Revises: b8d4e2f61a90
 Create Date: 2026-10-08 09:00:00.000000
 
 Contract: `docs2/sdlc/01-auth-and-shell/api.md`, "Clinic display name". The sidebar and the public
@@ -32,7 +32,7 @@ import sqlmodel.sql.sqltypes
 
 # revision identifiers, used by Alembic.
 revision = 'b7d2e4f6a8c1'
-down_revision = '6045114a607a'
+down_revision = 'b8d4e2f61a90'
 branch_labels = None
 depends_on = None
 
