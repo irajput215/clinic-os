@@ -1,6 +1,12 @@
 import { queryOptions } from "@tanstack/react-query"
 import { AuthService, PrescriptionsService } from "@/client"
-import type { PrescriptionCreate, PrescriptionRead } from "@/client/types.gen"
+import type {
+  PrescriptionAddendum,
+  PrescriptionCreate,
+  PrescriptionHistory,
+  PrescriptionRead,
+  PrescriptionUpdate,
+} from "@/client/types.gen"
 import type { TgaMatchResponse } from "@/data/types"
 
 /**
@@ -9,6 +15,9 @@ import type { TgaMatchResponse } from "@/data/types"
  *   GET  /prescriptions?state=&prescriber_id=&patient_id=&cursor=   POST /prescriptions
  *   POST /prescriptions/{id}/sign       POST /prescriptions/{id}/dispatch (Idempotency-Key)
  *   GET  /prescriptions/prescribers     POST /auth/step-up (the interim password step-up)
+ *   GET  /prescriptions/{id}            GET  /prescriptions/{id}/history
+ *   PATCH /prescriptions/{id} (a draft) POST /prescriptions/{id}/cancel {reason_code}
+ *   POST /prescriptions/{id}/addendum (Idempotency-Key; decision D-010)
  *
  * The safety gate's answer on every actionable script comes from the server, evaluated now. The
  * server also decides at sign and at dispatch, inside the transaction, so nothing here is a control:
@@ -57,6 +66,23 @@ export const PRESCRIPTION_STATE_LABEL: Record<PrescriptionState, string> = {
   REQUIRES_RECONCILIATION: "Needs reconciliation",
   CANCELLED: "Cancelled",
   REVERSED: "Reversed",
+}
+
+/**
+ * Why a script is cancelled: the server's closed list (decision D-010, interim; the vocabulary is the
+ * Clinical Safety Officer's). `SUPERSEDED_BY_ADDENDUM` is the server's own and is only ever shown.
+ */
+export const CANCEL_REASONS = {
+  ENTERED_IN_ERROR: "Entered in error",
+  CLINICALLY_NOT_REQUIRED: "No longer clinically required",
+  PATIENT_DECLINED: "Patient declined",
+  DUPLICATE: "Duplicate script",
+} as const
+export type CancelReason = keyof typeof CANCEL_REASONS
+export const REASON_LABEL: Record<string, string> = {
+  ...CANCEL_REASONS,
+  SUPERSEDED_BY_ADDENDUM: "Replaced by an addendum",
+  ADDENDUM: "Addendum drafted",
 }
 
 /** The API sends a decimal string ("1.00"); show it as a clinician writes it ("1", "2.5"). */
@@ -126,7 +152,46 @@ export const scriptsRepo = {
         },
       })
     ).data as Prescription,
+  /** Correct a draft. The server refuses anything but a `DRAFT` (`409`). */
+  update: async (id: string, body: PrescriptionUpdate) =>
+    (
+      await PrescriptionsService.updatePrescription({
+        path: { prescription_id: id },
+        body,
+      })
+    ).data as Prescription,
+  cancel: async (id: string, reason_code: CancelReason) =>
+    (
+      await PrescriptionsService.cancelPrescription({
+        path: { prescription_id: id },
+        body: { reason_code },
+      })
+    ).data as Prescription,
+  /**
+   * Correct a signed script by a new draft version. `intentKey` is one per opening of the form, so a
+   * retried request answers with the same addendum instead of a second one.
+   */
+  amend: async (id: string, body: PrescriptionAddendum, intentKey: string) =>
+    (
+      await PrescriptionsService.amendPrescription({
+        path: { prescription_id: id },
+        headers: { "Idempotency-Key": intentKey },
+        body,
+      })
+    ).data as Prescription,
 }
+
+export const scriptHistoryQuery = (id: string) =>
+  queryOptions({
+    queryKey: ["scripts", "history", id],
+    queryFn: async (): Promise<PrescriptionHistory> =>
+      (
+        await PrescriptionsService.readPrescriptionHistory({
+          path: { prescription_id: id },
+        })
+      ).data,
+    staleTime: 15_000,
+  })
 
 export const scriptsQuery = queryOptions({
   queryKey: ["scripts"],

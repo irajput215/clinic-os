@@ -187,6 +187,8 @@ PAYLOAD_KEYS: Final[frozenset[str]] = frozenset(
         "role_code",
         "source",
         "step_up",
+        # FEAT-11 US-5: an addendum's `prescription.modify` names the version it supersedes.
+        "supersedes_id",
         "supersedes_version",
         "target_user_id",
         "to_state",
@@ -280,6 +282,13 @@ PAYLOAD_ALLOW_LIST: Final[MappingProxyType[str, frozenset[str]]] = MappingProxyT
         # `11-prescribing/05-data-and-audit.md` and `10-prescription-safety-gate/05-data-and-audit.md`:
         # identifiers, codes and classes only - never medicine, dose, quantity or directions.
         "prescription.create": frozenset({"patient_id"}),
+        # `11-prescribing/05-data-and-audit.md`: a draft edit names the changed fields (never a
+        # value); the addendum's new version also names the original it supersedes (US-5).
+        "prescription.modify": frozenset(
+            {"patient_id", "changed_fields", "supersedes_id"}
+        ),
+        # A cancellation: the reason code is the envelope's `reason`; the payload says from where.
+        "prescription.reject": frozenset({"patient_id", "from_state"}),
         "prescription.sign": frozenset(
             {"patient_id", "step_up", "approval_id", "block_reason"}
         ),

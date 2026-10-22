@@ -37,12 +37,15 @@ import { currentUserQuery } from "@/lib/session"
 import { uuid } from "@/lib/uuid"
 import { z } from "@/lib/zod"
 import type { ScriptAction } from "./ScriptCard"
+import {
+  CancelForm,
+  CorrectionForm,
+  invalidateScripts,
+  ScriptHistory,
+} from "./ScriptManage"
+import { useScriptActions } from "./useScriptAction"
 
-const invalidateScripts = (queryClient: ReturnType<typeof useQueryClient>) =>
-  Promise.all([
-    queryClient.invalidateQueries({ queryKey: ["scripts"] }),
-    queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
-  ])
+type Mode = "review" | "edit" | "amend" | "cancel" | "history"
 
 const schema = z.object({
   patient_id: z.string().min(1, "Choose the patient."),
@@ -407,11 +410,15 @@ export function ReviewSignDialog({
   // One intent per opening of the dialog: a retry of the same click reuses it (server idempotency).
   const [intent, setIntent] = useState(() => uuid())
   const [forScript, setForScript] = useState(script?.id)
+  // Review, or one of the corrections (decision D-010), in the same dialog: never a dialog on a dialog.
+  const [mode, setMode] = useState<Mode>("review")
   if (script?.id !== forScript) {
     setForScript(script?.id)
     setPassword("")
     setIntent(uuid())
+    setMode("review")
   }
+  const { canEdit, canCancel, canAmend } = useScriptActions()
 
   const submit = useMutation({
     mutationFn: async () => {
@@ -437,10 +444,37 @@ export function ReviewSignDialog({
   const signing = s?.state === "DRAFT"
   const errorCode = refusalCode(submit.error)
 
+  const back = () => setMode("review")
+  const done = () => onOpenChange(false)
+
   return (
     <Dialog open={s !== null} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px]">
-        {s ? (
+        {s && (mode === "edit" || mode === "amend") ? (
+          <CorrectionForm
+            script={s}
+            amend={mode === "amend"}
+            onDone={done}
+            onBack={back}
+          />
+        ) : s && mode === "cancel" ? (
+          <CancelForm script={s} onDone={done} onBack={back} />
+        ) : s && mode === "history" ? (
+          <div className="grid gap-4">
+            <DialogHeader>
+              <DialogTitle>Script history</DialogTitle>
+              <DialogDescription>
+                {s.medicine_name} · {s.patient_name ?? "Patient"}
+              </DialogDescription>
+            </DialogHeader>
+            <ScriptHistory script={s} />
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={back}>
+                Back
+              </Button>
+            </DialogFooter>
+          </div>
+        ) : s ? (
           <form
             className="grid gap-4"
             onSubmit={(e) => {
@@ -564,6 +598,51 @@ export function ReviewSignDialog({
                 ) : null}
               </p>
             ) : null}
+
+            <div className="flex flex-wrap gap-2 border-t border-line-faint pt-3">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="max-lg:min-h-11"
+                onClick={() => setMode("history")}
+              >
+                History
+              </Button>
+              {canEdit(s) ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="max-lg:min-h-11"
+                  onClick={() => setMode("edit")}
+                >
+                  Edit draft
+                </Button>
+              ) : null}
+              {canAmend(s) ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="max-lg:min-h-11"
+                  onClick={() => setMode("amend")}
+                >
+                  Amend
+                </Button>
+              ) : null}
+              {canCancel(s) ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="text-danger-deep max-lg:min-h-11"
+                  onClick={() => setMode("cancel")}
+                >
+                  Cancel script
+                </Button>
+              ) : null}
+            </div>
 
             <DialogFooter>
               <Button

@@ -4,14 +4,16 @@
 
 | Name | Type | Default | Nullable | Children | Parents | Comment |
 | ---- | ---- | ------- | -------- | -------- | ------- | ------- |
+| addendum_key | varchar(64) |  | true |  |  |  |
 | approval_id | uuid |  | true |  | [public.tga_approvals](public.tga_approvals.md) |  |
+| cancel_reason_code | varchar(64) |  | true |  |  |  |
 | conventional_therapy | varchar |  | false |  |  |  |
 | created_at | timestamp with time zone |  | false |  |  |  |
 | date_of_service | date |  | false |  |  |  |
 | dosage_form | varchar |  | false |  |  |  |
 | dose_instruction | varchar |  | false |  |  |  |
 | drafted_by | uuid |  | false |  |  |  |
-| id | uuid | gen_random_uuid() | false | [public.dispatch_attempts](public.dispatch_attempts.md) [public.prescription_events](public.prescription_events.md) |  |  |
+| id | uuid | gen_random_uuid() | false | [public.dispatch_attempts](public.dispatch_attempts.md) [public.prescription_events](public.prescription_events.md) [public.prescriptions](public.prescriptions.md) |  |  |
 | medicine_name | varchar |  | false |  |  |  |
 | patient_id | uuid |  | false |  | [public.patients](public.patients.md) |  |
 | payload_hash | varchar |  | true |  |  |  |
@@ -21,7 +23,8 @@
 | signed_at | timestamp with time zone |  | true |  |  |  |
 | signed_by | uuid |  | true |  |  |  |
 | state | varchar |  | false |  |  |  |
-| tenant_id | uuid |  | false | [public.dispatch_attempts](public.dispatch_attempts.md) [public.prescription_events](public.prescription_events.md) | [public.tenants](public.tenants.md) [public.patients](public.patients.md) [public.tga_approvals](public.tga_approvals.md) |  |
+| supersedes_id | uuid |  | true |  | [public.prescriptions](public.prescriptions.md) |  |
+| tenant_id | uuid |  | false | [public.dispatch_attempts](public.dispatch_attempts.md) [public.prescription_events](public.prescription_events.md) [public.prescriptions](public.prescriptions.md) | [public.tenants](public.tenants.md) [public.patients](public.patients.md) [public.tga_approvals](public.tga_approvals.md) [public.prescriptions](public.prescriptions.md) |  |
 | tga_category | varchar |  | false |  |  |  |
 | triage_outcome | varchar |  | false |  |  |  |
 | updated_at | timestamp with time zone |  | false |  |  |  |
@@ -30,6 +33,9 @@
 
 | Name | Type | Definition |
 | ---- | ---- | ---------- |
+| ck_prescriptions_addendum_key | CHECK | CHECK ((((supersedes_id IS NULL) AND (addendum_key IS NULL)) OR ((supersedes_id IS NOT NULL) AND ((addendum_key)::text ~ '^[0-9a-f]{64}$'::text)))) |
+| ck_prescriptions_cancel_reason_code | CHECK | CHECK (((cancel_reason_code IS NULL) OR ((cancel_reason_code)::text = ANY ((ARRAY['ENTERED_IN_ERROR'::character varying, 'CLINICALLY_NOT_REQUIRED'::character varying, 'PATIENT_DECLINED'::character varying, 'DUPLICATE'::character varying, 'SUPERSEDED_BY_ADDENDUM'::character varying])::text[])))) |
+| ck_prescriptions_cancel_reason_present | CHECK | CHECK ((((state)::text = 'CANCELLED'::text) = (cancel_reason_code IS NOT NULL))) |
 | ck_prescriptions_conventional_therapy | CHECK | CHECK ((((char_length((conventional_therapy)::text) >= 1) AND (char_length((conventional_therapy)::text) <= 300)) AND ((conventional_therapy)::text !~ '[[:cntrl:]]'::text))) |
 | ck_prescriptions_dosage_form | CHECK | CHECK (((dosage_form)::text ~ '^[A-Z0-9][A-Z0-9_]{0,31}$'::text)) |
 | ck_prescriptions_dose_instruction | CHECK | CHECK ((((char_length((dose_instruction)::text) >= 1) AND (char_length((dose_instruction)::text) <= 500)) AND ((dose_instruction)::text !~ '[[:cntrl:]]'::text))) |
@@ -40,11 +46,13 @@
 | ck_prescriptions_signed_evidence | CHECK | CHECK ((((state)::text = ANY ((ARRAY['DRAFT'::character varying, 'CANCELLED'::character varying])::text[])) OR ((signed_at IS NOT NULL) AND (signed_by IS NOT NULL) AND (payload_hash IS NOT NULL) AND (approval_id IS NOT NULL)))) |
 | ck_prescriptions_signer_is_prescriber | CHECK | CHECK (((signed_by IS NULL) OR (signed_by = prescriber_id))) |
 | ck_prescriptions_state | CHECK | CHECK (((state)::text = ANY ((ARRAY['DRAFT'::character varying, 'SIGNED'::character varying, 'BLOCKED'::character varying, 'QUEUED'::character varying, 'DISPATCHED'::character varying, 'FAILED'::character varying, 'REQUIRES_RECONCILIATION'::character varying, 'CANCELLED'::character varying, 'REVERSED'::character varying])::text[]))) |
+| ck_prescriptions_supersedes_other | CHECK | CHECK (((supersedes_id IS NULL) OR (supersedes_id <> id))) |
 | ck_prescriptions_tga_category | CHECK | CHECK (((tga_category)::text ~ '^[A-Z0-9][A-Z0-9_]{0,31}$'::text)) |
 | ck_prescriptions_triage_outcome | CHECK | CHECK ((((char_length((triage_outcome)::text) >= 1) AND (char_length((triage_outcome)::text) <= 300)) AND ((triage_outcome)::text !~ '[[:cntrl:]]'::text))) |
 | fk_prescriptions_tenant_approval | FOREIGN KEY | FOREIGN KEY (tenant_id, approval_id) REFERENCES tga_approvals(tenant_id, id) ON DELETE RESTRICT |
 | fk_prescriptions_tenant_id_tenants | FOREIGN KEY | FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT |
 | fk_prescriptions_tenant_patient | FOREIGN KEY | FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT |
+| fk_prescriptions_tenant_supersedes | FOREIGN KEY | FOREIGN KEY (tenant_id, supersedes_id) REFERENCES prescriptions(tenant_id, id) ON DELETE RESTRICT |
 | pk_prescriptions | PRIMARY KEY | PRIMARY KEY (id) |
 | prescriptions_conventional_therapy_not_null | n | NOT NULL conventional_therapy |
 | prescriptions_created_at_not_null | n | NOT NULL created_at |
@@ -75,6 +83,7 @@
 | ix_prescriptions_tenant_state | CREATE INDEX ix_prescriptions_tenant_state ON public.prescriptions USING btree (tenant_id, state) |
 | pk_prescriptions | CREATE UNIQUE INDEX pk_prescriptions ON public.prescriptions USING btree (id) |
 | uq_prescriptions_tenant_id_id | CREATE UNIQUE INDEX uq_prescriptions_tenant_id_id ON public.prescriptions USING btree (tenant_id, id) |
+| uq_prescriptions_tenant_supersedes | CREATE UNIQUE INDEX uq_prescriptions_tenant_supersedes ON public.prescriptions USING btree (tenant_id, supersedes_id) WHERE (supersedes_id IS NOT NULL) |
 
 ## Triggers
 
@@ -90,11 +99,14 @@ erDiagram
 "public.prescriptions" }o--|| "public.tga_approvals" : "FOREIGN KEY (tenant_id, approval_id) REFERENCES tga_approvals(tenant_id, id) ON DELETE RESTRICT"
 "public.dispatch_attempts" }o--|| "public.prescriptions" : "FOREIGN KEY (tenant_id, prescription_id) REFERENCES prescriptions(tenant_id, id) ON DELETE RESTRICT"
 "public.prescription_events" }o--|| "public.prescriptions" : "FOREIGN KEY (tenant_id, prescription_id) REFERENCES prescriptions(tenant_id, id) ON DELETE RESTRICT"
+"public.prescriptions" }o--|| "public.prescriptions" : "FOREIGN KEY (tenant_id, supersedes_id) REFERENCES prescriptions(tenant_id, id) ON DELETE RESTRICT"
 "public.prescriptions" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
 "public.prescriptions" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 
 "public.prescriptions" {
+  varchar_64_ addendum_key
   uuid approval_id FK
+  varchar_64_ cancel_reason_code
   varchar conventional_therapy
   timestamp_with_time_zone created_at
   date date_of_service
@@ -111,6 +123,7 @@ erDiagram
   timestamp_with_time_zone signed_at
   uuid signed_by
   varchar state
+  uuid supersedes_id FK
   uuid tenant_id FK
   varchar tga_category
   varchar triage_outcome

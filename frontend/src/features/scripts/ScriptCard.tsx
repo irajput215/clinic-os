@@ -80,9 +80,15 @@ export function ScriptCard({
             Review & send
           </Button>
         ) : (
-          <span className="text-[13px] text-stone">
-            Assigned to {s.prescriber_name ?? "the prescriber"}
-          </span>
+          <>
+            <span className="text-[13px] text-stone">
+              Assigned to {s.prescriber_name ?? "the prescriber"}
+            </span>
+            {/* Its history, and the corrections the server allows this person (edit, cancel). */}
+            <Button size="sm" variant="outline" onClick={onReview}>
+              Details
+            </Button>
+          </>
         )}
         {showPatientLink ? (
           <Link

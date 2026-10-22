@@ -26,9 +26,16 @@ intent commits before any external call).
 - `prescription_events` is the one append-only history table. FEAT-11 names both
   `prescription_events` and `prescription_state_history` with identical columns and records the
   divergence as open; one table serves both purposes and the platform `audit_log` is the control record.
-- `schedule8_flag`, `supersedes_id` and `cancel_reason_code` are not created: the medicine catalogue
-  that would derive the flag is not sourced (T-11.5 open item), and there is no addendum or cancel
-  route. A column that is always `false` would be a false clinical claim.
+- `schedule8_flag` is not created: the medicine catalogue that would derive the flag is not sourced
+  (T-11.5 open item), and a column that is always `false` would be a false clinical claim.
+- **Cancel and addendum** (FEAT-11 R5, R11; decision D-010). `cancel_reason_code` is set exactly when
+  a row becomes `CANCELLED` (`ck_prescriptions_cancel_reason_present`) and only from the interim closed
+  vocabulary `CANCEL_REASON_CODES` (the vocabulary is the Clinical Safety Officer's, OPEN).
+  `supersedes_id` names the signed prescription an addendum corrects, in the same tenant; one original
+  has at most one addendum (`uq_prescriptions_tenant_supersedes`), and `addendum_key` is the
+  server-computed hash of the request's `Idempotency-Key`, present exactly on an addendum. The trigger
+  freezes `supersedes_id` and `addendum_key` for the row's life and lets `cancel_reason_code` change only
+  on the transition into `CANCELLED`.
 - `dispatch_attempts.provider` is `NULL` while a row is queued: no transport is configured, so naming a
   provider (the documents default to `PARCHMENT`) would claim an integration that does not exist.
 - `triage_outcome` and `conventional_therapy` are not in FEAT-11's column list; they are the docs2
@@ -86,6 +93,18 @@ ATTEMPT_TRANSITIONS: Final[dict[str, frozenset[str]]] = {
 }
 OUTCOME_CLASSES: Final[tuple[str, ...]] = ("CONFIRMED", "REJECTED", "UNKNOWN")
 
+# Why a prescription was cancelled: the interim closed vocabulary of decision D-010. FEAT-11 asks for
+# "a reason code, not free text" and names no codes; the vocabulary is OPEN with the Clinical Safety
+# Officer. `SUPERSEDED_BY_ADDENDUM` is written by the server only, when an addendum retires the original.
+CANCEL_REASON_CODES: Final[tuple[str, ...]] = (
+    "ENTERED_IN_ERROR",
+    "CLINICALLY_NOT_REQUIRED",
+    "PATIENT_DECLINED",
+    "DUPLICATE",
+    "SUPERSEDED_BY_ADDENDUM",
+)
+SUPERSEDED_BY_ADDENDUM: Final[str] = "SUPERSEDED_BY_ADDENDUM"
+
 
 # Free text a clinician types: bounded, and no control characters, so it cannot smuggle a line break
 # into anything that later renders it. The bound is the schema's as well.
@@ -108,6 +127,7 @@ def _sql_list(values: tuple[str, ...]) -> str:
 _STATE_SQL = _sql_list(PRESCRIPTION_STATES)
 _ATTEMPT_STATE_SQL = _sql_list(ATTEMPT_STATES)
 _OUTCOME_SQL = _sql_list(OUTCOME_CLASSES)
+_CANCEL_REASON_SQL = _sql_list(CANCEL_REASON_CODES)
 
 
 def _utcnow() -> datetime:
@@ -144,7 +164,29 @@ class Prescription(SQLModel, table=True):
             " AND payload_hash IS NOT NULL AND approval_id IS NOT NULL)",
             name="signed_evidence",
         ),
+        sa.CheckConstraint(
+            f"cancel_reason_code IS NULL OR cancel_reason_code IN ({_CANCEL_REASON_SQL})",
+            name="cancel_reason_code",
+        ),
+        sa.CheckConstraint(
+            "(state = 'CANCELLED') = (cancel_reason_code IS NOT NULL)",
+            name="cancel_reason_present",
+        ),
+        sa.CheckConstraint(
+            "supersedes_id IS NULL OR supersedes_id <> id", name="supersedes_other"
+        ),
+        sa.CheckConstraint(
+            f"(supersedes_id IS NULL AND addendum_key IS NULL) OR (supersedes_id IS NOT NULL"
+            f" AND addendum_key ~ '{_HEX64}')",
+            name="addendum_key",
+        ),
         sa.UniqueConstraint("tenant_id", "id", name="uq_prescriptions_tenant_id_id"),
+        sa.ForeignKeyConstraint(
+            ["tenant_id", "supersedes_id"],
+            ["prescriptions.tenant_id", "prescriptions.id"],
+            name="fk_prescriptions_tenant_supersedes",
+            ondelete="RESTRICT",
+        ),
         sa.ForeignKeyConstraint(
             ["tenant_id", "patient_id"],
             ["patients.tenant_id", "patients.id"],
@@ -167,6 +209,13 @@ class Prescription(SQLModel, table=True):
         ),
         sa.Index("ix_prescriptions_tenant_state", "tenant_id", "state"),
         sa.Index("ix_prescriptions_tenant_prescriber", "tenant_id", "prescriber_id"),
+        sa.Index(
+            "uq_prescriptions_tenant_supersedes",
+            "tenant_id",
+            "supersedes_id",
+            unique=True,
+            postgresql_where=sa.text("supersedes_id IS NOT NULL"),
+        ),
     )
 
     id: uuid.UUID = Field(
@@ -194,6 +243,9 @@ class Prescription(SQLModel, table=True):
     payload_hash: str | None = None
     signed_at: datetime | None = Field(default=None, sa_type=_TIMESTAMPTZ)
     signed_by: uuid.UUID | None = None
+    cancel_reason_code: str | None = Field(default=None, max_length=64)
+    supersedes_id: uuid.UUID | None = None
+    addendum_key: str | None = Field(default=None, max_length=64)
     created_at: datetime = Field(default_factory=_utcnow, sa_type=_TIMESTAMPTZ)
     updated_at: datetime = Field(
         default_factory=_utcnow,
