@@ -8,7 +8,7 @@ another tenant's request
 
 import logging
 import select as io_select
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from typing import Any, Final, LiteralString, cast
@@ -241,6 +241,54 @@ class _DeferredContext:
 #: The first of these on the transaction's connection sends the queued context.
 _CLOSING_EVENTS: Final = ("after_cursor_execute", "commit", "rollback")
 _DEFERRED_CONTEXT: Final = "clinos_deferred_context"
+_AT_COMMIT: Final = "clinos_at_commit"
+
+
+def send_with_commit(session: Session, write: Callable[[Session], None]) -> None:
+    """Run `write` at the end of this tenant transaction, in the same flight as its `COMMIT`.
+
+    For a write nothing later in the transaction reads, and that is the last thing the transaction
+    does: the audit insert of a read is the case it exists for (`docs/reference/performance.md`).
+    `tenant_transaction` first flushes every other pending change as usual, then sends each queued
+    write and `COMMIT` in one pipeline, so the database still runs them in order, inside the same
+    transaction, and a failing write fails the `COMMIT` and the whole transaction with it (INV-4).
+
+    Nothing is sent when the transaction ends in an exception: the writes are discarded with
+    everything else it did. Only a session opened by `tenant_transaction` can queue one.
+    """
+    queued: list[Callable[[Session], None]] | None = session.info.get(_AT_COMMIT)
+    if queued is None:
+        raise TenantContextRequired(
+            "writes sent with COMMIT need a session opened by tenant_transaction"
+        )
+    queued.append(write)
+
+
+def _commit_with_queued_writes(session: Session) -> None:
+    """Flush, then send the queued writes and `COMMIT` in one flight (`send_with_commit`)."""
+    queued: list[Callable[[Session], None]] = session.info.pop(_AT_COMMIT)
+    if not queued:
+        return
+    session.flush()
+    driver_connection = _driver_connection(session)
+    try:
+        with driver_connection.pipeline():
+            for write in queued:
+                write(session)
+            driver_connection.commit()
+    except psycopg.Error as error:
+        # In a pipeline the server's error arrives at the sync, below SQLAlchemy, so it is raised
+        # as the driver's own class. Callers handle SQLAlchemy's (`IntegrityError` and the rest):
+        # translate it exactly as SQLAlchemy would have, and the transaction rolls back as usual.
+        raise exc.DBAPIError.instance(
+            None,
+            None,
+            error,
+            psycopg.Error,
+            connection_invalidated=driver_connection.closed,
+        ) from error
+    # SQLAlchemy's own commit, at the end of `session.begin()`, now finds the transaction already
+    # committed and has nothing left to send.
 
 
 def run_pipelined(
@@ -381,7 +429,9 @@ def tenant_transaction(
         # Keyed pseudonyms for the request log line: a raw identifier never enters a log field
         # (`16-operations-and-observability/05-data-and-audit.md`).
         record_identity(tenant_id=tenant_id, actor_id=actor_id)
+        session.info[_AT_COMMIT] = []
         yield session
+        _commit_with_queued_writes(session)
 
 
 def _context_values(

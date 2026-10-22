@@ -200,10 +200,35 @@ head, one multi-row insert). The same change found that `db-rt` did not count ps
 `executemany` (it enters pipeline mode through a private method); `TimedConnection` now counts it, and
 a test pins it.
 
+**The audit insert travels with `COMMIT` (2026-10-22).** An audited read paid two trips for its
+event: the chain lock with its head, then the insert. The insert is now queued with
+`app.core.db.send_with_commit` and sent in the same flight as the transaction's `COMMIT`, after every
+other change the transaction made, so it costs no trip of its own. It is still inside the
+transaction: a failing insert fails the `COMMIT` and the whole operation (INV-4, proven in
+`tests/core/test_pool_and_pipeline.py`), and a transaction that raises sends nothing. The chain lock
+is held from the head's read to that `COMMIT`, exactly as before, so concurrent writers still cannot
+fork a tenant's chain. Every audited request is one trip cheaper, writes included:
+
+| Request (seeded / empty) | With T1-34 | Audit insert with `COMMIT` |
+|---|---|---|
+| `GET /dashboard/today` | 7 / 6 | **6 / 5** |
+| `GET /patients`, `POST /patients/search` | 5 / 5 | **4 / 4** |
+| `GET /patients/{id}` | 5 / 5 | **4 / 4** |
+| a patient's consult notes, bookings, approvals | 5 / 5 | **4 / 4** |
+| a patient's scripts | 6 / 5 | **5 / 4** |
+| `GET /tga-approvals` | 7 / 6 | **6 / 5** |
+| `GET /prescriptions` | 6 / 5 | **5 / 4** |
+| `GET /appointments` (one week) | 6 / 5 | **5 / 4** |
+
+What remains above three on an audited read is the audit's one trip (the lock must be held before
+the head is read, so the two cannot share a statement) and, on lists, a second step that depends on
+the first (names for the page's ids). Carrying the lock and head in the route's own last read flight
+would remove the audit's trip too; it is route by route and is not done.
+
 "Core only" on a seeded clinic shows what the per-row lookups cost once there is data (Today 32,
 scripts 17): the empty-clinic counts hid them. A read above three round trips is an audited read
-(the audit event costs two: the chain lock with the head read, then the insert) or a read whose
-second step depends on the first (names for the page's ids).
+(the audit event costs one: the chain lock with the head read; its insert rides with `COMMIT`) or a
+read whose second step depends on the first (names for the page's ids).
 
 At ~216 ms per round trip, Today goes from about 7.6 s of database waiting (35 round trips) to about
 1.5 s (7); at a co-located ~1 ms it would be single-digit milliseconds either way.
