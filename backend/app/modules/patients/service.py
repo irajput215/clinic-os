@@ -38,15 +38,26 @@ is open (feature 14, `docs/reference/open-questions.md`).
 | Merge and merge/reverse (`POST /patients/{id}/merge`, `.../merge/reverse`) | Reversal rules and step-up are unbuilt, and the merge endpoints sit behind `patient:merge`, which is not in the fixed permission list (`03-design.md`, open items) |
 | Duplicate detection (`GET /patients/{id}/duplicates`) | Requires an exact two-identifier match, so it needs the same unbuilt blind-index key handling |
 | Export | Requires step-up, a typed reason and a permission the app cannot yet check |
-| Treating-relationship rule | `care_relationships` has no ERD table definition and no named owner — a blocked dependency (`03-design.md`, open items; `01-requirements.md` OPEN-4) |
 | Permission / RBAC layer | Feature 03 (authentication and RBAC) is not started; the app has `is_superuser` and ordinary authenticated users only, so there is no central policy layer to call |
-| Single-record read audit (`patient.read` on `GET /patients/{id}`) | The design attaches `care_relationship_id` and `purpose` to a direct read, and the treating-relationship call site that supplies them is not wired yet (T1-34). The list and search reads *are* audited (below) |
 | Identifier search (Medicare, IHI) | Exact match on the keyed blind index only (R8), and no identifier is stored yet: the blind-index key has no custodian (`04-database-erd.md` open item 5) |
 | Identifier validation algorithms | The Medicare check digit, IRN rule and IHI format are unspecified in the source (`01-requirements.md` OPEN-1, requires legal/regulatory validation) |
 | Field-level encryption and blind-index key handling | Key custody and rotation are OPEN (`03-design.md`, open items), so no identifier is accepted or stored by this slice |
 | Soft-delete and retention scheduling | A privacy decision, not an engineering one (feature 14; `database-conventions.md`, "Reconciled with the rest of this document set") |
 | Identifier masking on output | Not applicable while no identifier is exposed; R9's mask applies when one is added |
 | `Idempotency-Key`, the search rate-limit value | `Idempotency-Key` is a cross-cutting standard with no implementation in the app yet; the search limit's value is open (`04-threat-model.md`, "Rate-limit values for the search and duplicate-candidate routes"), so the router applies an interim value and says so |
+
+## The treating-relationship rule (T1-34, decision D-007)
+
+`patient:read` and `patient:update` held only through a relationship-bound grant (a `DOCTOR` or
+`NURSE`, the matrix's `cr`) reach a patient only through an active care relationship
+(`03-design.md`, "Treating-relationship rule"). The relationship is resolved **in the statement that
+loads the patient** (`care_relationships.service.relationship_id`), so it costs no round trip, runs
+under the same transaction, tenant context and RLS policy as the read, and is never widened to the
+tenant. Across a tenant boundary the answer stays `404` (the row is never found); inside the tenant
+without a relationship it is `403 AUTHZ_CARE_RELATIONSHIP_DENIED`. Every direct read writes
+`patient.read` with the relationship id and the purpose, and every refusal is audited `DENIED`. For a
+relationship-bound reader the list and the search are filtered to the patients they have an active
+relationship with (`03-design.md`, "Endpoints": "treating-relationship filtered"), and so is the total.
 
 ## List and search (`docs2/sdlc/02-patients/api.md`, agreed 2026-10-07)
 
@@ -86,6 +97,7 @@ from app.core.reads import Pending, ReadBatch
 # The audit module is reached through its service facade (`docs/reference/build-contract.md` §7).
 # The import is one-way — `audit` knows nothing about `patients` — so there is no cycle.
 from app.modules.audit import service as audit
+from app.modules.care_relationships import service as care
 from app.modules.patients.models import Patient
 from app.modules.patients.schemas import (
     PatientCreate,
@@ -93,6 +105,7 @@ from app.modules.patients.schemas import (
     PatientsPublic,
     PatientUpdate,
 )
+from app.modules.users_roles.policy import Actor, Decision
 
 # The two actions this module emits, named as doc 07 §1 names them — the closed catalogue
 # `docs/features/04-audit-log/05-data-and-audit.md` makes normative. `05-patients/05-data-and-audit.md`
@@ -105,6 +118,14 @@ PATIENT_READ: str = "patient.read"
 
 # The audit `reason` code for a refused cursor.
 INVALID_CURSOR: Final[str] = "INVALID_CURSOR"
+# The audit `reason` for a direct read or update of a patient that is not the caller's own (absent, or
+# another tenant's): the clinical-records trail's code for the same case.
+NOT_FOUND: Final[str] = "AUTHZ_DENIED_CROSS_TENANT"
+
+# The permissions the rule is evaluated for. Named here as well as in the catalogue so this module does
+# not import the users-and-roles catalogue for two strings.
+_READ: Final[str] = "patient:read"
+_UPDATE: Final[str] = "patient:update"
 
 
 def _field_names(patient_in: PatientCreate | PatientUpdate) -> list[str]:
@@ -398,15 +419,32 @@ def _read(
     limit: int,
     cursor: str | None,
     query_filters: list[str] | None,
+    care_scope: uuid.UUID | None,
 ) -> PatientsPublic:
     """Serve one list or search page and audit it on the same transaction (INV-4).
+
+    `care_scope` is the relationship-bound reader's own id: the page and its total are then the
+    patients that reader has an active care relationship with, and the purpose is `TREATMENT`.
 
     A cursor that does not verify, or names a row this tenant cannot see, is audited `DENIED` with
     the same envelope as a success (R13), committed, and then refused with `InvalidCursor`.
     """
-    payload: dict[str, object] = {}
+    payload: dict[str, object] = {
+        "purpose": care.PRACTICE_ADMINISTRATION
+        if care_scope is None
+        else care.TREATMENT
+    }
     if query_filters is not None:
         payload["query_filters"] = query_filters
+    if care_scope is not None:
+        conditions = [
+            *conditions,
+            col(Patient.id).in_(
+                care.related_patient_ids(
+                    tenant_id=tenant_id, practitioner_id=care_scope
+                )
+            ),
+        ]
     result: PatientsPublic | None = None
     with tenant_transaction(
         tenant_id=tenant_id,
@@ -456,6 +494,7 @@ def list_patients(
     context: ReadContext,
     limit: int,
     cursor: str | None = None,
+    care_scope: uuid.UUID | None = None,
 ) -> PatientsPublic:
     """One keyset page of the caller's live patients, by family name, given name, id. Audited."""
     return _read(
@@ -466,6 +505,7 @@ def list_patients(
         limit=limit,
         cursor=cursor,
         query_filters=None,
+        care_scope=care_scope,
     )
 
 
@@ -476,6 +516,7 @@ def search_patients(
     q: str,
     limit: int,
     cursor: str | None = None,
+    care_scope: uuid.UUID | None = None,
 ) -> PatientsPublic:
     """One keyset page of the caller's live patients matching every term of `q`. Audited.
 
@@ -491,13 +532,19 @@ def search_patients(
         limit=limit,
         cursor=cursor,
         query_filters=sorted({term.kind for term in terms}),
+        care_scope=care_scope,
     )
 
 
 def record_read_denial(
-    *, tenant_id: uuid.UUID, context: ReadContext, reason: str
+    *,
+    tenant_id: uuid.UUID,
+    context: ReadContext,
+    reason: str,
+    action: str = PATIENT_READ,
+    resource_id: uuid.UUID | None = None,
 ) -> None:
-    """Audit a list or search the policy layer refused, before any patient row is read (R13)."""
+    """Audit a request the policy layer refused, before any patient row is read (R13)."""
     with tenant_transaction(
         tenant_id=tenant_id,
         actor_id=context.actor_id,
@@ -507,10 +554,124 @@ def record_read_denial(
         audit.record(
             session,
             audit.AuditEvent(
-                action=PATIENT_READ,
+                action=action,
                 result="DENIED",
+                resource_id=resource_id,
                 reason=reason,
                 source_ip=context.source_ip,
+            ),
+        )
+
+
+@dataclass(frozen=True)
+class PatientRefusal:
+    """A decided, already-audited refusal of a direct read or update. The router raises it."""
+
+    status_code: int
+    decision: Decision | None = None
+
+
+def _patient_and_relationship(
+    session: Session, *, actor: Actor, patient_id: uuid.UUID, lock: bool = False
+) -> tuple[Patient, uuid.UUID | None] | None:
+    """One live patient of the actor's tenant and the actor's active relationship with it, in one
+    statement; `None` for absent and another tenant's alike (R6)."""
+    statement = select(
+        Patient, care.actor_relationship_id(actor, col(Patient.id))
+    ).where(
+        Patient.id == patient_id,
+        # Defence in depth beside RLS, exactly as `_live_patient`.
+        Patient.tenant_id == actor.tenant_id,
+        col(Patient.deleted_at).is_(None),
+    )
+    if lock:
+        statement = statement.with_for_update(of=Patient)
+    row = session.exec(statement).first()
+    return None if row is None else (row[0], row[1])
+
+
+def read_patient(
+    *, actor: Actor, patient_id: uuid.UUID, context: ReadContext
+) -> PatientRead | PatientRefusal:
+    """Read one patient under the treating-relationship rule, auditing the read (T1-34, R7, R13).
+
+    One flight loads the patient and the relationship; the decision follows; the event is written on
+    the same transaction: `SUCCESS` with `care_relationship_id` and `purpose`, or `DENIED` with the
+    reason. `404` for a patient that is not the caller's own, `403 AUTHZ_CARE_RELATIONSHIP_DENIED` for
+    one of the caller's own without the relationship a bound grant needs.
+    """
+    with tenant_transaction(
+        tenant_id=actor.tenant_id,
+        actor_id=context.actor_id,
+        actor_role=context.actor_role,
+        source_ip=context.source_ip,
+    ) as session:
+        found = _patient_and_relationship(session, actor=actor, patient_id=patient_id)
+        if found is None:
+            audit.record(
+                session,
+                audit.AuditEvent(
+                    action=PATIENT_READ,
+                    result="DENIED",
+                    resource_id=patient_id,
+                    reason=NOT_FOUND,
+                    source_ip=context.source_ip,
+                ),
+            )
+            return PatientRefusal(status_code=404)
+        patient, relationship = found
+        access = care.patient_access(
+            actor, _READ, patient_id=patient.id, care_relationship_id=relationship
+        )
+        audit.record(
+            session,
+            audit.AuditEvent(
+                action=PATIENT_READ,
+                result="SUCCESS" if access.allowed else "DENIED",
+                resource_id=patient.id,
+                reason=None if access.allowed else access.reason,
+                source_ip=context.source_ip,
+                payload=access.audit_payload() if access.allowed else None,
+            ),
+        )
+        if not access.allowed:
+            return PatientRefusal(
+                status_code=access.decision.status_code, decision=access.decision
+            )
+        return PatientRead.model_validate(patient)
+
+
+@dataclass(frozen=True)
+class PatientAccessResult:
+    """A patient of the caller's tenant (or `None`) and the actor's access to it, for a module that
+    acts on a patient through this facade (staging a script, writing a consult note)."""
+
+    patient: PatientRead | None
+    access: care.PatientAccess | None
+
+
+def patient_access(
+    *, actor: Actor, patient_id: uuid.UUID, permission: str = _READ
+) -> PatientAccessResult:
+    """Resolve one patient and the actor's access to it in one statement, without auditing.
+
+    The caller audits on its own transaction, with its own action: a refused staging is a
+    `prescription.create` refusal, not a patient read.
+    """
+    with tenant_transaction(
+        tenant_id=actor.tenant_id, actor_id=actor.user_id
+    ) as session:
+        found = _patient_and_relationship(session, actor=actor, patient_id=patient_id)
+        if found is None:
+            return PatientAccessResult(patient=None, access=None)
+        patient, relationship = found
+        return PatientAccessResult(
+            patient=PatientRead.model_validate(patient),
+            access=care.patient_access(
+                actor,
+                permission,
+                patient_id=patient.id,
+                care_relationship_id=relationship,
             ),
         )
 
@@ -526,28 +687,50 @@ def get_patient(*, tenant_id: uuid.UUID, patient_id: uuid.UUID) -> PatientRead |
 
 def update_patient(
     *,
-    tenant_id: uuid.UUID,
+    actor: Actor,
     patient_id: uuid.UUID,
     patient_in: PatientUpdate,
-    actor_id: uuid.UUID | None = None,
-    actor_role: str | None = None,
-) -> PatientRead | None:
+) -> PatientRead | PatientRefusal:
     """Apply a partial update to one live patient for this tenant, or `None`.
 
     Only the fields the client sent are touched (`exclude_unset`), so an omitted field is
     never overwritten with a default and a `PATCH` cannot clear a NOT NULL column.
 
     **The audit event is written on this transaction (INV-4)**, and it carries the *names* of the
-    fields the client sent — never their values. A `None` answer (absent, or another tenant's record)
-    writes nothing: no row was touched, so there is no change to account for, and the router's `404`
-    discloses nothing.
+    fields the client sent - never their values. A patient that is not the caller's own (absent, or
+    another tenant's) is `404` and audited `DENIED`; one of the caller's own that a relationship-bound
+    grant cannot reach is `403 AUTHZ_CARE_RELATIONSHIP_DENIED`, audited the same way, and no row is
+    touched in either case (T1-34).
     """
     with tenant_transaction(
-        tenant_id=tenant_id, actor_id=actor_id, actor_role=actor_role
+        tenant_id=actor.tenant_id, actor_id=actor.user_id, actor_role=actor.actor_role
     ) as session:
-        patient = _live_patient(session, tenant_id=tenant_id, patient_id=patient_id)
-        if patient is None:
-            return None
+        found = _patient_and_relationship(
+            session, actor=actor, patient_id=patient_id, lock=True
+        )
+        access = (
+            None
+            if found is None
+            else care.patient_access(
+                actor, _UPDATE, patient_id=patient_id, care_relationship_id=found[1]
+            )
+        )
+        if found is None or access is None or not access.allowed:
+            audit.record(
+                session,
+                audit.AuditEvent(
+                    action=PATIENT_UPDATE,
+                    result="DENIED",
+                    resource_id=patient_id,
+                    reason=NOT_FOUND if access is None else access.reason,
+                ),
+            )
+            if access is None:
+                return PatientRefusal(status_code=404)
+            return PatientRefusal(
+                status_code=access.decision.status_code, decision=access.decision
+            )
+        patient = found[0]
         patient.sqlmodel_update(patient_in.model_dump(exclude_unset=True))
         session.add(patient)
         session.flush()

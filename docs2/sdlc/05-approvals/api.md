@@ -5,7 +5,7 @@
 | Method | Path | Source | Notes |
 |---|---|---|---|
 | `GET` | `/api/v1/tga-approvals` | `backend/app/modules/tga_approvals/router.py` | The practice-wide register. Contract below |
-| `GET` | `/api/v1/patients/{patient_id}/tga-approvals` | same (#46) | `TgaApprovalsPublic` |
+| `GET` | `/api/v1/patients/{patient_id}/tga-approvals` | same (#46) | `TgaApprovalsPublic`. Under the treating-relationship rule since T1-34 (decided as a `patient:read` of that patient: `403 AUTHZ_CARE_RELATIONSHIP_DENIED` for a doctor or nurse off the care team); the `tga_approval.read` event adds `care_relationship_id` and `purpose` |
 | `POST` | `/api/v1/tga-approvals` | same | `TgaApprovalCreate`, `extra=forbid`, two-year and forward-window checks |
 | `POST` | `/api/v1/tga-approvals/{id}/verify` | same | `{tga_application_number}`, four-eyes |
 | `POST` | `/api/v1/tga-approvals/{id}/revoke` | same | `{reason_code}` |

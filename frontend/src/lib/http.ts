@@ -20,6 +20,9 @@ export const isNotFound = (error: unknown): boolean => {
 export const isForbidden = (error: unknown): boolean =>
   httpStatus(error) === 403
 
+/** The treating-relationship refusal's code (T1-34; docs/features/05-patients R7). */
+export const CARE_RELATIONSHIP_DENIED = "AUTHZ_CARE_RELATIONSHIP_DENIED"
+
 /**
  * Retry only what can change on its own: a request that never reached the API, or a `5xx`.
  * A `4xx` is the API's final answer; retrying it only puts a spinner in front of a decided state.
@@ -74,11 +77,25 @@ export const refusalCode = (error: unknown): string | undefined => {
 }
 
 /**
+ * `403 AUTHZ_CARE_RELATIONSHIP_DENIED`: this clinician is not on the patient's care team. The API
+ * answers it only inside the caller's own organisation (another organisation's record is `404`), and
+ * the screen says nothing about the record beyond that.
+ */
+export const isCareRelationshipDenied = (error: unknown): boolean =>
+  httpStatus(error) === 403 && refusalCode(error) === CARE_RELATIONSHIP_DENIED
+
+/**
  * Plain sentences for the refusal codes the API documents, so a clinician reads what to do next
  * rather than the server's internal phrasing. A code not listed here falls back to the API's own
  * `detail.message`.
  */
 const REFUSAL_SENTENCES: Record<string, string> = {
+  // the treating-relationship rule and the care team (docs2/sdlc/02-patients, T1-34)
+  [CARE_RELATIONSHIP_DENIED]:
+    "You have no care relationship with this patient. Ask your practice manager to add you to their care team.",
+  ALREADY_IN_CARE_TEAM: "They're already on this patient's care team.",
+  RELATIONSHIP_NOT_FOUND:
+    "That care relationship has already ended. Refresh to see the current team.",
   // tga_approvals (docs2/sdlc/05-approvals)
   VERIFIER_CANNOT_BE_CREATOR:
     "You entered this approval, so a second clinician must verify it.",

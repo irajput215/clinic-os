@@ -76,6 +76,7 @@ from app.core.reads import Pending, Plan, ReadBatch
 # The audit module is reached through its service facade (`docs/reference/build-contract.md` §7). The
 # import is one-way — `audit` knows nothing about `tga_approvals` — so there is no cycle.
 from app.modules.audit import service as audit
+from app.modules.care_relationships import service as care
 from app.modules.patients import service as patients_service
 from app.modules.tga_approvals.models import (
     APPROVAL_STATES,
@@ -97,6 +98,11 @@ from app.modules.tga_approvals.schemas import (
     TgaMatchResponse,
     ValidityInterval,
 )
+from app.modules.users_roles.policy import Actor, Decision
+
+# A patient's approvals are part of the patient's record: the treating-relationship rule is decided
+# for this permission (T1-34).
+PATIENT_READ_PERMISSION: Final[str] = "patient:read"
 
 __all__ = [
     "APPLICATION_NUMBER_MISMATCH",
@@ -606,15 +612,21 @@ def _totals(rows: Sequence[tuple[str, int, int]]) -> tuple[dict[str, int], int]:
     return by_state, expiring
 
 
+@dataclass(frozen=True)
+class PatientApprovals:
+    """A patient's page, or why not: `page is None` without a decision is `404`; with one, `403`."""
+
+    page: TgaApprovalsPublic | None
+    decision: Decision | None = None
+
+
 def list_approvals(
     *,
-    tenant_id: uuid.UUID,
+    actor: Actor,
     patient_id: uuid.UUID,
     limit: int = DEFAULT_PAGE_SIZE,
     cursor: str | None = None,
-    actor_id: uuid.UUID | None = None,
-    actor_role: str | None = None,
-) -> TgaApprovalsPublic | None:
+) -> PatientApprovals:
     """One keyset page of a patient's approvals, newest first, tenant-scoped by RLS (T2-12, F15).
 
     `None` when the patient is not one of the caller's own (absent and another tenant's alike, R8):
@@ -624,14 +636,23 @@ def list_approvals(
 
     Audited as one `tga_approval.read` per page with the patient and the row count, never one per
     row (US-2: *"`approval.read` once per patient-level access, not per row"*).
+
+    The treating-relationship rule applies (T1-34): a patient's approvals are part of the patient's
+    record, so the read is decided as a `patient:read` of that patient. The actor's relationship rides
+    in the same flight; without the one a relationship-bound grant needs, the read is refused `403`
+    and audited `DENIED`. A read records the relationship id and the purpose.
     """
     _check_limit(limit)
+    tenant_id = actor.tenant_id
     with tenant_transaction(
-        tenant_id=tenant_id, actor_id=actor_id, actor_role=actor_role
+        tenant_id=tenant_id, actor_id=actor.user_id, actor_role=actor.actor_role
     ) as session:
         batch = ReadBatch()
         patient = patients_service.queue_display_names(
             batch, tenant_id=tenant_id, patient_ids=[patient_id]
+        )
+        relationship = batch.scalars(
+            select(care.actor_relationship_id(actor, patient_id))
         )
         refused_cursor: InvalidCursor | None = None
         found: Pending[list[TgaApproval]] | None = None
@@ -659,7 +680,23 @@ def list_approvals(
                 result="DENIED",
                 reason=CROSS_TENANT,
             )
-            return None
+            return PatientApprovals(page=None)
+        access = care.patient_access(
+            actor,
+            PATIENT_READ_PERMISSION,
+            patient_id=patient_id,
+            care_relationship_id=relationship.value[0],
+        )
+        if not access.allowed:
+            _record(
+                session,
+                action=APPROVAL_READ,
+                resource_id=None,
+                result="DENIED",
+                reason=access.reason,
+                payload={"patient_id": str(patient_id)},
+            )
+            return PatientApprovals(page=None, decision=access.decision)
         if refused_cursor is not None:
             raise refused_cursor
         assert found is not None, "the page is read whenever the cursor decodes"
@@ -669,9 +706,15 @@ def list_approvals(
             session,
             action=APPROVAL_READ,
             resource_id=None,
-            payload={"patient_id": str(patient_id), "result_count": len(data)},
+            payload={
+                "patient_id": str(patient_id),
+                "result_count": len(data),
+                **access.audit_payload(),
+            },
         )
-        return TgaApprovalsPublic(data=data, count=len(data), next_cursor=next_cursor)
+        return PatientApprovals(
+            page=TgaApprovalsPublic(data=data, count=len(data), next_cursor=next_cursor)
+        )
 
 
 def _expiring(bound: date) -> ColumnElement[bool]:
@@ -803,6 +846,7 @@ def needs_action_digest_plan(
     today: date,
     limit: int,
     client_tenant_id_supplied: bool = False,
+    events: list[audit.AuditEvent] | None = None,
 ) -> Plan[TgaApprovalDigest]:
     """The register's "Needs action" set at a glance, on the caller's transaction (Today page).
 
@@ -818,7 +862,9 @@ def needs_action_digest_plan(
 
     Audited exactly as the register is: one `tga_approval.read` on this transaction, with the
     register filter it is equivalent to and the number of rows returned. A `tenant_id` the client
-    sent is written down on that event as `CLIENT_TENANT_ID_IGNORED` (INV-1).
+    sent is written down on that event as `CLIENT_TENANT_ID_IGNORED` (INV-1). When the caller passes
+    `events`, the event is appended there instead, for the caller to write with its other sections'
+    events in one chained insert (`audit.record_many`) on the same transaction.
     """
     _check_limit(limit)
     window = DEFAULT_EXPIRING_WITHIN_DAYS
@@ -866,16 +912,19 @@ def needs_action_digest_plan(
         pending=rows(pending.value),
         expiring_soon=rows(expiring.value),
     )
-    _record(
-        session,
+    event = audit.AuditEvent(
         action=APPROVAL_READ,
-        resource_id=None,
+        result="SUCCESS",
         reason=CLIENT_TENANT_ID_IGNORED if client_tenant_id_supplied else None,
         payload={
             "query_filters": {"state": ["PENDING"], "expiring_within_days": window},
             "result_count": len(pending.value) + len(expiring.value),
         },
     )
+    if events is None:
+        audit.record(session, event)
+    else:
+        events.append(event)
     return digest
 
 

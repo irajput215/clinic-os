@@ -140,7 +140,10 @@ def test_the_five_declared_paths_are_served() -> None:
     # * `GET /api/v1/patients/{patient_id}/tga-approvals` — feature 08
     #   (`docs/features/08-tga-approvals/03-design.md`, "Endpoints");
     # * `GET /api/v1/patients/{patient_id}/appointments` — feature 04 calendar and booking
-    #   (`docs2/sdlc/04-calendar-and-booking/api.md`, agreed 2026-10-07).
+    #   (`docs2/sdlc/04-calendar-and-booking/api.md`, agreed 2026-10-07);
+    # * `GET`/`POST /api/v1/patients/{patient_id}/care-relationships` and
+    #   `POST .../care-relationships/{care_relationship_id}/end` - the care team, task T1-34
+    #   (`docs2/sdlc/02-patients/api.md`, "Care team"; decision D-007).
     #
     # The census stays exact, which is the property this test exists to protect: a route under
     # `/patients/` that no design declares, a trailing-slash variant of any of them, or a method set
@@ -149,6 +152,10 @@ def test_the_five_declared_paths_are_served() -> None:
         f"{PATIENTS_URL}/{{patient_id}}/clinical-records": {"get"},
         f"{PATIENTS_URL}/{{patient_id}}/tga-approvals": {"get"},
         f"{PATIENTS_URL}/{{patient_id}}/appointments": {"get"},
+        f"{PATIENTS_URL}/{{patient_id}}/care-relationships": {"get", "post"},
+        f"{PATIENTS_URL}/{{patient_id}}/care-relationships/{{care_relationship_id}}/end": {
+            "post"
+        },
     }
 
     assert sorted(

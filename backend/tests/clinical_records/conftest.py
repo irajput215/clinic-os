@@ -33,6 +33,7 @@ from sqlmodel import Session
 from app.core.config import settings
 from app.core.db import engine
 from app.main import app
+from tests.utils.care import relate
 from tests.utils.rbac import ActorSession, RbacApi
 
 CLINICAL_URL = f"{settings.API_V1_STR}/clinical-records"
@@ -83,6 +84,17 @@ class ClinicalApi:
             tenant_id=session.tenant_id,
             granted_by=session.user_id,
             role_code=role_code,
+        )
+
+    def relate(
+        self, *, manager: ActorSession, practitioner: ActorSession, patient: uuid.UUID
+    ) -> uuid.UUID:
+        """Put `practitioner` on the patient's care team, as the product does (T1-34)."""
+        return relate(
+            self.client,
+            manager.headers,
+            patient_id=patient,
+            practitioner_id=practitioner.user_id,
         )
 
     def create_patient(self, session: ActorSession, **overrides: Any) -> uuid.UUID:

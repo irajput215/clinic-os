@@ -130,6 +130,9 @@ class OwnPermissionsRead(SQLModel):
     model_config = SQLModelConfig(extra="forbid")
 
     permissions: list[str]
+    #: The held codes that reach a patient only through an active care relationship (the matrix's
+    #: `cr` grants, T1-34): the screen explains a refusal and hides the care-team controls with it.
+    relationship_bound: list[str] = []
 
 
 class StaffRoleRead(SQLModel):

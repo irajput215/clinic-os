@@ -25,7 +25,10 @@ Step 5 exists for exactly one rule today: the treating relationship, carried by 
 below. Its input is resolved by
 [`app.modules.care_relationships.service`](../care_relationships/service.py) under the request's tenant
 context *before* `can()` is called, so `can()` stays pure — the verdict arrives as data rather than as a
-query inside the decision. The other resource rules the design names (prescriber of record, pharmacy
+query inside the decision. The rule binds the grants the matrix marks `cr` (`DOCTOR` and `NURSE` on the
+patient and clinical-record codes, `catalog.CARE_RELATIONSHIP_SCOPED_GRANTS`); an actor that holds the
+permission through an unconditional grant as well (`Actor.unscoped_permissions`) is not bound by it.
+The default is fail-closed: an `Actor` built without that set is bound for every permission (D-007). The other resource rules the design names (prescriber of record, pharmacy
 routing) belong to later features and have no table yet; a resource rule can only ever remove access, so
 their absence is a deferral, not a fail-open.
 
@@ -110,6 +113,15 @@ class Actor:
     is_active: bool
     permissions: frozenset[str]
     role_codes: frozenset[str] = frozenset()
+    #: The held permissions at least one role grants **without** the matrix's `cr` modifier
+    #: (`catalog.grant_is_unconditional`), resolved from the same rows as `permissions`. For a patient
+    #: resource, a permission outside this set needs an active care relationship. Empty by default, so
+    #: an actor that was not told otherwise is relationship-bound for everything (fail closed).
+    unscoped_permissions: frozenset[str] = frozenset()
+
+    def relationship_bound(self, permission: str) -> bool:
+        """Whether exercising `permission` on a patient needs an active care relationship."""
+        return permission not in self.unscoped_permissions
 
     @property
     def actor_role(self) -> str | None:
@@ -171,11 +183,13 @@ def can(
         )
 
     # The resource rule the design places last (step 4 of its list, step 5 here): a patient-scoped
-    # resource is reachable only through an active treating relationship. It is decided from the data
-    # the resolver already produced, so this function stays pure.
+    # resource is reachable through a relationship-bound grant only with an active treating
+    # relationship. It is decided from the data the resolver already produced, so this function
+    # stays pure.
     if (
         isinstance(resource, PatientResourceRef)
         and resource.care_relationship_id is None
+        and actor.relationship_bound(permission)
     ):
         return _deny(
             403,

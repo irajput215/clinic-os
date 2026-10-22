@@ -10,6 +10,7 @@ from app.core.db import engine, init_db
 from app.core.rate_limit import limiter
 from app.main import app
 from app.models import User
+from app.modules.care_relationships.models import CareRelationship
 from app.modules.users_roles.models import StaffInvitation, UserRole
 from tests.utils.user import authentication_token_from_email
 from tests.utils.utils import get_superuser_token_headers
@@ -64,6 +65,9 @@ def db() -> Generator[Session]:
         # tenant clean their RBAC rows up themselves.
         session.execute(delete(UserRole))
         session.execute(delete(StaffInvitation))
+        # A care relationship names its practitioner (`ON DELETE RESTRICT`); module fixtures remove
+        # their own, and this catches any a failed test left behind before the accounts go.
+        session.execute(delete(CareRelationship))
         session.execute(delete(User))
         session.commit()
 

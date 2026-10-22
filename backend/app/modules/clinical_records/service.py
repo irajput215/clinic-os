@@ -30,17 +30,17 @@ Rules this module holds to:
 - **Nothing returns a raw ORM entity.** Rows are converted to declared schemas *inside* the
   transaction, before the session closes and expires its attributes.
 
-## The treating-relationship rule (R11) — deferred, and why
+## The treating-relationship rule (R11, task T1-34)
 
-Reads and writes require an active care relationship in the design
-(`03-design.md` §"Treating-relationship check"; `01-requirements.md` R11). The rule reads the
-`care_relationships` table through a module that **does not exist on this branch**: it is marked
-`OPEN — blocked` in the feature's own documents (`01-requirements.md` OPEN-3, `07-definition-of-done.md`
-open items), and `app/modules/users_roles/policy.py` records the same deferral for `can()`'s resource
-rules. This module therefore calls the central policy layer with the tenant-scoped `ResourceRef` that
-exists, and the relationship rule is reported as the remaining gap in the PR rather than half-applied
-by reaching into another module's tables. The deferral is not a fail-open: `can()` allows only after
-an explicit permission check, so a resource rule can only ever *remove* access.
+Reads and writes require an active care relationship when the actor's grant is relationship-bound
+(`03-design.md` §"Treating-relationship check"; `01-requirements.md` R11; the matrix's `G cr` for a
+doctor or a nurse). The relationship is resolved **in the statement that loads the record** (a scalar
+subquery from `care_relationships.service.relationship_id`, correlated on the record's own
+`patient_id`), so it rides in the route's first flight, under the same transaction, tenant context and
+RLS policy, and is never widened to the tenant. A record that is not the caller's own is `NOT_FOUND`
+(`404`) before the rule is examined; one of the caller's own without the relationship is
+`RELATIONSHIP_DENIED` (`403 AUTHZ_CARE_RELATIONSHIP_DENIED`), audited `DENIED` with that reason. An
+accepted read records `care_relationship_id` and `purpose` on its `clinical_record.read` event.
 """
 
 import base64
@@ -65,6 +65,7 @@ from app.core.reads import Pending, ReadBatch
 # The audit module is reached through its service facade (`docs/reference/build-contract.md` §7).
 # The import is one-way — `audit` knows nothing about `clinical_records` — so there is no cycle.
 from app.modules.audit import service as audit
+from app.modules.care_relationships import service as care
 from app.modules.clinical_records.models import (
     ClinicalRecord,
     ClinicalRecordVersion,
@@ -80,7 +81,7 @@ from app.modules.clinical_records.schemas import (
     SoapNote,
 )
 from app.modules.patients import service as patients_service
-from app.modules.users_roles.policy import DecisionCode
+from app.modules.users_roles.policy import Actor, Decision, DecisionCode
 
 # The two actions this module emits. Both are already in the closed catalogue of
 # `docs/features/04-audit-log/05-data-and-audit.md` §"The action catalogue (doc 07 §1)" — the doc 07
@@ -124,6 +125,7 @@ _DENIAL_REASON_CODES: Final[dict[DecisionCode, str]] = {
     DecisionCode.IDENTITY_NOT_ACTIVE: AUTHZ_DENIED,
     DecisionCode.PERMISSION_NOT_HELD: AUTHZ_DENIED,
     DecisionCode.CROSS_TENANT: AUTHZ_DENIED_CROSS_TENANT,
+    DecisionCode.CARE_RELATIONSHIP_DENIED: AUTHZ_CARE_RELATIONSHIP_DENIED,
 }
 
 # The SOAP rendering order and headings. The design fixes the four section names and their order;
@@ -170,6 +172,8 @@ class ReadOutcome:
     status: str
     record: ClinicalRecordDetail | None = None
     version: ClinicalRecordVersionRead | None = None
+    #: The policy layer's refusal when `status` is `RELATIONSHIP_DENIED`.
+    decision: Decision | None = None
 
 
 @dataclass(frozen=True)
@@ -178,6 +182,7 @@ class TimelineOutcome:
 
     status: str
     page: ClinicalRecordsPublic | None = None
+    decision: Decision | None = None
 
 
 @dataclass(frozen=True)
@@ -186,6 +191,7 @@ class AppendOutcome:
 
     status: str
     record: ClinicalRecordDetail | None = None
+    decision: Decision | None = None
 
 
 @dataclass(frozen=True)
@@ -194,6 +200,7 @@ class SignOutcome:
 
     status: str
     record: ClinicalRecordDetail | None = None
+    decision: Decision | None = None
 
 
 STATUS_OK: Final[str] = "OK"
@@ -201,6 +208,7 @@ STATUS_NOT_FOUND: Final[str] = "NOT_FOUND"
 STATUS_ALREADY_SIGNED: Final[str] = "ALREADY_SIGNED"
 STATUS_REASON_REQUIRED: Final[str] = "REASON_REQUIRED"
 STATUS_NOT_AUTHOR: Final[str] = "NOT_AUTHOR"
+STATUS_RELATIONSHIP_DENIED: Final[str] = "RELATIONSHIP_DENIED"
 
 
 def denial_reason_code(code: DecisionCode) -> str:
@@ -281,6 +289,59 @@ def _live_record(
         col(ClinicalRecord.deleted_at).is_(None),
     )
     return session.exec(statement).first()
+
+
+def _record_and_access(
+    session: Session,
+    *,
+    actor: Actor,
+    record_id: uuid.UUID,
+    permission: str,
+    lock: bool = False,
+) -> tuple[ClinicalRecord, care.PatientAccess] | None:
+    """One live record of the actor's tenant and the actor's access to its patient, in one statement.
+
+    `None` for absent and another tenant's alike (R10), decided before the relationship rule.
+    """
+    statement = select(
+        ClinicalRecord,
+        care.actor_relationship_id(actor, col(ClinicalRecord.patient_id)),
+    ).where(
+        ClinicalRecord.id == record_id,
+        ClinicalRecord.tenant_id == actor.tenant_id,
+        col(ClinicalRecord.deleted_at).is_(None),
+    )
+    if lock:
+        statement = statement.with_for_update(of=ClinicalRecord)
+    row = session.exec(statement).first()
+    if row is None:
+        return None
+    record, relationship = row
+    return record, care.patient_access(
+        actor,
+        permission,
+        patient_id=record.patient_id,
+        care_relationship_id=relationship,
+    )
+
+
+def _refuse_relationship(
+    session: Session,
+    *,
+    action: str,
+    access: care.PatientAccess,
+    resource_id: uuid.UUID | None,
+    patient_id: uuid.UUID,
+) -> None:
+    """Audit a treating-relationship refusal on the caller's transaction (US-7)."""
+    _audit(
+        session,
+        action=action,
+        result="DENIED",
+        resource_id=resource_id,
+        reason=denial_reason_code(access.decision.code),
+        payload={"patient_id": str(patient_id)},
+    )
 
 
 def _version_row(
@@ -466,22 +527,27 @@ def create_record(
 
 
 def get_record(
-    *, tenant_id: uuid.UUID, context: AuditContext, record_id: uuid.UUID
+    *, actor: Actor, context: AuditContext, record_id: uuid.UUID
 ) -> ReadOutcome:
     """Read one record and its versions, ascending, auditing the access (US-4, US-5).
 
     One `clinical_record.read` event per record access — not one per version — as US-4 fixes it.
     """
     with tenant_transaction(
-        tenant_id=tenant_id,
+        tenant_id=actor.tenant_id,
         actor_id=context.actor_id,
         actor_role=context.actor_role,
         request_id=context.request_id,
         correlation_id=context.correlation_id,
         source_ip=context.source_ip,
     ) as session:
-        record = _live_record(session, tenant_id=tenant_id, record_id=record_id)
-        if record is None:
+        found = _record_and_access(
+            session,
+            actor=actor,
+            record_id=record_id,
+            permission=CLINICAL_RECORD_READ_PERMISSION,
+        )
+        if found is None:
             # Absent and another tenant's are the same answer, and both are audited: a substituted
             # identifier is exactly the attempt the trail exists to hold (S13).
             _audit(
@@ -492,6 +558,18 @@ def get_record(
                 reason=AUTHZ_DENIED_CROSS_TENANT,
             )
             return ReadOutcome(status=STATUS_NOT_FOUND)
+        record, access = found
+        if not access.allowed:
+            _refuse_relationship(
+                session,
+                action=RECORD_READ_ACTION,
+                access=access,
+                resource_id=record.id,
+                patient_id=record.patient_id,
+            )
+            return ReadOutcome(
+                status=STATUS_RELATIONSHIP_DENIED, decision=access.decision
+            )
         detail = _detail(session, record)
         _audit(
             session,
@@ -501,6 +579,7 @@ def get_record(
             payload={
                 "patient_id": str(record.patient_id),
                 "result_count": len(detail.versions),
+                **access.audit_payload(),
             },
         )
         return ReadOutcome(status=STATUS_OK, record=detail)
@@ -508,12 +587,13 @@ def get_record(
 
 def get_version(
     *,
-    tenant_id: uuid.UUID,
+    actor: Actor,
     context: AuditContext,
     record_id: uuid.UUID,
     version: int,
 ) -> ReadOutcome:
     """Read one version of one record, auditing the access (F14)."""
+    tenant_id = actor.tenant_id
     with tenant_transaction(
         tenant_id=tenant_id,
         actor_id=context.actor_id,
@@ -522,8 +602,13 @@ def get_version(
         correlation_id=context.correlation_id,
         source_ip=context.source_ip,
     ) as session:
-        record = _live_record(session, tenant_id=tenant_id, record_id=record_id)
-        if record is None:
+        found = _record_and_access(
+            session,
+            actor=actor,
+            record_id=record_id,
+            permission=CLINICAL_RECORD_READ_PERMISSION,
+        )
+        if found is None:
             _audit(
                 session,
                 action=RECORD_READ_ACTION,
@@ -532,6 +617,18 @@ def get_version(
                 reason=AUTHZ_DENIED_CROSS_TENANT,
             )
             return ReadOutcome(status=STATUS_NOT_FOUND)
+        record, access = found
+        if not access.allowed:
+            _refuse_relationship(
+                session,
+                action=RECORD_READ_ACTION,
+                access=access,
+                resource_id=record.id,
+                patient_id=record.patient_id,
+            )
+            return ReadOutcome(
+                status=STATUS_RELATIONSHIP_DENIED, decision=access.decision
+            )
         row = _version_row(
             session, tenant_id=tenant_id, record_id=record_id, version=version
         )
@@ -550,14 +647,18 @@ def get_version(
             action=RECORD_READ_ACTION,
             result="SUCCESS",
             resource_id=record.id,
-            payload={"patient_id": str(record.patient_id), "result_count": 1},
+            payload={
+                "patient_id": str(record.patient_id),
+                "result_count": 1,
+                **access.audit_payload(),
+            },
         )
         return ReadOutcome(status=STATUS_OK, version=_version_read(row))
 
 
 def list_timeline(
     *,
-    tenant_id: uuid.UUID,
+    actor: Actor,
     context: AuditContext,
     patient_id: uuid.UUID,
     limit: int,
@@ -575,7 +676,12 @@ def list_timeline(
     `signed_at`: `03-design.md` records that choice as an open item, and `signed_at` is NULL for every
     unsigned record, so it cannot order a timeline that includes drafts. The page asks for one row
     more than the caller wanted; that extra row is what proves whether a next page exists.
+
+    The actor's care relationship with the patient travels in the same flight (T1-34): a patient of
+    the caller's own without the relationship a bound grant needs is `RELATIONSHIP_DENIED`, audited,
+    and no record is returned.
     """
+    tenant_id = actor.tenant_id
     with tenant_transaction(
         tenant_id=tenant_id,
         actor_id=context.actor_id,
@@ -587,6 +693,9 @@ def list_timeline(
         batch = ReadBatch()
         patient = patients_service.queue_display_names(
             batch, tenant_id=tenant_id, patient_ids=[patient_id]
+        )
+        relationship = batch.scalars(
+            select(care.actor_relationship_id(actor, patient_id))
         )
         refused_cursor: InvalidCursor | None = None
         timeline: _TimelineReads | None = None
@@ -612,6 +721,23 @@ def list_timeline(
                 reason=AUTHZ_DENIED_CROSS_TENANT,
             )
             return TimelineOutcome(status=STATUS_NOT_FOUND)
+        access = care.patient_access(
+            actor,
+            CLINICAL_RECORD_READ_PERMISSION,
+            patient_id=patient_id,
+            care_relationship_id=relationship.value[0],
+        )
+        if not access.allowed:
+            _refuse_relationship(
+                session,
+                action=RECORD_READ_ACTION,
+                access=access,
+                resource_id=patient_id,
+                patient_id=patient_id,
+            )
+            return TimelineOutcome(
+                status=STATUS_RELATIONSHIP_DENIED, decision=access.decision
+            )
         if refused_cursor is not None:
             raise refused_cursor
         assert timeline is not None, "the page is read whenever the cursor decodes"
@@ -628,7 +754,11 @@ def list_timeline(
             action=RECORD_READ_ACTION,
             result="SUCCESS",
             resource_id=patient_id,
-            payload={"patient_id": str(patient_id), "result_count": len(page_rows)},
+            payload={
+                "patient_id": str(patient_id),
+                "result_count": len(page_rows),
+                **access.audit_payload(),
+            },
         )
         page: list[ClinicalRecordSummary] = []
         for record in page_rows:
@@ -711,7 +841,7 @@ def _queue_timeline(
 
 def append_version(
     *,
-    tenant_id: uuid.UUID,
+    actor: Actor,
     context: AuditContext,
     record_id: uuid.UUID,
     append_in: ClinicalRecordAppend,
@@ -735,6 +865,7 @@ def append_version(
     existing version.
     """
     body, body_format = _narrative(append_in)
+    tenant_id = actor.tenant_id
     with tenant_transaction(
         tenant_id=tenant_id,
         actor_id=context.actor_id,
@@ -743,8 +874,13 @@ def append_version(
         correlation_id=context.correlation_id,
         source_ip=context.source_ip,
     ) as session:
-        record = _live_record(session, tenant_id=tenant_id, record_id=record_id)
-        if record is None:
+        found = _record_and_access(
+            session,
+            actor=actor,
+            record_id=record_id,
+            permission=CLINICAL_RECORD_WRITE_PERMISSION,
+        )
+        if found is None:
             _audit(
                 session,
                 action=RECORD_WRITE_ACTION,
@@ -753,6 +889,18 @@ def append_version(
                 reason=AUTHZ_DENIED_CROSS_TENANT,
             )
             return AppendOutcome(status=STATUS_NOT_FOUND)
+        record, access = found
+        if not access.allowed:
+            _refuse_relationship(
+                session,
+                action=RECORD_WRITE_ACTION,
+                access=access,
+                resource_id=record.id,
+                patient_id=record.patient_id,
+            )
+            return AppendOutcome(
+                status=STATUS_RELATIONSHIP_DENIED, decision=access.decision
+            )
         if not amendment and record.signed_at is not None:
             _audit(
                 session,
@@ -857,7 +1005,7 @@ def _insert_version(
 
 
 def sign_record(
-    *, tenant_id: uuid.UUID, context: AuditContext, record_id: uuid.UUID
+    *, actor: Actor, context: AuditContext, record_id: uuid.UUID
 ) -> SignOutcome:
     """Sign the current version of a record, identity-bound to its author (US-2, R4).
 
@@ -866,6 +1014,7 @@ def sign_record(
     NOTE_ALREADY_SIGNED`. The signature sets `clinical_records.signed_at` — the column the design's
     privilege block grants for exactly this purpose — and nothing else; no version row is touched.
     """
+    tenant_id = actor.tenant_id
     with tenant_transaction(
         tenant_id=tenant_id,
         actor_id=context.actor_id,
@@ -874,8 +1023,13 @@ def sign_record(
         correlation_id=context.correlation_id,
         source_ip=context.source_ip,
     ) as session:
-        record = _live_record(session, tenant_id=tenant_id, record_id=record_id)
-        if record is None:
+        found = _record_and_access(
+            session,
+            actor=actor,
+            record_id=record_id,
+            permission=CLINICAL_RECORD_WRITE_PERMISSION,
+        )
+        if found is None:
             _audit(
                 session,
                 action=RECORD_WRITE_ACTION,
@@ -884,6 +1038,18 @@ def sign_record(
                 reason=AUTHZ_DENIED_CROSS_TENANT,
             )
             return SignOutcome(status=STATUS_NOT_FOUND)
+        record, access = found
+        if not access.allowed:
+            _refuse_relationship(
+                session,
+                action=RECORD_WRITE_ACTION,
+                access=access,
+                resource_id=record.id,
+                patient_id=record.patient_id,
+            )
+            return SignOutcome(
+                status=STATUS_RELATIONSHIP_DENIED, decision=access.decision
+            )
         if record.signed_at is not None:
             _audit(
                 session,

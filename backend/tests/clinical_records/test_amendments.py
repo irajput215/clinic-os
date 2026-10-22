@@ -262,14 +262,26 @@ def test_concurrent_amendments_do_not_lose_an_update(
 
     def append(body: str) -> None:
         from app.modules.clinical_records.schemas import ClinicalRecordAppend
+        from app.modules.users_roles.policy import Actor
 
         context = clinical_service.AuditContext(
             actor_id=tenant.owner.user_id, actor_role="PRACTICE_OWNER"
         )
+        assert tenant.tenant_id is not None
+        # The owner, as the session would resolve them: `clinical_record:write` held unconditionally.
+        owner = Actor(
+            user_id=tenant.owner.user_id,
+            tenant_id=tenant.tenant_id,
+            is_active=True,
+            permissions=frozenset({clinical_service.CLINICAL_RECORD_WRITE_PERMISSION}),
+            unscoped_permissions=frozenset(
+                {clinical_service.CLINICAL_RECORD_WRITE_PERMISSION}
+            ),
+        )
         barrier.wait(timeout=10)
         try:
             outcome = clinical_service.append_version(
-                tenant_id=tenant.tenant_id,
+                actor=owner,
                 context=context,
                 record_id=uuid.UUID(record_id),
                 append_in=ClinicalRecordAppend(

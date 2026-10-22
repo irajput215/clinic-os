@@ -1,5 +1,9 @@
 from fastapi import APIRouter
 
+# The whole model registry, so every foreign key a mapped table names resolves at runtime too: the
+# care-relationship upkeep inserts a row whose `clinic_id` references `clinics`, a table no route
+# module imports on its own.
+import app.db_models  # noqa: F401
 from app.api.routes import health, login, users, utils
 from app.modules.appointments.router import (
     patient_router as appointments_patient_router,
@@ -10,6 +14,7 @@ from app.modules.appointments.router import (
 from app.modules.appointments.router import public_router as public_booking_router
 from app.modules.appointments.router import router as appointments_router
 from app.modules.audit.router import router as audit_router
+from app.modules.care_relationships.router import router as care_relationships_router
 from app.modules.clinical_records.router import router as clinical_records_router
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.identity_tenancy.router import auth_router
@@ -66,3 +71,5 @@ api_router.include_router(auth_router)
 api_router.include_router(prescriptions_router)
 # Phase 2E: the Today page, one read composed from the three modules above.
 api_router.include_router(dashboard_router)
+# T1-34 / D-007: a patient's care team, the interim upkeep of the treating-relationship rule.
+api_router.include_router(care_relationships_router)

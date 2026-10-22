@@ -1,14 +1,13 @@
-"""S6, R2, R11 — deny by default: authentication, permission, and the one deferred resource rule.
+"""S6, R2, R11 - deny by default: authentication, permission, and the treating-relationship rule.
 
 Design: `docs/features/06-clinical-records/03-design.md` §"Deny-by-default request path". The order is
 literal: authenticate → resolve the tenant from the session → check the permission → resolve the
-resource → (the treating-relationship rule) → audit → validate → execute.
+resource → the treating-relationship rule → audit → validate → execute.
 
-The treating-relationship rule (R11) is **not implemented**: the `care_relationships` module it reads
-does not exist on this branch and the feature's own documents record it as `OPEN — blocked`
-(`01-requirements.md` OPEN-3). `test_the_care_relationship_rule_is_not_yet_implemented` pins the
-current behaviour deliberately, so the day the rule lands this test fails and the gap cannot be
-forgotten.
+R11 (task T1-34): a doctor's or nurse's `clinical_record:*` grant reaches a record only through an
+active care relationship with its patient (the matrix's `cr`); without one, every route answers
+`403 AUTHZ_CARE_RELATIONSHIP_DENIED` and writes a `DENIED` event with that reason. Across a tenant
+boundary the answer stays `404`. An unconditional grant (an administrator's read) is not bound.
 """
 
 import uuid
@@ -105,33 +104,103 @@ def test_a_read_only_role_may_read_but_not_write(
     assert clinical.row_counts(tenant.tenant_id) == (1, 1)
 
 
-def test_the_care_relationship_rule_is_not_yet_implemented(
+def test_a_doctor_without_a_care_relationship_is_refused_on_every_route(
     clinical: ClinicalApi, tenant: ClinicalTenant
 ) -> None:
-    """The documented gap (R11 / OPEN-3), pinned so it cannot be forgotten.
-
-    R11 requires an active treating relationship for every read and write. The rule's data source is
-    `care_relationships`, which has no module and no table on this branch — the feature's own
-    `07-definition-of-done.md` records it as `OPEN — blocked`. What *is* enforced is permission and
-    tenancy; the relationship rule can only ever remove access, so its absence is a deferral rather
-    than a fail-open.
-
-    When `care_relationships` lands and the rule is wired in, an actor holding `clinical_record:read`
-    with no active relationship must be refused here — and this assertion will fail, which is the
-    point.
-    """
+    """R11 / US-7: `403` with the relationship code, audited, and nothing written."""
     record = created_record(clinical.create_record(tenant.owner, tenant.patient))
-    # An administrator holds `clinical_record:read` and has no treating relationship with the
-    # patient: no `care_relationships` row exists for anybody in this environment.
+    doctor = clinical.add_actor(session=tenant.owner, role_code="DOCTOR")
+    before = clinical.row_counts(tenant.tenant_id)
+
+    for response in (
+        clinical.read_record(doctor, record["id"]),
+        clinical.read_version(doctor, record["id"], 1),
+        clinical.timeline(doctor, tenant.patient),
+        clinical.create_record(doctor, tenant.patient),
+        clinical.patch_record(
+            doctor, record["id"], body="An edit", amendment_reason="Unrelated"
+        ),
+        clinical.amend(doctor, record["id"], body="An amendment", amendment_reason="x"),
+        clinical.sign(doctor, record["id"]),
+    ):
+        assert response.status_code == 403, response.text
+        assert response.json()["detail"]["code"] == "AUTHZ_CARE_RELATIONSHIP_DENIED"
+        # The refusal names no patient data.
+        assert "Synthetic" not in response.text
+
+    assert clinical.row_counts(tenant.tenant_id) == before
+    denials = [
+        row
+        for row in clinical.clinical_events(tenant.tenant_id)
+        if row["actor_id"] == doctor.user_id
+    ]
+    assert len(denials) == 7
+    assert {row["result"] for row in denials} == {"DENIED"}
+    assert {row["reason"] for row in denials} == {"AUTHZ_CARE_RELATIONSHIP_DENIED"}
+    assert {row["metadata"]["patient_id"] for row in denials} == {str(tenant.patient)}
+
+
+def test_another_tenants_record_stays_404_for_a_relationship_bound_doctor(
+    clinical: ClinicalApi, tenant: ClinicalTenant
+) -> None:
+    """The relationship `403` is only ever answered inside the caller's own tenant."""
+    record = created_record(clinical.create_record(tenant.owner, tenant.patient))
+    other_owner = clinical.register(clinic_name="Another Clinical Clinic")
+    other_doctor = clinical.add_actor(session=other_owner, role_code="DOCTOR")
+
+    assert clinical.read_record(other_doctor, record["id"]).status_code == 404
+    assert clinical.timeline(other_doctor, tenant.patient).status_code == 404
+    assert clinical.sign(other_doctor, record["id"]).status_code == 404
+
+
+def test_a_doctor_with_a_care_relationship_reads_and_writes_audited(
+    clinical: ClinicalApi, tenant: ClinicalTenant
+) -> None:
+    """R11: the relationship opens the record, and the read records its id and the purpose."""
+    record = created_record(clinical.create_record(tenant.owner, tenant.patient))
+    doctor = clinical.add_actor(session=tenant.owner, role_code="DOCTOR")
+    relationship = clinical.relate(
+        manager=tenant.owner, practitioner=doctor, patient=tenant.patient
+    )
+
+    assert clinical.read_record(doctor, record["id"]).status_code == 200
+    assert clinical.timeline(doctor, tenant.patient).status_code == 200
+    created = clinical.create_record(doctor, tenant.patient)
+    assert created.status_code == 201, created.text
+
+    reads = [
+        row
+        for row in clinical.clinical_events(
+            tenant.tenant_id, action="clinical_record.read"
+        )
+        if row["actor_id"] == doctor.user_id
+    ]
+    assert [row["result"] for row in reads] == ["SUCCESS", "SUCCESS"]
+    for row in reads:
+        assert row["metadata"]["care_relationship_id"] == str(relationship)
+        assert row["metadata"]["purpose"] == "TREATMENT"
+
+
+def test_an_unconditional_grant_is_not_bound_by_the_relationship_rule(
+    clinical: ClinicalApi, tenant: ClinicalTenant
+) -> None:
+    """The matrix gives an administrator `clinical_record:read` without `cr`: no relationship needed,
+    and the read is recorded with the administrative purpose and no relationship id."""
+    record = created_record(clinical.create_record(tenant.owner, tenant.patient))
     administrator = clinical.add_actor(session=tenant.owner, role_code="ADMINISTRATOR")
 
     response = clinical.read_record(administrator, record["id"])
 
-    assert response.status_code == 200, (
-        "the treating-relationship rule now refuses this read — R11 is implemented, and this "
-        "gap-pinning test should be replaced by the positive and negative relationship cases: "
-        + response.text
-    )
+    assert response.status_code == 200, response.text
+    [read] = [
+        row
+        for row in clinical.clinical_events(
+            tenant.tenant_id, action="clinical_record.read"
+        )
+        if row["actor_id"] == administrator.user_id
+    ]
+    assert read["metadata"]["purpose"] == "PRACTICE_ADMINISTRATION"
+    assert "care_relationship_id" not in read["metadata"]
 
 
 def test_an_unknown_record_is_not_a_permission_probe(

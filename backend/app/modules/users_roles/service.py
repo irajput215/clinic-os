@@ -68,6 +68,7 @@ from app.modules.users_roles.catalog import (
     SYSTEM_ROLE_CATALOGUE,
     USER_CREATE,
     USER_PERMISSION_CHANGE,
+    grant_is_unconditional,
 )
 from app.modules.users_roles.models import (
     Permission,
@@ -314,22 +315,41 @@ def held_grants_in_context_statement(
     return _GRANTS_IN_CONTEXT_DRIVER_SQL, {"user_id": user_id}
 
 
-def grants_from_rows(
-    rows: Iterable[Sequence[str | None]],
-) -> tuple[frozenset[str], frozenset[str]]:
+@dataclass(frozen=True)
+class HeldGrants:
+    """What an account holds in one tenant, from the `(role_code, permission_code)` rows.
+
+    `unscoped_permissions` is the subset of `permissions` that at least one held role grants without
+    the matrix's care-relationship modifier (`catalog.grant_is_unconditional`); the policy layer reads
+    it for a patient resource (`Actor.unscoped_permissions`).
+    """
+
+    permissions: frozenset[str]
+    role_codes: frozenset[str]
+    unscoped_permissions: frozenset[str]
+
+
+def grants_from_rows(rows: Iterable[Sequence[str | None]]) -> HeldGrants:
     permissions: set[str] = set()
     role_codes: set[str] = set()
+    unscoped: set[str] = set()
     for role_code, permission_code in rows:
         if role_code:
             role_codes.add(role_code)
         if permission_code:
             permissions.add(permission_code)
-    return frozenset(permissions), frozenset(role_codes)
+            if role_code and grant_is_unconditional(role_code, permission_code):
+                unscoped.add(permission_code)
+    return HeldGrants(
+        permissions=frozenset(permissions),
+        role_codes=frozenset(role_codes),
+        unscoped_permissions=frozenset(unscoped),
+    )
 
 
 def _held_grants(
     session: Session, *, user_id: uuid.UUID, tenant_id: uuid.UUID
-) -> tuple[frozenset[str], frozenset[str]]:
+) -> HeldGrants:
     """The permission codes and role codes this account holds in this tenant, in one query.
 
     One statement instead of one per table: each round trip to the database costs the full
@@ -349,8 +369,7 @@ def resolve_permissions(
     The caller supplies the tenant the session resolved, never a request value; the query runs under
     forced RLS as well.
     """
-    permissions, _ = _held_grants(session, user_id=user_id, tenant_id=tenant_id)
-    return permissions
+    return _held_grants(session, user_id=user_id, tenant_id=tenant_id).permissions
 
 
 def resolve_role_codes(
@@ -363,8 +382,7 @@ def resolve_role_codes(
     statement, which is what makes `actor_role` "the role held at decision time" rather than the role
     held a moment later.
     """
-    _, role_codes = _held_grants(session, user_id=user_id, tenant_id=tenant_id)
-    return role_codes
+    return _held_grants(session, user_id=user_id, tenant_id=tenant_id).role_codes
 
 
 def actor_for(
@@ -384,7 +402,7 @@ def actor_for(
     """
     # Every authenticated request resolves its actor, so the whole transaction (`BEGIN`, the tenant
     # context, the grants and `COMMIT`) travels in one round trip.
-    permissions, role_codes = grants_from_rows(
+    grants = grants_from_rows(
         tenant_read(
             tenant_id=tenant_id,
             actor_id=user_id,
@@ -396,8 +414,9 @@ def actor_for(
         user_id=user_id,
         tenant_id=tenant_id,
         is_active=is_active,
-        permissions=permissions,
-        role_codes=role_codes,
+        permissions=grants.permissions,
+        role_codes=grants.role_codes,
+        unscoped_permissions=grants.unscoped_permissions,
     )
 
 
@@ -615,7 +634,10 @@ def own_permissions(actor: Actor) -> OwnPermissionsRead:
     querying again means the list the caller sees is exactly the set that authorises the same request,
     and costs no second transaction. Nothing from the request body, path or query is read (INV-1).
     """
-    return OwnPermissionsRead(permissions=sorted(actor.permissions))
+    return OwnPermissionsRead(
+        permissions=sorted(actor.permissions),
+        relationship_bound=sorted(actor.permissions - actor.unscoped_permissions),
+    )
 
 
 def assign_role(

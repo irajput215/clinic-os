@@ -145,7 +145,7 @@ def test_an_account_with_no_role_gets_an_empty_list(rbac: RbacApi) -> None:
 
     response = rbac.client.get(OWN_PERMISSIONS_URL, headers=nobody.headers)
     assert response.status_code == 200, response.text
-    assert response.json() == {"permissions": []}
+    assert response.json() == {"permissions": [], "relationship_bound": []}
 
 
 def test_the_practice_owner_sees_the_full_catalogue_sorted(rbac: RbacApi) -> None:
@@ -153,7 +153,7 @@ def test_the_practice_owner_sees_the_full_catalogue_sorted(rbac: RbacApi) -> Non
 
     response = rbac.client.get(OWN_PERMISSIONS_URL, headers=owner.headers)
     assert response.status_code == 200, response.text
-    assert response.json() == {"permissions": ALL_CODES}
+    assert response.json() == {"permissions": ALL_CODES, "relationship_bound": []}
 
 
 def test_a_role_sees_exactly_its_bundle_and_roles_union(rbac: RbacApi) -> None:
@@ -165,7 +165,10 @@ def test_a_role_sees_exactly_its_bundle_and_roles_union(rbac: RbacApi) -> None:
     )
     first = rbac.client.get(OWN_PERMISSIONS_URL, headers=clinician.headers)
     assert first.status_code == 200, first.text
-    assert first.json() == {"permissions": sorted(BUNDLES["PHARMACY"])}
+    assert first.json() == {
+        "permissions": sorted(BUNDLES["PHARMACY"]),
+        "relationship_bound": [],
+    }
 
     rbac.grant(
         tenant_id=owner.tenant_id,
@@ -174,8 +177,15 @@ def test_a_role_sees_exactly_its_bundle_and_roles_union(rbac: RbacApi) -> None:
         granted_by=owner.user_id,
     )
     second = rbac.client.get(OWN_PERMISSIONS_URL, headers=clinician.headers)
+    # Grants are additive (T1-34): `patient:read` stays unconditional through PHARMACY, while the
+    # Nurse's `patient:update` and clinical-record codes reach a patient only through a relationship.
     assert second.json() == {
-        "permissions": sorted(BUNDLES["PHARMACY"] | BUNDLES["NURSE"])
+        "permissions": sorted(BUNDLES["PHARMACY"] | BUNDLES["NURSE"]),
+        "relationship_bound": [
+            "clinical_record:read",
+            "clinical_record:write",
+            "patient:update",
+        ],
     }
 
 
@@ -187,12 +197,19 @@ def test_a_revoked_role_disappears_on_the_next_request(rbac: RbacApi) -> None:
         tenant_id=owner.tenant_id, granted_by=owner.user_id, role_code="DOCTOR"
     )
     assert rbac.client.get(OWN_PERMISSIONS_URL, headers=doctor.headers).json() == {
-        "permissions": sorted(BUNDLES["DOCTOR"])
+        "permissions": sorted(BUNDLES["DOCTOR"]),
+        "relationship_bound": [
+            "clinical_record:read",
+            "clinical_record:write",
+            "patient:read",
+            "patient:update",
+        ],
     }
 
     rbac.revoke_all(tenant_id=owner.tenant_id, user_id=doctor.user_id)
     assert rbac.client.get(OWN_PERMISSIONS_URL, headers=doctor.headers).json() == {
-        "permissions": []
+        "permissions": [],
+        "relationship_bound": [],
     }
 
 
@@ -218,11 +235,11 @@ def test_another_tenants_grant_is_never_visible(rbac: RbacApi) -> None:
     try:
         response = rbac.client.get(OWN_PERMISSIONS_URL, headers=member_of_a.headers)
         assert response.status_code == 200, response.text
-        assert response.json() == {"permissions": []}
+        assert response.json() == {"permissions": [], "relationship_bound": []}
 
         # And B's owner keeps exactly its own set: the planted row changes nothing for B either.
         b_view = rbac.client.get(OWN_PERMISSIONS_URL, headers=tenant_b.headers)
-        assert b_view.json() == {"permissions": ALL_CODES}
+        assert b_view.json() == {"permissions": ALL_CODES, "relationship_bound": []}
     finally:
         # Tenant A is cleaned up first, and this row would RESTRICT the delete of A's account.
         rbac.revoke_all(tenant_id=tenant_b.tenant_id, user_id=member_of_a.user_id)
@@ -242,7 +259,7 @@ def test_client_supplied_identifiers_are_ignored(rbac: RbacApi) -> None:
         headers={**nobody.headers, "X-Tenant-Id": str(other.tenant_id)},
     )
     assert response.status_code == 200, response.text
-    assert response.json() == {"permissions": []}
+    assert response.json() == {"permissions": [], "relationship_bound": []}
 
 
 def test_reading_own_permissions_writes_no_audit_event(rbac: RbacApi) -> None:
@@ -276,7 +293,7 @@ def test_me_is_not_captured_by_the_user_id_route(rbac: RbacApi) -> None:
 
     as_admin = rbac.client.get(OWN_PERMISSIONS_URL, headers=owner.headers)
     assert as_admin.status_code == 200, as_admin.text
-    assert set(as_admin.json()) == {"permissions"}
+    assert set(as_admin.json()) == {"permissions", "relationship_bound"}
     assert all(isinstance(code, str) for code in as_admin.json()["permissions"])
 
     # The administrative route is untouched by the new one.

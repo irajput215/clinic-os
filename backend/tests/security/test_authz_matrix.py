@@ -6,6 +6,11 @@ changes nothing, and a caller holding the permission succeeds. The expected righ
 `patient:*` rows of the matrix in `docs/features/03-users-and-roles/01-requirements.md`, hard-coded
 here so the test is a check on the catalogue rather than a restatement of it.
 
+The `cr` cells (a doctor's and a nurse's `patient:read` and `patient:update`) are grants that reach a
+patient only through an active care relationship (T1-34): the matrix asserts the refusal without one
+(`403 AUTHZ_CARE_RELATIONSHIP_DENIED`, the row untouched), then records the relationship through the
+care-team route and asserts the success.
+
 The task layer names this file (`tests/security/test_authz_matrix.py`, T1-30); the feature layer's test
 plan names `tests/security/test_users_rbac.py::test_role_endpoint_matrix_403_without_permission` for
 the same obligation. The task-layer name is used and the divergence is reported.
@@ -20,6 +25,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 from app.core.config import settings
+from tests.utils.care import relate
 from tests.utils.rbac import ActorSession, RbacApi
 
 PATIENTS_URL = f"{settings.API_V1_STR}/patients"
@@ -42,6 +48,9 @@ ROLE_PATIENT_RIGHTS: dict[str, tuple[bool, bool, bool]] = {
     "PHARMACY": (False, True, False),
     "COMPLIANCE_AUDITOR": (False, True, False),
 }
+
+# The roles whose patient grants carry the matrix's `cr` modifier.
+RELATIONSHIP_BOUND_ROLES = frozenset({"DOCTOR", "NURSE"})
 
 
 class Matrix(NamedTuple):
@@ -131,6 +140,29 @@ def test_role_endpoint_matrix(matrix: Matrix) -> None:
         assert response.status_code == (200 if can_read else 403), (
             f"{role}: {response.text}"
         )
+
+        if role in RELATIONSHIP_BOUND_ROLES:
+            # Without a relationship: the read and the update are both refused, the row untouched.
+            response = matrix.api.client.get(
+                f"{PATIENTS_URL}/{patient_id}", headers=actor.headers
+            )
+            assert response.status_code == 403, f"{role}: {response.text}"
+            assert response.json()["detail"]["code"] == "AUTHZ_CARE_RELATIONSHIP_DENIED"
+            response = matrix.api.client.patch(
+                f"{PATIENTS_URL}/{patient_id}",
+                json={"preferred_name": f"unrelated-{role}"},
+                headers=actor.headers,
+            )
+            assert response.status_code == 403, f"{role}: {response.text}"
+            stored = matrix.api.patient_row(patient_id)
+            assert stored is not None
+            assert stored["preferred_name"] != f"unrelated-{role}"
+            relate(
+                matrix.api.client,
+                matrix.owner.headers,
+                patient_id=patient_id,
+                practitioner_id=actor.user_id,
+            )
 
         # GET /patients/{id} — patient:read
         response = matrix.api.client.get(

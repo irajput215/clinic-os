@@ -58,7 +58,7 @@ from app.modules.appointments.schemas import (
 )
 from app.modules.identity_tenancy import service as identity_tenancy
 from app.modules.users_roles.catalog import APPOINTMENT_PERMISSIONS
-from app.modules.users_roles.policy import ResourceRef
+from app.modules.users_roles.policy import ResourceRef, enforce
 from app.modules.users_roles.service import authorize
 
 practitioners_router = APIRouter(prefix="/practitioners", tags=["appointments"])
@@ -103,6 +103,7 @@ def list_practitioners(*, actor: ActorDep) -> list[PractitionerRead]:
 def list_appointments(
     *,
     actor: ActorDep,
+    request: Request,
     starts_from: Annotated[AwareDatetime, Query(alias="from")],
     starts_before: Annotated[AwareDatetime, Query(alias="to")],
     practitioner_id: uuid.UUID | None = None,
@@ -111,10 +112,11 @@ def list_appointments(
     authorize(actor, APPOINTMENT_PERMISSIONS["read"])
     try:
         return service.list_appointments(
-            tenant_id=actor.tenant_id,
+            actor=actor,
             starts_from=starts_from,
             starts_before=starts_before,
             practitioner_id=practitioner_id,
+            source_ip=_client_address(request),
         )
     except service.AppointmentRefused as refusal:
         _raise(refusal)
@@ -167,19 +169,24 @@ def change_appointment_status(
     responses=_REFUSALS,
 )
 def list_patient_appointments(
-    *, actor: ActorDep, patient_id: uuid.UUID
+    *, actor: ActorDep, request: Request, patient_id: uuid.UUID
 ) -> list[AppointmentRead]:
-    """One patient's bookings, newest first. Another tenant's patient is `404`."""
+    """One patient's bookings, newest first. Another tenant's patient is `404`; one of this
+    organisation's without the care relationship a doctor's or nurse's grant needs is `403`."""
     authorize(
         actor, APPOINTMENT_PERMISSIONS["read"], ResourceRef(tenant_id=actor.tenant_id)
     )
-    found = service.list_for_patient(tenant_id=actor.tenant_id, patient_id=patient_id)
-    if found is None:
+    result = service.list_for_patient(
+        actor=actor, patient_id=patient_id, source_ip=_client_address(request)
+    )
+    if not result.found:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": service.PATIENT_NOT_FOUND, "message": "Patient not found"},
         )
-    return found
+    if result.decision is not None:
+        enforce(result.decision)
+    return result.bookings
 
 
 # -- public ----------------------------------------------------------------------------------------

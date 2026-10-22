@@ -397,8 +397,13 @@ def test_list_and_search_reads_are_audited(api: PatientsApi) -> None:
         ("SUCCESS", None),
         ("SUCCESS", None),
     ]
-    assert reads[0]["metadata"] == {"result_count": 2}
+    # The owner's `patient:read` is unconditional, so the purpose is the administrative one (T1-34).
+    assert reads[0]["metadata"] == {
+        "purpose": "PRACTICE_ADMINISTRATION",
+        "result_count": 2,
+    }
     assert reads[1]["metadata"] == {
+        "purpose": "PRACTICE_ADMINISTRATION",
         "query_filters": [service.DATE_OF_BIRTH, service.NAME_PREFIX],
         "result_count": 1,
     }

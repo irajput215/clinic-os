@@ -214,6 +214,61 @@ export type Body_login_login_access_token = {
 };
 
 /**
+ * CareRelationshipCreate
+ *
+ * Add a practitioner to a patient's care team. Unknown fields (a `tenant_id` above all) are `422`.
+ */
+export type CareRelationshipCreate = {
+    /**
+     * Practitioner Id
+     */
+    practitioner_id: string;
+};
+
+/**
+ * CareTeamMember
+ *
+ * One active relationship on a patient's care team. `practitioner_name` is `None` for an account
+ * that is no longer an active practitioner (the relationship still shows, so it can be ended).
+ */
+export type CareTeamMember = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Practitioner Id
+     */
+    practitioner_id: string;
+    /**
+     * Practitioner Name
+     */
+    practitioner_name: string | null;
+    /**
+     * Active From
+     */
+    active_from: string;
+    /**
+     * Source
+     */
+    source: string;
+};
+
+/**
+ * CareTeamPublic
+ */
+export type CareTeamPublic = {
+    /**
+     * Data
+     */
+    data: Array<CareTeamMember>;
+    /**
+     * Count
+     */
+    count: number;
+};
+
+/**
  * ClinicalRecordAppend
  *
  * The body of `PATCH /api/v1/clinical-records/{id}` and of `POST .../amendments`.
@@ -652,6 +707,10 @@ export type OwnPermissionsRead = {
      * Permissions
      */
     permissions: Array<string>;
+    /**
+     * Relationship Bound
+     */
+    relationship_bound?: Array<string>;
 };
 
 /**
@@ -4512,3 +4571,97 @@ export type dashboardReadTodayResponses = {
 };
 
 export type dashboardReadTodayResponse = dashboardReadTodayResponses[keyof dashboardReadTodayResponses];
+
+export type careRelationshipsListCareTeamData = {
+    body?: never;
+    path: {
+        /**
+         * Patient Id
+         */
+        patient_id: string;
+    };
+    query?: never;
+    url: '/api/v1/patients/{patient_id}/care-relationships';
+};
+
+export type careRelationshipsListCareTeamErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type careRelationshipsListCareTeamError = careRelationshipsListCareTeamErrors[keyof careRelationshipsListCareTeamErrors];
+
+export type careRelationshipsListCareTeamResponses = {
+    /**
+     * Successful Response
+     */
+    200: CareTeamPublic;
+};
+
+export type careRelationshipsListCareTeamResponse = careRelationshipsListCareTeamResponses[keyof careRelationshipsListCareTeamResponses];
+
+export type careRelationshipsRecordCareRelationshipData = {
+    body: CareRelationshipCreate;
+    path: {
+        /**
+         * Patient Id
+         */
+        patient_id: string;
+    };
+    query?: never;
+    url: '/api/v1/patients/{patient_id}/care-relationships';
+};
+
+export type careRelationshipsRecordCareRelationshipErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type careRelationshipsRecordCareRelationshipError = careRelationshipsRecordCareRelationshipErrors[keyof careRelationshipsRecordCareRelationshipErrors];
+
+export type careRelationshipsRecordCareRelationshipResponses = {
+    /**
+     * Successful Response
+     */
+    201: CareTeamPublic;
+};
+
+export type careRelationshipsRecordCareRelationshipResponse = careRelationshipsRecordCareRelationshipResponses[keyof careRelationshipsRecordCareRelationshipResponses];
+
+export type careRelationshipsEndCareRelationshipData = {
+    body?: never;
+    path: {
+        /**
+         * Patient Id
+         */
+        patient_id: string;
+        /**
+         * Care Relationship Id
+         */
+        care_relationship_id: string;
+    };
+    query?: never;
+    url: '/api/v1/patients/{patient_id}/care-relationships/{care_relationship_id}/end';
+};
+
+export type careRelationshipsEndCareRelationshipErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type careRelationshipsEndCareRelationshipError = careRelationshipsEndCareRelationshipErrors[keyof careRelationshipsEndCareRelationshipErrors];
+
+export type careRelationshipsEndCareRelationshipResponses = {
+    /**
+     * Successful Response
+     */
+    200: CareTeamPublic;
+};
+
+export type careRelationshipsEndCareRelationshipResponse = careRelationshipsEndCareRelationshipResponses[keyof careRelationshipsEndCareRelationshipResponses];

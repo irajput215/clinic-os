@@ -52,13 +52,12 @@ Each section is audited exactly as its owning module audits its own list route, 
 | Section | Event | Payload |
 |---|---|---|
 | `approvals` | `tga_approval.read` `SUCCESS` (the register's event) | `query_filters: {state: ["PENDING"], expiring_within_days: 30}`, `result_count` (rows returned) |
-| `appointments` | none, like `GET /appointments` (deferred with `patient.read`, T1-34) | - |
-| `scripts` | none, like `GET /prescriptions` (the closed catalogue has no prescription read action) | - |
+| `appointments` | `appointment.read` `SUCCESS` (T1-34) | `query_filters: ["today"]`, `result_count` |
+| `scripts` | `prescription.read` `SUCCESS` (T1-34) | `query_filters: ["actionable"]`, `result_count` |
 
-**No catalogue action was added.** Auditing the whole page would need a new action (for example a
-`dashboard.read`), which is a change to the closed catalogue (`docs/features/04-audit-log/05-data-and-audit.md`)
-and the owner's decision, not this phase's. The gaps above are the same ones the appointments and
-prescriptions modules already record.
+The three events are written together (`audit.record_many`: one chain lock and head, one insert), so
+the page pays the same two audit round trips it paid for the approvals event alone. No `dashboard.read`
+was added: each section keeps its owning module's event, which is what the page's own rule asks.
 
 A `tenant_id` query parameter is ignored. When the approvals section is read it is written down on that
 section's event as `CLIENT_TENANT_ID_IGNORED` (INV-1); when it is withheld there is no event to carry it

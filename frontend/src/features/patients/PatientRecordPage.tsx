@@ -40,6 +40,7 @@ import {
   formatTime,
   patientRef,
 } from "@/lib/format"
+import { CareTeamCard } from "./CareTeamCard"
 import { NotesTab } from "./NotesTab"
 import { PatientFormDialog } from "./PatientFormDialog"
 import { PATIENT_TAB_KEYS, PATIENT_TABS, type PatientTab } from "./tabs"
@@ -228,6 +229,7 @@ function OverviewTab({ patientId }: { patientId: string }) {
             </ul>
           )}
         </Card>
+        <CareTeamCard patientId={patientId} />
       </div>
     </div>
   )
@@ -376,34 +378,39 @@ function AppointmentsTab({ patientId }: { patientId: string }) {
       ) : (appts.data ?? []).length === 0 ? (
         <EmptyState title="No appointments." />
       ) : (
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th className="pl-5">When</th>
-              <th>Type</th>
-              <th className="max-sm:hidden">With</th>
-              <th className="pr-5">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {appts.data!.map((a) => (
-              <tr key={a.id}>
-                <td className="pl-5">
-                  <Mono>
-                    {formatDate(a.starts_at)} {formatTime(a.starts_at)}
-                  </Mono>
-                </td>
-                <td>{APPOINTMENT_TYPES[a.type].label}</td>
-                <td className="max-sm:hidden">
-                  {practitioners.find((p) => p.id === a.practitioner_id)?.name}
-                </td>
-                <td className="pr-5">
-                  <AppointmentStatusPill status={a.status} />
-                </td>
+        <div className="overflow-x-auto">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th className="pl-5">When</th>
+                <th>Type</th>
+                <th className="max-sm:hidden">With</th>
+                <th className="pr-5">Status</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {appts.data!.map((a) => (
+                <tr key={a.id}>
+                  <td className="pl-5">
+                    <Mono>
+                      {formatDate(a.starts_at)} {formatTime(a.starts_at)}
+                    </Mono>
+                  </td>
+                  <td>{APPOINTMENT_TYPES[a.type].label}</td>
+                  <td className="max-sm:hidden">
+                    {
+                      practitioners.find((p) => p.id === a.practitioner_id)
+                        ?.name
+                    }
+                  </td>
+                  <td className="pr-5">
+                    <AppointmentStatusPill status={a.status} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </Card>
   )
@@ -430,49 +437,53 @@ function ActivityTab({ patientId }: { patientId: string }) {
       ) : events.data.length === 0 ? (
         <EmptyState title="No recorded activity for this record yet." />
       ) : (
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th className="pl-5">When</th>
-              <th>Action</th>
-              <th className="max-sm:hidden">Role</th>
-              <th className="max-md:pr-5">Result</th>
-              <th className="pr-5 max-md:hidden">Hash</th>
-            </tr>
-          </thead>
-          <tbody>
-            {events.data.map((e) => (
-              <tr key={e.event_id}>
-                <td className="pl-5">
-                  <Mono>{formatDayMonthTime(e.timestamp)}</Mono>
-                </td>
-                <td>{actionLabel(e.action)}</td>
-                <td className="text-stone max-sm:hidden">
-                  {e.actor_role ?? "-"}
-                </td>
-                <td className="max-md:pr-5">
-                  <span
-                    className={
-                      e.result === "SUCCESS" ? "text-ok-deep" : "text-danger"
-                    }
-                  >
-                    {e.result.toLowerCase()}
-                  </span>
-                  {e.reason ? (
-                    <span className="ml-1 text-xs text-stone">
-                      ({e.reason})
-                    </span>
-                  ) : null}
-                </td>
-                <td className="pr-5 max-md:hidden">
-                  <Mono className="text-[11px] text-stone-faint">
-                    {e.hash.slice(0, 12)}…
-                  </Mono>
-                </td>
+        // A row can be wider than a phone (a long action or reason): it scrolls inside the card,
+        // never the page, like every other table.
+        <div className="overflow-x-auto">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th className="pl-5">When</th>
+                <th>Action</th>
+                <th className="max-sm:hidden">Role</th>
+                <th className="max-md:pr-5">Result</th>
+                <th className="pr-5 max-md:hidden">Hash</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {events.data.map((e) => (
+                <tr key={e.event_id}>
+                  <td className="pl-5">
+                    <Mono>{formatDayMonthTime(e.timestamp)}</Mono>
+                  </td>
+                  <td>{actionLabel(e.action)}</td>
+                  <td className="text-stone max-sm:hidden">
+                    {e.actor_role ?? "-"}
+                  </td>
+                  <td className="max-md:pr-5">
+                    <span
+                      className={
+                        e.result === "SUCCESS" ? "text-ok-deep" : "text-danger"
+                      }
+                    >
+                      {e.result.toLowerCase()}
+                    </span>
+                    {e.reason ? (
+                      <span className="ml-1 text-xs text-stone">
+                        ({e.reason})
+                      </span>
+                    ) : null}
+                  </td>
+                  <td className="pr-5 max-md:hidden">
+                    <Mono className="text-[11px] text-stone-faint">
+                      {e.hash.slice(0, 12)}…
+                    </Mono>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </Card>
   )

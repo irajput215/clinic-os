@@ -188,20 +188,18 @@ def list_patient_tga_approvals(
     """A patient's approvals, keyset-paginated, tenant-scoped by RLS (F15, US-2)."""
     _authorize(actor, TGA_APPROVAL_READ, action=service.APPROVAL_READ)
     try:
-        page = service.list_approvals(
-            tenant_id=actor.tenant_id,
-            patient_id=patient_id,
-            limit=limit,
-            cursor=cursor,
-            actor_id=actor.user_id,
-            actor_role=actor.actor_role,
+        result = service.list_approvals(
+            actor=actor, patient_id=patient_id, limit=limit, cursor=cursor
         )
     except service.InvalidCursor as error:
         raise _invalid_cursor(error) from error
-    if page is None:
+    if result.decision is not None:
+        # The treating-relationship refusal (T1-34), already audited `DENIED`.
+        enforce(result.decision)
+    if result.page is None:
         # Not one of the caller's patients; the refusal was audited `CROSS_TENANT` (R8).
         raise _not_found()
-    return page
+    return result.page
 
 
 @router.get("", response_model=TgaApprovalRegister)

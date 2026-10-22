@@ -134,7 +134,7 @@ def test_a_grant_cannot_live_longer_than_two_minutes(clinic: Clinic) -> None:
 def test_a_nurse_cannot_sign_and_the_refusal_is_audited(
     rx: RxApi, clinic: Clinic
 ) -> None:
-    nurse = rx.member(clinic, "NURSE")
+    nurse = rx.related_member(clinic, "NURSE")
     staged = rx.stage(clinic, nurse)
     response = rx.client.post(
         f"{URL}/{staged['id']}/sign",

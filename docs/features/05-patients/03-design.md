@@ -101,6 +101,12 @@ inferred from clinic membership and never widens to the tenant.
 > practitioner_id, patient_id, clinic_id, active_from, active_to, source)`, which has **no ERD table
 > definition and no named owner** (`06-authentication-rbac.md` §11 open item 5). Not designed here; the
 > rule cannot be fully evidenced until the table is specified.
+>
+> **Built (T1-34, 2026-10-08)** with the table task T1-04 created: the rule binds the matrix's `cr`
+> grants, runs in the statement that loads the patient, and audits `care_relationship_id` and a
+> server-derived `purpose`. Who maintains the table is still OPEN; the interim (relationships recorded
+> explicitly on the patient's care team by an unbound role) is decision
+> [D-007](../../reference/decisions/D-007-treating-relationship-rule.md).
 
 ## Endpoints
 

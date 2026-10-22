@@ -42,11 +42,14 @@ indistinguishable to the caller.
 - Permission: `patient:read`
 - Tenant scope: session
 - Ownership rule: every returned row's `tenant_id` equals the session's tenant; another tenant's rows are absent, not denied
+- Treating relationship: a relationship-bound reader (a `DOCTOR` or `NURSE` grant, the matrix's `cr`)
+  sees only the patients they have an active care relationship with, and the total counts only those
+  (T1-34)
 - Input schema: `limit` bounded `1..25`, an opaque signed `cursor`; **any other query parameter is
   refused** `422 UNSUPPORTED_QUERY_PARAMETER`, so a search term put in the URL (`?q=`) is never
   silently ignored and answered with the unfiltered list (R12)
 - Output schema: `PatientsPublic` - one keyset page, the tenant's live total, `next_cursor`
-- Audit: `patient.read` on the same transaction, with `result_count`; a permission refusal, an
+- Audit: `patient.read` on the same transaction, with `result_count` and `purpose`; a permission refusal, an
   unsupported parameter and a cursor that does not verify are each audited `DENIED`
 - Rate limit: deferred - the list is a plain tenant-scoped read, as before this change
 - Errors: `401` (unauthenticated), `403` (`PERMISSION_NOT_HELD` or no organisation on the account), `422` (`INVALID_CURSOR`, `UNSUPPORTED_QUERY_PARAMETER`, a bad `limit`); fails closed = yes
@@ -73,11 +76,14 @@ indistinguishable to the caller.
 - Permission: `patient:read`
 - Tenant scope: both — the session resolves the tenant, the resource is matched against it
 - Ownership rule: the record is returned only when its `tenant_id` equals the session's tenant; otherwise `404` with no body fields
+- Treating relationship: required for a relationship-bound grant; without one, `403
+  AUTHZ_CARE_RELATIONSHIP_DENIED` (T1-34, R7). Across a tenant boundary the answer stays `404`
 - Input schema: none — `patient_id` is a UUID path parameter
 - Output schema: `PatientRead`
-- Audit: deferred — `patient.read`, for the reason the list route gives (T1-34)
-- Rate limit: deferred — no rate-limit layer is applied to authenticated routes yet
-- Errors: `401` (unauthenticated), `403` (`PERMISSION_NOT_HELD` or no organisation on the account), `404` (absent or another tenant's), `422`; fails closed = yes
+- Audit: `patient.read` on the read's own transaction - `SUCCESS` with `care_relationship_id` (when
+  one exists) and `purpose`; every refusal (`404`, permission, relationship) `DENIED` with its reason
+- Rate limit: 300/min per session (the single-resource read class)
+- Errors: `401` (unauthenticated), `403` (`PERMISSION_NOT_HELD`, `AUTHZ_CARE_RELATIONSHIP_DENIED` or no organisation on the account), `404` (absent or another tenant's), `422`; fails closed = yes
 - Step-up: no
 
 #### `PATCH /api/v1/patients/{patient_id}`
@@ -85,29 +91,27 @@ indistinguishable to the caller.
 - Permission: `patient:update`
 - Tenant scope: both — the session resolves the tenant, the resource is matched against it
 - Ownership rule: the record is updated only when its `tenant_id` equals the session's tenant; otherwise `404` and the row is untouched
+- Treating relationship: required for a relationship-bound grant (`patient:update` is `G cr` for a
+  doctor or nurse); without one, `403 AUTHZ_CARE_RELATIONSHIP_DENIED` and the row is untouched
 - Input schema: `PatientUpdate` — unknown fields rejected
 - Output schema: `PatientRead`
 - Audit: `patient.update` — written in the same transaction as the change (INV-4), with
-  `changed_fields` (names only)
+  `changed_fields` (names only); every refusal `DENIED` with its reason
 - Rate limit: deferred — no rate-limit layer is applied to authenticated routes yet
-- Errors: `401` (unauthenticated), `403` (`PERMISSION_NOT_HELD` or no organisation on the account), `404` (absent or another tenant's), `422`; fails closed = yes
+- Errors: `401` (unauthenticated), `403` (`PERMISSION_NOT_HELD`, `AUTHZ_CARE_RELATIONSHIP_DENIED` or no organisation on the account), `404` (absent or another tenant's), `422`; fails closed = yes
 - Step-up: no
 
-Out of scope for this slice - merge, identifier search, duplicates, export, the treating-relationship
-rule, the single-record `patient.read` event, identifier validation, and encryption/blind-index key
-handling - is listed
-with a reason in the `service` module docstring. The treating-relationship resource rule (task T1-34) is a
-blocked dependency with no `care_relationships` table; `can()` therefore has no resource rule to run
-yet, which can only remove access, never grant it.
+Out of scope for this slice - merge, identifier search, duplicates, export, identifier validation,
+and encryption/blind-index key handling - is listed with a reason in the `service` module docstring.
 """
 
 import uuid
-from typing import Final
+from typing import Final, NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from app.api.deps import ActorDep
-from app.core.rate_limit import patient_search_rate_limit
+from app.core.rate_limit import patient_search_rate_limit, read_rate_limit
 from app.modules.patients import service
 from app.modules.patients.schemas import (
     MAX_CURSOR_LENGTH,
@@ -119,7 +123,7 @@ from app.modules.patients.schemas import (
     PatientUpdate,
 )
 from app.modules.users_roles.catalog import PATIENT_PERMISSIONS
-from app.modules.users_roles.policy import Actor, ResourceRef, can, enforce
+from app.modules.users_roles.policy import Actor, can, enforce
 from app.modules.users_roles.service import authorize
 
 router = APIRouter(prefix="/patients", tags=["patients"])
@@ -157,14 +161,39 @@ def _read_context(actor: Actor, request: Request) -> service.ReadContext:
     )
 
 
-def _authorise_read(actor: Actor, context: service.ReadContext) -> None:
-    """`patient:read`, with the refusal audited before it is raised (R13, equal fidelity)."""
-    decision = can(actor, PATIENT_PERMISSIONS["read"])
+def _authorise(
+    actor: Actor,
+    context: service.ReadContext,
+    *,
+    permission: str = PATIENT_PERMISSIONS["read"],
+    action: str = service.PATIENT_READ,
+    resource_id: uuid.UUID | None = None,
+) -> None:
+    """The permission, with the refusal audited before it is raised (R13, equal fidelity)."""
+    decision = can(actor, permission)
     if not decision.allowed:
         service.record_read_denial(
-            tenant_id=actor.tenant_id, context=context, reason=AUTHZ_DENIED
+            tenant_id=actor.tenant_id,
+            context=context,
+            reason=AUTHZ_DENIED,
+            action=action,
+            resource_id=resource_id,
         )
     enforce(decision)
+
+
+def _care_scope(actor: Actor) -> uuid.UUID | None:
+    """The reader whose relationships bound a list, or `None` when `patient:read` is unconditional."""
+    return (
+        actor.user_id if actor.relationship_bound(PATIENT_PERMISSIONS["read"]) else None
+    )
+
+
+def _raise_refusal(refusal: service.PatientRefusal) -> NoReturn:
+    """The policy layer's own `{code, message}` refusal, or `404` with no body fields."""
+    if refusal.decision is not None:
+        enforce(refusal.decision)
+    raise _patient_not_found()
 
 
 def _invalid_cursor() -> HTTPException:
@@ -196,7 +225,7 @@ def list_patients(
 ) -> PatientsPublic:
     """One keyset page of the caller's patients. Follow `next_cursor` for the next page."""
     context = _read_context(actor, request)
-    _authorise_read(actor, context)
+    _authorise(actor, context)
     if set(request.query_params) - _LIST_QUERY_PARAMETERS:
         service.record_read_denial(
             tenant_id=actor.tenant_id,
@@ -210,7 +239,11 @@ def list_patients(
         )
     try:
         return service.list_patients(
-            tenant_id=actor.tenant_id, context=context, limit=limit, cursor=cursor
+            tenant_id=actor.tenant_id,
+            context=context,
+            limit=limit,
+            cursor=cursor,
+            care_scope=_care_scope(actor),
         )
     except service.InvalidCursor as error:
         raise _invalid_cursor() from error
@@ -226,7 +259,7 @@ def search_patients(
 ) -> PatientsPublic:
     """Find the caller's patients by name prefix, date of birth or reference. Keyset-paged."""
     context = _read_context(actor, request)
-    _authorise_read(actor, context)
+    _authorise(actor, context)
     try:
         return service.search_patients(
             tenant_id=actor.tenant_id,
@@ -234,46 +267,49 @@ def search_patients(
             q=search_in.q,
             limit=search_in.limit,
             cursor=search_in.cursor,
+            care_scope=_care_scope(actor),
         )
     except service.InvalidCursor as error:
         raise _invalid_cursor() from error
 
 
-@router.get("/{patient_id}", response_model=PatientRead)
-def read_patient(*, actor: ActorDep, patient_id: uuid.UUID) -> PatientRead:
-    """Read one patient. Another tenant's record is `404`, never `403`."""
-    patient = service.get_patient(tenant_id=actor.tenant_id, patient_id=patient_id)
-    if patient is None:
-        raise _patient_not_found()
-    # The row was loaded under the session's tenant, so its `tenant_id` equals the actor's; the
-    # policy call states that explicitly and refuses any mismatch with `404 CROSS_TENANT` (R6).
-    authorize(
-        actor, PATIENT_PERMISSIONS["read"], ResourceRef(tenant_id=actor.tenant_id)
-    )
-    return patient
+@router.get(
+    "/{patient_id}",
+    response_model=PatientRead,
+    dependencies=[Depends(read_rate_limit)],
+)
+def read_patient(
+    *, actor: ActorDep, request: Request, patient_id: uuid.UUID
+) -> PatientRead:
+    """Read one patient. Another tenant's record is `404`, never `403`; one of this organisation's
+    without the care relationship a doctor's or nurse's grant needs is `403`."""
+    context = _read_context(actor, request)
+    _authorise(actor, context, resource_id=patient_id)
+    result = service.read_patient(actor=actor, patient_id=patient_id, context=context)
+    if isinstance(result, service.PatientRefusal):
+        _raise_refusal(result)
+    return result
 
 
 @router.patch("/{patient_id}", response_model=PatientRead)
 def update_patient(
     *,
     actor: ActorDep,
+    request: Request,
     patient_id: uuid.UUID,
     patient_in: PatientUpdate,
 ) -> PatientRead:
     """Update one patient. Unknown fields are `422`; another tenant's record is `404`."""
-    patient = service.get_patient(tenant_id=actor.tenant_id, patient_id=patient_id)
-    if patient is None:
-        raise _patient_not_found()
-    authorize(
-        actor, PATIENT_PERMISSIONS["update"], ResourceRef(tenant_id=actor.tenant_id)
+    _authorise(
+        actor,
+        _read_context(actor, request),
+        permission=PATIENT_PERMISSIONS["update"],
+        action=service.PATIENT_UPDATE,
+        resource_id=patient_id,
     )
-    updated = service.update_patient(
-        tenant_id=actor.tenant_id,
-        patient_id=patient_id,
-        patient_in=patient_in,
-        actor_id=actor.user_id,
-        actor_role=actor.actor_role,
+    result = service.update_patient(
+        actor=actor, patient_id=patient_id, patient_in=patient_in
     )
-    if updated is None:
-        raise _patient_not_found()
-    return updated
+    if isinstance(result, service.PatientRefusal):
+        _raise_refusal(result)
+    return result

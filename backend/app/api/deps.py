@@ -59,6 +59,7 @@ class SessionAccount:
     may_transact: bool
     permissions: frozenset[str]
     role_codes: frozenset[str]
+    unscoped_permissions: frozenset[str]
 
 
 def get_session_account(token: TokenDep) -> SessionAccount:
@@ -123,13 +124,14 @@ def get_session_account(token: TokenDep) -> SessionAccount:
     # A verified session may see how long its own request took; an anonymous caller may not
     # (`app/core/server_timing.py`, "What is never recorded").
     expose_server_timing()
-    permissions, role_codes = users_roles_service.grants_from_rows(grant_rows)
+    grants = users_roles_service.grants_from_rows(grant_rows)
     record_identity(tenant_id=user.tenant_id, actor_id=user.id)
     return SessionAccount(
         user=user,
         may_transact=may_transact,
-        permissions=permissions,
-        role_codes=role_codes,
+        permissions=grants.permissions,
+        role_codes=grants.role_codes,
+        unscoped_permissions=grants.unscoped_permissions,
     )
 
 
@@ -224,6 +226,7 @@ def get_actor(account: SessionAccountDep) -> Actor:
         is_active=current_user.is_active,
         permissions=account.permissions,
         role_codes=account.role_codes,
+        unscoped_permissions=account.unscoped_permissions,
     )
 
 

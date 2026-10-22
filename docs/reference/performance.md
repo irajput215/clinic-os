@@ -190,6 +190,16 @@ branch after the core changes and before the module work.
 | `GET /roles` | not measured | 11 | **3** | **3** |
 | `GET /practitioners` | 22 | 5 | **3** | **3** |
 
+**T1-34 (2026-10-08) audits the reads that were not audited before**, as the patients, clinical-records
+and booking documents require (decision D-007): `GET /prescriptions` is now **6** seeded / **5** empty,
+`GET /appointments` **6** / **5**, a patient's record `GET /patients/{id}` **5** / **5**, a patient's
+bookings and scripts **5** and **6** / **5**: each is the two trips of the audit write, and the care
+relationship itself costs none (it is a subquery of the route's first statement). Today stays at 7 / 6
+while auditing two more sections, because its three events are one `audit.record_many` (one lock and
+head, one multi-row insert). The same change found that `db-rt` did not count psycopg's
+`executemany` (it enters pipeline mode through a private method); `TimedConnection` now counts it, and
+a test pins it.
+
 "Core only" on a seeded clinic shows what the per-row lookups cost once there is data (Today 32,
 scripts 17): the empty-clinic counts hid them. A read above three round trips is an audited read
 (the audit event costs two: the chain lock with the head read, then the insert) or a read whose

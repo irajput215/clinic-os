@@ -11,7 +11,12 @@ import { httpStatus } from "@/lib/http"
  * backend decides every request.
  */
 export type MyPermissions =
-  | { known: true; codes: readonly string[] }
+  | {
+      known: true
+      codes: readonly string[]
+      /** Held only through a care relationship (a doctor's or nurse's patient grants, T1-34). */
+      relationshipBound: readonly string[]
+    }
   | { known: false }
 
 export const myPermissionsQuery = queryOptions({
@@ -19,12 +24,17 @@ export const myPermissionsQuery = queryOptions({
   queryFn: async (): Promise<MyPermissions> => {
     try {
       const { data } = await UsersService.readOwnPermissions()
-      return { known: true, codes: data.permissions }
+      return {
+        known: true,
+        codes: data.permissions,
+        relationshipBound: data.relationship_bound ?? [],
+      }
     } catch (error) {
       const status = httpStatus(error)
       if (status === 404 || status === 422) return { known: false }
       // `403` is the answer for an account with no organisation: it holds nothing.
-      if (status === 403) return { known: true, codes: [] }
+      if (status === 403)
+        return { known: true, codes: [], relationshipBound: [] }
       throw error
     }
   },

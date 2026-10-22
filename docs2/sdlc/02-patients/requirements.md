@@ -17,6 +17,8 @@
 - R5 An unknown id, or another organisation's, shows "not available" (the API answers `404` for both).
 - R6 The record has tabs: Overview, Consult notes, TGA approvals, Scripts, Appointments, Activity. The tab is in the URL (`?tab=`).
 - R7 There is no delete (R11 in docs/features/05-patients).
+- R8 (T1-34) A doctor or nurse opens a record only while on the patient's care team. Without it the record says "You have no care relationship with this patient" and what to do next, and nothing else about the record; their patient list holds only the patients whose care team they are on.
+- R9 (T1-34, D-007 interim) The Overview's **Care team** card, shown to an owner, administrator or authorised prescriber, lists the active care team, adds an active doctor or nurse, and ends a relationship. No optimistic update: the card redraws from the server's answer.
 
 ## Non-functional
 
