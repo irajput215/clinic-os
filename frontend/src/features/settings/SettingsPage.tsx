@@ -20,7 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { changePassword, deactivateMe, updateMe } from "@/data/account"
-import { useCanConfigureClinic } from "@/data/tenant"
+import { useCanConfigureClinic } from "@/data/useClinic"
 import {
   Card,
   Field,
