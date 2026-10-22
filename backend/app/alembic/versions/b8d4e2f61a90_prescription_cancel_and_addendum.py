@@ -1,7 +1,7 @@
 """Prescription cancel and addendum: the reason code, the superseded original, the addendum key
 
 Revision ID: b8d4e2f61a90
-Revises: 44c34ed0d6b2
+Revises: 6045114a607a
 Create Date: 2026-10-08
 
 FEAT-11 R5 ("`SIGNED` is immutable; a correction is an addendum") and R11 ("cancel before dispatch
@@ -28,7 +28,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "b8d4e2f61a90"
-down_revision = "44c34ed0d6b2"
+down_revision = "6045114a607a"
 branch_labels = None
 depends_on = None
 
@@ -184,11 +184,12 @@ def downgrade() -> None:
     op.drop_constraint(
         "fk_prescriptions_tenant_supersedes", "prescriptions", type_="foreignkey"
     )
+    # Suffix names: the shared naming convention renders `ck_prescriptions_<name>`, as on create.
     for name in (
-        "ck_prescriptions_addendum_key",
-        "ck_prescriptions_supersedes_other",
-        "ck_prescriptions_cancel_reason_present",
-        "ck_prescriptions_cancel_reason_code",
+        "addendum_key",
+        "supersedes_other",
+        "cancel_reason_present",
+        "cancel_reason_code",
     ):
         op.drop_constraint(name, "prescriptions", type_="check")
     op.drop_column("prescriptions", "addendum_key")
