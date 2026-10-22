@@ -74,6 +74,26 @@ Not gate-blocking, but each one is the owner's to make and nothing changes until
 |---|---|---|---|---|
 | **O-1** | FastAPI's native OpenTelemetry (`fastapi[standard]` 0.143 and later) can export request spans, metrics and logs over OTLP when the environment sets `FASTAPI_OTEL_AUTO_CONFIGURE=true` and an endpoint. Spans carry the request path (record ids) and the query string. Enabling it is a new data flow to the telemetry collector (INV-5, L3) | **Off.** `app/main.py` passes `NATIVE_TELEMETRY_OFF` (every signal off, environment auto-configuration refused); `tests/security/test_no_native_telemetry.py` holds it off | CTO + Privacy Officer | 2026-10-08, dependency update |
 
+
+### 1.5 Deferred by Milestone 4 (2026-10-22)
+
+Milestone 4 built signup verification, staff invitations, the treating-relationship rule, the clinic
+display name, clinic hours with booking emails, and prescription corrections. These items were out of
+its scope by the owner's instruction. Each is recorded here as an open decision, with what the code
+does in the meantime; nothing below is built, and no work may assume an answer.
+
+| Item | What is open | What the code does meanwhile (fail-safe) | Owner | Record |
+|---|---|---|---|---|
+| **MFA** | Whether ClinicOS adopts a managed identity provider or hardens its own password auth, and with it MFA enrolment, recovery and phishing-resistant factors | Password sign-in with email verification at signup (D-008) and a step-up proof before signing and dispatching a script. **No MFA.** Gate 3 cannot be signed | CTO + Security Lead | [D-003](decisions/D-003-identity-model.md); §3.2 `02-security-architecture.md` item 1 |
+| **eRx rail and pharmacy dispatch** | The certified e-prescribing conformant party, its contract, residency and sub-processors, credentials, egress and the minimum-data payload | **No transport exists.** `configured_transport()` returns `None`, so a dispatched script stays `QUEUED` and the app says "Not sent: no pharmacy or eRx transport is configured" (`backend/app/modules/prescriptions/transport.py`) | Compliance Lead (conformant party, REQUIRES LEGAL/REGULATORY VALIDATION) + Practice Owner (contract, funding) | §3.2 `19-project-charter.md` O1; FEAT-10 OPEN-1; FEAT-13 OPEN-2 |
+| **FEAT-12 inbound webhook** | The signed receiver for asynchronous dispatch confirmations, its mount point, signature scheme and the reconciliation schedule | **Not built.** No route accepts provider callbacks; the `clinos_webhook_ingest` role exists with no table to write. It depends on the eRx rail above | Security Lead (mount point, O5) + Engineering Lead | §5 C15; [D-005](decisions/D-005-route-path-convention.md) item 1 |
+| **CAPTCHA** | Whether public signup and public booking need a human-verification challenge. Every CAPTCHA service is a new third-party data flow from the visitor's browser, so it needs a vendor, residency and privacy decision first | **None.** Public signup and booking are protected by per-client rate limits, email verification (signup) and one answer for every address (no enumeration) | Security Lead + Privacy Officer | `docs2/sdlc/04-calendar-and-booking/api.md` "Deferred"; [D-008](decisions/D-008-signup-email-verification.md) |
+| **Clinical Safety Officer rulings** | The clinical-safety choices Milestone 4 had to make provisionally (each listed with its fail-safe interim in its decision record) | Each interim **grants less** than any likely ruling: | Clinical Safety Officer | below |
+| | - the approval validity boundary | `valid_to` half-open | | [D-006](decisions/D-006-approval-grain-and-validity-boundary.md) |
+| | - the roles bound by the treating relationship, the relationship's source of truth, and whether practice-wide screens are filtered | the matrix as written; relationships only by explicit, audited care-team upkeep; practice-wide screens audited, not filtered | (with the Security Lead for the source) | [D-007](decisions/D-007-treating-relationship-rule.md) Interims 1 and 3; §3.2 `06-authentication-rbac.md` item 5 |
+| | - the cancel-reason vocabulary, who may cancel a colleague's script, and correcting a dispatched script | a closed interim list; only the drafter or prescriber; no correction once dispatched | | [D-010](decisions/D-010-prescription-corrections.md) |
+| **Booking reminders trigger** | Which scheduler calls the reminder job in production | Confirmations are sent at once; reminders wait in the outbox until the owner sets the job token and URL, and one whose appointment has started is skipped, never sent late | Practice Owner | D-009 (scheduled jobs and booking reminders) |
+
 ---
 
 ## 2. Legal and regulatory validation register
