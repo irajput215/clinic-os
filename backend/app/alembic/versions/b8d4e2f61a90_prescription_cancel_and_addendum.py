@@ -21,6 +21,8 @@ requires a reason"), decision D-010.
   stays frozen. Everything the earlier version enforced is unchanged.
 
 Nullable columns and checks that hold on every existing row: the upgrade is safe on a populated table.
+The downgrade refuses (`DOWNGRADE_REFUSED`) once any row carries a cancel reason or an addendum link,
+because dropping the columns would erase that clinical history.
 No `ALTER ... OWNER`, no role, no extension.
 """
 
@@ -178,7 +180,27 @@ def upgrade() -> None:
     op.execute(_function(with_addendum=True))
 
 
+_REFUSE_LOSSY_DOWNGRADE = """
+DO $guard$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM prescriptions
+        WHERE cancel_reason_code IS NOT NULL OR supersedes_id IS NOT NULL
+    ) THEN
+        RAISE EXCEPTION 'DOWNGRADE_REFUSED: prescriptions carry cancel reasons or addendum links;'
+            ' downgrading would discard clinical history'
+            USING ERRCODE = 'check_violation';
+    END IF;
+END
+$guard$;
+"""
+
+
 def downgrade() -> None:
+    # Fail closed: once a script has been cancelled with a reason or amended, dropping these columns
+    # would erase that history (and a later upgrade could not restore it). A database with no such row
+    # downgrades cleanly.
+    op.execute(_REFUSE_LOSSY_DOWNGRADE)
     op.execute(_function(with_addendum=False))
     op.drop_index("uq_prescriptions_tenant_supersedes", table_name="prescriptions")
     op.drop_constraint(
