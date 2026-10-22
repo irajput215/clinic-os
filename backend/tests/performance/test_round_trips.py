@@ -15,8 +15,9 @@ status and its grants, in one flight), the route's first statement (which carrie
 - on an **empty** clinic, the floor: a lookup that has nothing to look up costs nothing.
 
 Each budget's breakdown is written beside it. "Prelude" is the session prelude, "BEGIN+" the
-transaction's first flight (its `BEGIN` and tenant context ride with it), "audit" the two trips of
-an audited read (the chain lock with its head, then the insert, `app.modules.audit.service.record`).
+transaction's first flight (its `BEGIN` and tenant context ride with it), "audit" the one trip of
+an audited read (the chain lock with its head, `app.modules.audit.service.record`); the audit's
+insert travels with `COMMIT` (`app.core.db.send_with_commit`), so it costs no trip of its own.
 """
 
 import uuid
@@ -71,14 +72,14 @@ BUDGETS = [
     Budget(
         "today",
         "/dashboard/today",
-        seeded=7,
-        empty=6,
+        seeded=6,
+        empty=5,
         why="prelude, BEGIN+ the clinic day (date and bounds in one statement), every section's"
         " rows in one flight (bookings; script counts and actionable scripts; approval totals,"
         " pending and expiring), every lookup in the next (patient and staff names, dispatch"
         " attempts, the gate's approvals; none on an empty clinic), audit (appointment.read,"
         " prescription.read and tga_approval.read chained in one `record_many`: the lock with its"
-        " head, then one multi-row insert), COMMIT. T1-34 audits two more sections at no extra"
+        " head, then one multi-row insert with COMMIT). T1-34 audits two more sections at no extra"
         " trip",
         seeded_rows=lambda body: (
             len(body["appointments"]["data"])
@@ -89,8 +90,8 @@ BUDGETS = [
     Budget(
         "patients list",
         "/patients",
-        seeded=5,
-        empty=5,
+        seeded=4,
+        empty=4,
         why="prelude, BEGIN+ the page with its total, audit (patient.read), COMMIT",
         seeded_rows=lambda body: body["count"],
     ),
@@ -99,25 +100,25 @@ BUDGETS = [
         "/patients/search",
         method="POST",
         body={"q": "fam"},
-        seeded=5,
-        empty=5,
+        seeded=4,
+        empty=4,
         why="prelude, BEGIN+ the page with its total, audit (patient.read), COMMIT",
         seeded_rows=_data,
     ),
     Budget(
         "patient record",
         "/patients/{patient}",
-        seeded=5,
-        empty=5,
+        seeded=4,
+        empty=4,
         why="prelude, BEGIN+ the patient with the reader's care relationship (one statement),"
-        " audit (patient.read with the relationship and purpose, T1-34: +2, the two trips every"
+        " audit (patient.read with the relationship and purpose, T1-34: +1, the one trip every"
         " audited read pays), COMMIT",
     ),
     Budget(
         "record: consult notes",
         "/patients/{patient}/clinical-records",
-        seeded=5,
-        empty=5,
+        seeded=4,
+        empty=4,
         why="prelude, BEGIN+ the patient, the total, the page and its current versions in one"
         " flight, audit (clinical_record.read), COMMIT",
         seeded_rows=_data,
@@ -125,17 +126,17 @@ BUDGETS = [
     Budget(
         "record: appointments",
         "/patients/{patient}/appointments",
-        seeded=5,
-        empty=5,
+        seeded=4,
+        empty=4,
         why="prelude, BEGIN+ the patient, the reader's care relationship and its bookings in one"
-        " flight, audit (appointment.read, T1-34: +2), COMMIT",
+        " flight, audit (appointment.read, T1-34: +1), COMMIT",
         seeded_rows=len,
     ),
     Budget(
         "record: approvals",
         "/patients/{patient}/tga-approvals",
-        seeded=5,
-        empty=5,
+        seeded=4,
+        empty=4,
         why="prelude, BEGIN+ the patient and the page in one flight, audit (tga_approval.read),"
         " COMMIT",
         seeded_rows=_data,
@@ -143,25 +144,25 @@ BUDGETS = [
     Budget(
         "record: scripts",
         "/prescriptions?patient_id={patient}",
-        seeded=6,
-        empty=5,
+        seeded=5,
+        empty=4,
         why="prelude, BEGIN+ the page with the patient and the reader's care relationship, its"
         " names, dispatch attempts and gate answers in one flight (none on an empty page), audit"
-        " (prescription.read, T1-34: +2), COMMIT",
+        " (prescription.read, T1-34: +1), COMMIT",
         seeded_rows=_data,
     ),
     Budget(
         "record: activity",
         "/audit/events?resource_id={patient}&limit=50",
-        seeded=5,
-        empty=5,
+        seeded=4,
+        empty=4,
         why="prelude, BEGIN+ the page, audit (the read of the trail is itself audited), COMMIT",
     ),
     Budget(
         "approvals register",
         "/tga-approvals",
-        seeded=7,
-        empty=6,
+        seeded=6,
+        empty=5,
         why="prelude, BEGIN+ the service date, the page and the totals (one statement) in one"
         " flight, audit (tga_approval.read), the patients' names (none on an empty page), COMMIT",
         seeded_rows=_data,
@@ -169,19 +170,19 @@ BUDGETS = [
     Budget(
         "scripts queue",
         "/prescriptions",
-        seeded=6,
-        empty=5,
+        seeded=5,
+        empty=4,
         why="prelude, BEGIN+ the page, its names, dispatch attempts and gate answers in one flight"
-        " (none on an empty page), audit (prescription.read, T1-34: +2), COMMIT",
+        " (none on an empty page), audit (prescription.read, T1-34: +1), COMMIT",
         seeded_rows=_data,
     ),
     Budget(
         "calendar week",
         "/appointments?{week}",
-        seeded=6,
-        empty=5,
+        seeded=5,
+        empty=4,
         why="prelude, BEGIN+ the bookings, the patients' names (none on an empty week), audit"
-        " (appointment.read, T1-34: +2), COMMIT",
+        " (appointment.read, T1-34: +1), COMMIT",
         seeded_rows=len,
     ),
     Budget(

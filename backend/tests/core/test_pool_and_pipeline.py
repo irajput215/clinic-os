@@ -10,24 +10,35 @@ Three properties, each with the failure it guards against:
    transaction sees its own context and nothing else.
 3. **The context reaches the database before the first statement runs**, including when that first
    statement is a write or a pipelined batch.
+4. **A write sent with `COMMIT` is still part of the transaction** (`send_with_commit`): it runs
+   after every other change, a failing one fails the whole transaction, and a transaction that
+   raises sends none.
 
 Every transaction that reads rows runs as `clinos_app`: the process engine connects as the owner with
 `BYPASSRLS`, and an assertion made as the owner would pass whatever the context said.
 """
 
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.pool import NullPool
+from sqlmodel import Session
 
 from app.core import db as db_module
 from app.core.config import settings
-from app.core.db import engine, run_pipelined, tenant_transaction
+from app.core.db import (
+    TenantContextRequired,
+    engine,
+    run_pipelined,
+    send_with_commit,
+    tenant_transaction,
+)
 from app.core.server_timing import instrument_engine
+from app.modules.clinics.models import Clinic
 from tests.utils.seeding import create_clinic, create_tenant, delete_tenancy_rows
 
 READINESS_PATH = f"{settings.API_V1_STR}/health/ready/"
@@ -250,3 +261,81 @@ def test_warming_fills_the_pool_with_distinct_open_connections() -> None:
     finally:
         db_module.engine = original
         fresh.dispose()
+
+
+# --- 4. Writes sent with COMMIT (`send_with_commit`) ---------------------------------------------
+
+
+def _clinic_names(tenant_id: uuid.UUID) -> list[str]:
+    with tenant_transaction(tenant_id=tenant_id) as session:
+        conn = session.connection()
+        conn.execute(AS_APP_ROLE)
+        return list(conn.execute(text("SELECT name FROM clinics")).scalars().all())
+
+
+def _insert_clinic(name: str) -> Callable[[Session], None]:
+    def write(session: Session) -> None:
+        session.connection().execute(
+            text(
+                "INSERT INTO clinics (id, tenant_id, name, created_at, updated_at) VALUES ("
+                "gen_random_uuid(), NULLIF(current_setting('app.tenant_id', true), '')::uuid,"
+                " :name, now(), now())"
+            ),
+            {"name": name},
+        )
+
+    return write
+
+
+def test_a_failing_write_sent_with_commit_fails_the_whole_transaction(
+    two_tenants: dict[str, uuid.UUID],
+) -> None:
+    earlier = f"Earlier {uuid.uuid4().hex[:6]}"
+
+    def fails(session: Session) -> None:
+        session.connection().execute(text("SELECT 1 / 0"))
+
+    with pytest.raises(DBAPIError):
+        with tenant_transaction(tenant_id=two_tenants["a"]) as session:
+            _insert_clinic(earlier)(
+                session
+            )  # an ordinary write, earlier in the transaction
+            send_with_commit(session, fails)
+
+    # The earlier write went down with the failed one: nothing was committed (INV-4).
+    assert earlier not in _clinic_names(two_tenants["a"])
+
+
+def test_a_transaction_that_raises_sends_none_of_its_queued_writes(
+    two_tenants: dict[str, uuid.UUID],
+) -> None:
+    queued = f"Queued {uuid.uuid4().hex[:6]}"
+
+    with pytest.raises(RuntimeError, match="the caller failed"):
+        with tenant_transaction(tenant_id=two_tenants["a"]) as session:
+            send_with_commit(session, _insert_clinic(queued))
+            raise RuntimeError("the caller failed")
+
+    assert queued not in _clinic_names(two_tenants["a"])
+
+
+def test_only_a_tenant_transaction_can_send_a_write_with_commit() -> None:
+    with Session(engine) as session, pytest.raises(TenantContextRequired):
+        send_with_commit(session, lambda _session: None)
+
+
+def test_writes_sent_with_commit_follow_every_other_change_and_commit(
+    two_tenants: dict[str, uuid.UUID],
+) -> None:
+    pending = f"Pending {uuid.uuid4().hex[:6]}"
+    queued = f"Queued {uuid.uuid4().hex[:6]}"
+    with tenant_transaction(tenant_id=two_tenants["b"]) as session:
+        # An ORM change still pending at the end is flushed first; the queued write and COMMIT
+        # follow it (in one flight, which the round-trip pins in `tests/performance` count).
+        session.add(
+            Clinic(tenant_id=two_tenants["b"], name=pending)  # type: ignore[call-arg]
+        )
+        send_with_commit(session, _insert_clinic(queued))
+
+    assert {pending, queued} <= set(_clinic_names(two_tenants["b"]))
+    assert {pending, queued}.isdisjoint(_clinic_names(two_tenants["a"]))

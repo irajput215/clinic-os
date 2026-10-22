@@ -35,15 +35,18 @@ import uuid
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from functools import cache
 from hmac import compare_digest
 from typing import Any, Final, Protocol, cast
 
-from sqlalchemy import and_, or_
+from sqlalchemy import Insert, and_, insert, or_
+from sqlalchemy import Table as sa_Table
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.sql.elements import ColumnElement
 from sqlmodel import Session, col, select, text
 
 from app.core.config import settings
-from app.core.db import driver_sql, run_pipelined
+from app.core.db import driver_sql, run_pipelined, send_with_commit
 from app.modules.audit.actions import (
     ACTIONS,
     PAYLOAD_ALLOW_LIST,
@@ -205,6 +208,19 @@ _CHAIN_HEAD_SQL: Final = driver_sql(
 )
 
 
+@cache
+def _audit_insert() -> tuple[Insert, tuple[tuple[str, str], ...]]:
+    """The audit row's insert, and each column's name with the attribute that holds it.
+
+    Built on first use, never at import: reading a mapper's attributes configures every mapper, and at
+    import time not every model is registered yet (`scripts/prestart.sh` imports this module long
+    before the rest). The column and attribute names differ for `metadata`.
+    """
+    mapper = sa_inspect(AuditLogEntry)
+    columns = tuple((prop.columns[0].name, prop.key) for prop in mapper.column_attrs)
+    return insert(cast(sa_Table, mapper.local_table)), columns
+
+
 def _chain_lock_key(tenant_id: uuid.UUID) -> int:
     """The advisory-lock key for one tenant's chain, derived from the tenant id.
 
@@ -320,23 +336,24 @@ def _validate(event: AuditEvent) -> None:
 def record(session: Session, event: AuditEvent) -> AuditLogEntry:
     """Insert one audit event on the caller's transaction, chained to the tenant's previous hash.
 
-    Returns the inserted entry with `hash` and `prev_hash` set, so a caller can report the head hash
-    without a second query. Raises
+    Returns the entry with `hash` and `prev_hash` set, so a caller can report the head hash without a
+    second query. The row itself is inserted with the transaction's `COMMIT`, in the same flight
+    (`record_many`). Raises
     [`AuditWriteRefused`][app.modules.audit.service.AuditWriteRefused] for a payload or action the
-    catalogue does not name, and lets a database error propagate untouched: the caller's transaction
-    is the one that must fail (R4).
+    catalogue does not name, at once and before anything is queued; a database error from the insert
+    fails the `COMMIT`, so the caller's transaction is the one that fails (R4).
     """
     [entry] = record_many(session, [event])
     return entry
 
 
 def record_many(session: Session, events: Sequence[AuditEvent]) -> list[AuditLogEntry]:
-    """Insert several events on the caller's transaction, chained in order, in two round trips.
+    """Insert several events on the caller's transaction, chained in order, in one round trip.
 
     For a request that reads several kinds of record at once (the Today page audits each section it
-    read): one chain lock with its head, then every row in one insert. Each event is validated before
-    anything is written, so one refused event refuses them all, and the caller's transaction fails
-    (R4). The timestamps strictly increase in the given order, so the chain's order (timestamp, then
+    read): one chain lock with its head, then every row in one insert that travels with `COMMIT`.
+    Each event is validated before anything is written, so one refused event refuses them all, and
+    the caller's transaction fails (R4). The timestamps strictly increase in the given order, so the chain's order (timestamp, then
     id) is the order the events were given in.
     """
     for event in events:
@@ -395,10 +412,20 @@ def record_many(session: Session, events: Sequence[AuditEvent]) -> list[AuditLog
         prev_hash = entry.hash
         entries.append(entry)
 
-    session.add_all(entries)
-    # Flush rather than commit: the rows reach the database inside the caller's transaction, so a
-    # constraint failure surfaces at the audit write rather than at the caller's commit.
-    session.flush()
+    # The rows travel with the transaction's `COMMIT`, in the same flight (`send_with_commit`): the
+    # insert is still inside the caller's transaction, after everything else it wrote, and a failed
+    # insert fails the `COMMIT` and the whole operation (R4, INV-4). The chain lock is held from the
+    # head's read until that `COMMIT`, so no other writer can chain onto the same head meanwhile.
+    statement, columns = _audit_insert()
+    rows = [
+        {column: getattr(entry, attribute) for column, attribute in columns}
+        for entry in entries
+    ]
+
+    def insert_rows(queued: Session) -> None:
+        queued.connection().execute(statement, rows)
+
+    send_with_commit(session, insert_rows)
     return entries
 
 
