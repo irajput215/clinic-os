@@ -21,6 +21,51 @@ errors with `detail.code`. A `tenant_id` in a body or query string is ignored an
 | `GET` | `/api/v1/public/{clinic_slug}/slots?type=` | none | Rate-limited 60/min per address. Tenant resolved from the slug **server-side**; an unknown, malformed or non-`ACTIVE` clinic is one uniform `404 CLINIC_NOT_FOUND`. `PublicSlot[]` `{practitioner_id, practitioner_name, starts_at, ends_at}` from tomorrow to 14 days out. `practitioner_name` never falls back to an email. |
 | `POST` | `/api/v1/public/{clinic_slug}/bookings` | none | `application/json` only (`415` otherwise; CSRF-safe by construction). Rate-limited 10/min per address and 5/hour per email (keyed HMAC, never the address in clear). Body: `{type, practitioner_id, starts_at, given_name, family_name, date_of_birth, email, phone (AU mobile), consent: true}`, strict. `201 {reference}` (`BK-XXXXXX`), identical whether the patient was new or matched. `422 SLOT_NOT_OFFERED` (not a slot the clinic offers), `422 BOOKING_AGE_NOT_MET` (under 18 in Sydney), **`409 SLOT_TAKEN`**. |
 
+## Clinic hours, slot length and booking emails (Milestone 4, 2026-10-08)
+
+**Status: built 2026-10-08.** `backend/app/modules/appointments/` (`models.py`, `service.py`,
+`notifications.py`, `router.py`). Scheduling decision: [D-009](../../../docs/reference/decisions/D-009-scheduled-jobs-and-booking-reminders.md).
+
+| Method | Path | Auth / permission | Contract |
+|---|---|---|---|
+| `GET` | `/api/v1/appointment-settings` | any member of an active organisation; no permission code | `{slot_minutes, hours: [{weekday 1-7, opens_at "HH:MM" \| null, closes_at "HH:MM" \| null}] (always 7, Monday first), is_default}`. Opening hours are PUBLIC (`01-tenancy-and-clinics/05-data-and-audit.md` names "public clinic address and opening hours" as its PUBLIC example), and the calendar of every role reads them. Read class (300/min). |
+| `PUT` | `/api/v1/appointment-settings` | `tenant:configure` (Practice Owner); no step-up | Body `{slot_minutes, hours: [7 rows]}`, strict (a `tenant_id` is ignored and audited `CLIENT_TENANT_ID_IGNORED`). Rules, each a `422` naming the day: one row per weekday 1-7, no duplicate; a day is open (both times) or closed (both `null`); `opens_at < closes_at`; times on 5-minute marks; the open span is at least one slot long; at least one open day; `slot_minutes` in `{10, 15, 20, 30, 60}`. One interval per day, so two openings of one day cannot overlap by construction. `200` with the saved settings and `bookings_outside_hours`: how many upcoming live bookings now fall outside the hours (they are kept, never cancelled). `403 PERMISSION_NOT_HELD`, audited. Administrative class (20/min). |
+| `POST` | `/api/v1/internal/booking-notifications/run` | bearer `BOOKING_NOTIFICATIONS_RUN_TOKEN` (no session); `404` when the token is not configured | Sends every due confirmation and reminder, one tenant per transaction. `{sent, skipped, failed, retried}` counts only. `401` on a wrong token. `503 EMAIL_NOT_CONFIGURED` when outgoing mail is off. 20/min. |
+
+**Slots.** The public page offers, for each open day from tomorrow to 14 days out, a start every
+`slot_minutes` from opening, each ending (start + the visit type's length, R2) at or before closing.
+Without a settings row the clinic is open Monday to Friday 09:00-17:00 with 15-minute slots. (Until
+2026-10-08 starts stepped by the visit type's length, so a 30-minute consult was offered every 30
+minutes; it is now offered on the clinic's slot grid.) Staff bookings are not limited to the hours:
+reception may book outside them. The calendar's day view spans the day's hours (08:00-18:00 when the
+day is closed), extended to any booking outside them, with one clickable slot per `slot_minutes`.
+
+**Booking emails.** Sent to the patient's email address on file (a public booking always has one; a
+staff-created patient may not, and is then skipped), only while outgoing email is configured
+(`settings.emails_enabled`):
+
+- a **confirmation** when a booking is made, from the public page or by staff, sent right after the
+  booking commits;
+- a **reminder** 24 hours before the start (none when the booking is made less than 24 hours ahead).
+
+The email content contract. The docs are silent on booking email content, so each email carries the
+minimum and nothing clinical: the clinic's **display name** (PUBLIC), the **date and time** in Sydney
+time, the **booking reference** (`BK-XXXXXX`) and **how to change it** ("contact the clinic and quote
+your reference"). Never the patient's name, date of birth or phone, the visit type, the practitioner,
+the reason for the visit, or any link that signs anyone in. The subject carries the clinic name only.
+Every value is HTML-escaped. Each send is audited `integration.request` (`provider: SMTP`,
+`outcome_class`), resource the notification; no address, name or time is in the trail or the logs.
+
+**Audit.** A settings change is `tenant.config_changed` with `changed_fields` (`slot_minutes`,
+`hours`) and `step_up: false`, on the change's transaction; a refusal is audited `DENIED` before the
+`403`.
+
+**Schema.** `appointment_settings` loses `opens_at`, `closes_at` and `working_days` and gains
+`slot_minutes`; `appointment_hours` holds seven rows per configured clinic (closed = both times
+`null`), so closing a day is an `UPDATE` and the application role needs no `DELETE`;
+`appointment_notifications` is the outbox. All three are tenant tables with forced RLS. The migration
+copies each existing row's hours onto its working days.
+
 ## Decisions recorded with the agreement
 
 - **Permissions: no new code.** Reading the calendar is `patient:read`; booking and moving a booking is
@@ -57,5 +102,8 @@ errors with `detail.code`. A `tenant_id` in a body or query string is ignored an
   `care_relationship_id` and `purpose`, under the treating-relationship rule (`403
   AUTHZ_CARE_RELATIONSHIP_DENIED` for a doctor or nurse off the patient's care team, `404` across
   tenants, both audited `DENIED`).
-- **Deferred:** CAPTCHA (a new third-party data flow, needs its own decision); confirmations by SMS or
-  email (out of scope in requirements); rate limits are in-process (`app/core/rate_limit.py` notes).
+- **Deferred:** CAPTCHA (a new third-party data flow, needs its own decision); SMS confirmations;
+  rate limits are in-process (`app/core/rate_limit.py` notes). Email confirmations and reminders were
+  added on 2026-10-08 (above).
+- **Availability is tenant configuration** (above) is superseded by "Clinic hours, slot length and
+  booking emails" for the shape of the table and the slot step.

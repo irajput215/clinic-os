@@ -49,8 +49,9 @@ export const readClinic = (): Clinic =>
  * the setup project's, one per fresh account a test must own, and those whose subject is signing in
  * (the sign-in page, a changed or recovered password, a deactivated account, an accepted invitation,
  * the setup project's verifier; signing a script re-enters the password through `/auth/step-up`,
- * which is not a sign-in). One run spends 16 of the 20 (a verified signup answers its own session,
- * so the setup's owner and the signup spec spend none); adding one is a budget
+ * which is not a sign-in). One run spends 17 of the 20 (a verified signup answers its own session,
+ * so the setup's owner and the signup spec spend none; `clinic-hours.spec.ts` owns a clinic, because
+ * its hours change the slots every booking spec reads); adding one is a budget
  * decision, not a free step. The setup project also waits out the window a previous run against the same
  * backend may have left (`waitOutPreviousRun`), so back-to-back runs never meet a `429`.
  * Tokens live 15 minutes, longer than a run (CI bounds a shard at 13).

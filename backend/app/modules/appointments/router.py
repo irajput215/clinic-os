@@ -25,33 +25,55 @@ appointment and no staff detail beyond a practitioner's display name ever leaves
 | `GET /public/{slug}` | **no** | none | slug, server-side | none | `PublicClinicRead` (`display_name` only) | none (PUBLIC data only) |
 | `GET /public/{slug}/slots?type=` | **no** | none | slug, server-side | query | `PublicSlot[]` | none (no personal data read) |
 | `POST /public/{slug}/bookings` | **no** | none | slug, server-side | `PublicBookingRequest` (JSON only) | `{reference}` (201) | `patient.create` (when new), `appointment.create` |
+| `GET /appointment-settings` | yes | none (PUBLIC hours; any member) | session | none | `AppointmentSettingsRead` | none |
+| `PUT /appointment-settings` | yes | `tenant:configure` | session | `AppointmentSettingsUpdate` | `AppointmentSettingsSaved` | `tenant.config_changed` (and `DENIED` for a refusal) |
+| `POST /internal/booking-notifications/run` | bearer job token (off when unset: `404`) | none | each active tenant, server-side | none | `NotificationRunReport` | `integration.request` per email sent |
 
 A `tenant_id` in a body or a query string is never read: it is ignored and recorded as
 `appointment.create` `DENIED` `CLIENT_TENANT_ID_IGNORED` (INV-1). Errors are RFC 7807 with
 `detail.code`; another tenant's appointment, patient or practitioner is `404`, never `403`.
 """
 
+import hashlib
+import hmac
 import re
 import uuid
 from typing import Annotated, Any, NoReturn
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    status,
+)
 from pydantic import AwareDatetime
 
 from app.api.deps import ActorDep, SessionDep
+from app.core.config import settings
 from app.core.rate_limit import (
     PUBLIC_BOOKING_EMAIL_LIMIT,
     PUBLIC_BOOKING_EMAIL_WINDOW_SECONDS,
+    admin_rate_limit,
+    internal_job_rate_limit,
     limit_identifier,
     public_booking_rate_limit,
     public_slots_rate_limit,
+    read_rate_limit,
 )
-from app.modules.appointments import service
+from app.modules.appointments import notifications, service
 from app.modules.appointments.schemas import (
     AppointmentCreate,
     AppointmentRead,
+    AppointmentSettingsRead,
+    AppointmentSettingsSaved,
+    AppointmentSettingsUpdate,
     AppointmentStatusUpdate,
     AppointmentType,
+    NotificationRunReport,
     PractitionerRead,
     PublicBookingCreated,
     PublicBookingRequest,
@@ -59,14 +81,20 @@ from app.modules.appointments.schemas import (
 )
 from app.modules.identity_tenancy import service as identity_tenancy
 from app.modules.identity_tenancy.schemas import PublicClinicRead
-from app.modules.users_roles.catalog import APPOINTMENT_PERMISSIONS
+from app.modules.users_roles.catalog import (
+    APPOINTMENT_PERMISSIONS,
+    EMAIL_NOT_CONFIGURED,
+    TENANCY_PERMISSIONS,
+)
 from app.modules.users_roles.policy import ResourceRef, enforce
-from app.modules.users_roles.service import authorize
+from app.modules.users_roles.service import authorize, can
 
 practitioners_router = APIRouter(prefix="/practitioners", tags=["appointments"])
 router = APIRouter(prefix="/appointments", tags=["appointments"])
 patient_router = APIRouter(prefix="/patients", tags=["appointments"])
 public_router = APIRouter(prefix="/public", tags=["public-booking"])
+settings_router = APIRouter(prefix="/appointment-settings", tags=["appointments"])
+internal_router = APIRouter(prefix="/internal", tags=["internal"])
 
 # The shape `identity_tenancy.service.slugify` produces. Anything else cannot be a clinic, and is
 # answered exactly like an unknown clinic.
@@ -131,9 +159,16 @@ def list_appointments(
     responses=_REFUSALS,
 )
 def create_appointment(
-    *, actor: ActorDep, body: AppointmentCreate, request: Request
+    *,
+    actor: ActorDep,
+    body: AppointmentCreate,
+    request: Request,
+    background_tasks: BackgroundTasks,
 ) -> AppointmentRead:
-    """Book a patient with a practitioner. `409 APPOINTMENT_OVERLAP` names the clash's time."""
+    """Book a patient with a practitioner. `409 APPOINTMENT_OVERLAP` names the clash's time.
+
+    The patient's confirmation email is sent after the booking commits (when email is configured).
+    """
     authorize(actor, APPOINTMENT_PERMISSIONS["write"])
     if body.client_tenant_id_supplied or "tenant_id" in request.query_params:
         service.record_client_tenant_id_ignored(
@@ -142,9 +177,15 @@ def create_appointment(
             actor_role=actor.actor_role,
         )
     try:
-        return service.create_appointment(actor=actor, body=body)
+        created = service.create_appointment(actor=actor, body=body)
     except service.AppointmentRefused as refusal:
         _raise(refusal)
+    background_tasks.add_task(
+        notifications.send_confirmation,
+        tenant_id=actor.tenant_id,
+        appointment_id=created.id,
+    )
+    return created
 
 
 @router.post(
@@ -287,7 +328,11 @@ def list_public_slots(
     },
 )
 def create_public_booking(
-    *, tenant_id: ClinicDep, body: PublicBookingRequest, request: Request
+    *,
+    tenant_id: ClinicDep,
+    body: PublicBookingRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
 ) -> PublicBookingCreated:
     """Book from the public page. The same answer whether the patient was new or already known."""
     limit_identifier(
@@ -302,9 +347,108 @@ def create_public_booking(
             tenant_id=tenant_id, actor_role="PUBLIC_BOOKING", source_ip=address
         )
     try:
-        reference = service.public_book(
+        appointment_id = service.public_book(
             tenant_id=tenant_id, body=body, source_ip=address
         )
     except service.AppointmentRefused as refusal:
         _raise(refusal)
-    return PublicBookingCreated(reference=reference)
+    background_tasks.add_task(
+        notifications.send_confirmation,
+        tenant_id=tenant_id,
+        appointment_id=appointment_id,
+    )
+    return PublicBookingCreated(reference=service.booking_reference(appointment_id))
+
+
+# -- clinic hours and slot length ------------------------------------------------------------------
+
+
+@settings_router.get(
+    "", response_model=AppointmentSettingsRead, dependencies=[Depends(read_rate_limit)]
+)
+def read_appointment_settings(*, actor: ActorDep) -> AppointmentSettingsRead:
+    """The clinic's hours and slot length, for every member: opening hours are PUBLIC."""
+    return service.get_settings(tenant_id=actor.tenant_id)
+
+
+@settings_router.put(
+    "",
+    response_model=AppointmentSettingsSaved,
+    dependencies=[Depends(admin_rate_limit)],
+    responses={
+        403: {
+            "description": "`PERMISSION_NOT_HELD`: changing the hours needs `tenant:configure`. "
+            "Audited; nothing changes."
+        }
+    },
+)
+def update_appointment_settings(
+    *, actor: ActorDep, body: AppointmentSettingsUpdate, request: Request
+) -> AppointmentSettingsSaved:
+    """Set the hours per weekday and the slot length (Practice Owner). Audited on its transaction."""
+    decision = can(actor, TENANCY_PERMISSIONS["configure"])
+    if not decision.allowed:
+        service.record_settings_denial(actor=actor, reason=decision.code.value)
+        enforce(decision)
+    return service.update_settings(
+        actor=actor,
+        body=body,
+        client_tenant_id_supplied=(
+            body.client_tenant_id_supplied or "tenant_id" in request.query_params
+        ),
+    )
+
+
+# -- the booking-email job (D-009) -----------------------------------------------------------------
+
+
+def _digest(value: str) -> bytes:
+    return hashlib.sha256(value.encode("utf-8")).digest()
+
+
+def _run_token(authorization: Annotated[str | None, Header()] = None) -> None:
+    """Off unless configured (`404`, as if absent); otherwise the bearer token, compared in constant
+    time over digests so neither its value nor its length leaks through timing."""
+    configured = settings.BOOKING_NOTIFICATIONS_RUN_TOKEN
+    if configured is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "NOT_FOUND", "message": "Not Found"},
+        )
+    scheme, _, supplied = (authorization or "").partition(" ")
+    if scheme.lower() != "bearer" or not hmac.compare_digest(
+        _digest(supplied), _digest(configured.get_secret_value())
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "INVALID_TOKEN", "message": "Not authorised."},
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+@internal_router.post(
+    "/booking-notifications/run",
+    response_model=NotificationRunReport,
+    dependencies=[Depends(internal_job_rate_limit), Depends(_run_token)],
+    responses={
+        401: {"description": "Wrong or missing token"},
+        404: {"description": "The job endpoint is not enabled on this server"},
+        503: {"description": "`EMAIL_NOT_CONFIGURED`: outgoing email is off"},
+    },
+)
+def run_booking_notifications() -> NotificationRunReport:
+    """Send every due booking confirmation and reminder, one tenant at a time. Counts only.
+
+    For a scheduler (D-009). No tenant is named by the caller: the job reads the active tenants and
+    runs each in its own transaction. Idempotent: a second call sends nothing the first one sent.
+    """
+    try:
+        return notifications.send_due_for_every_tenant()
+    except notifications.EmailNotConfigured:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": EMAIL_NOT_CONFIGURED,
+                "message": "Outgoing email is not configured.",
+            },
+        ) from None

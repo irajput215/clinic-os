@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import text
 
 from app.core.db import engine
-from tests.appointments.conftest import API, AppointmentsApi, Clinic, code
+from tests.appointments.conftest import API, AppointmentsApi, Clinic, code, week
 
 
 def _first_slot(
@@ -74,15 +74,10 @@ def test_tenant_settings_override_the_default_hours(
     api: AppointmentsApi, clinic: Clinic
 ) -> None:
     default = len(api.slots(clinic.slug).json())
-    with engine.begin() as conn:
-        conn.execute(
-            text(
-                "INSERT INTO appointment_settings (tenant_id, opens_at, closes_at,"
-                " working_days, created_at, updated_at)"
-                " VALUES (:t, '09:00', '10:00', '{1,2,3,4,5,6,7}', now(), now())"
-            ),
-            {"t": clinic.tenant_id},
-        )
+    saved = api.put_settings(
+        clinic.owner, week(dict.fromkeys(range(1, 8), ("09:00", "10:00")))
+    )
+    assert saved.status_code == 200, saved.text
     custom = api.slots(clinic.slug).json()
     # 14 days, every day, 09:00-10:00 in 15-minute triage slots: 4 a day.
     assert len(custom) == 14 * 4

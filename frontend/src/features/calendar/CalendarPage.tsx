@@ -7,6 +7,11 @@ import {
   appointmentsForDatesQuery,
   practitionersQuery,
 } from "@/data/appointments"
+import {
+  type ClinicHours,
+  clinicHoursQuery,
+  minutesOf,
+} from "@/data/clinic-hours"
 import { APPOINTMENT_TYPES, type Appointment } from "@/data/types"
 import { EmptyState, ErrorState, PageHeader } from "@/design/primitives"
 import { AppointmentStatusPill } from "@/features/shared/pills"
@@ -19,10 +24,52 @@ import {
   type SlotPrefill,
 } from "./AppointmentDialogs"
 
-const DAY_START = 8 * 60
-const DAY_END = 18 * 60
+// A closed day, or hours not yet loaded, shows 08:00-18:00 (R1).
+const DEFAULT_START = 8 * 60
+const DEFAULT_END = 18 * 60
+const DEFAULT_SLOT = 15
 const HOUR_PX = 96
-const px = (minutes: number) => ((minutes - DAY_START) / 60) * HOUR_PX
+
+/** ISO weekday (Monday = 1) of a clinic date `YYYY-MM-DD`. */
+const isoWeekday = (iso: string) => {
+  const dow = new Date(`${iso}T12:00:00Z`).getUTCDay()
+  return dow === 0 ? 7 : dow
+}
+
+interface DayFrame {
+  /** The grid's first and last minute: the day's hours, widened to whole hours and to any booking. */
+  start: number
+  end: number
+  /** The opening hours, or `null` on a closed day: only these get clickable slots. */
+  open: { opens: number; closes: number } | null
+  slot: number
+}
+
+/** The day view's frame from the clinic's hours (docs2/sdlc/04 R8) and the day's bookings. */
+function dayFrame(
+  date: string,
+  hours: ClinicHours | undefined,
+  appointments: Appointment[],
+): DayFrame {
+  const day = hours?.hours[isoWeekday(date) - 1]
+  const open =
+    day?.opens_at && day.closes_at
+      ? { opens: minutesOf(day.opens_at), closes: minutesOf(day.closes_at) }
+      : null
+  let start = open ? open.opens : DEFAULT_START
+  let end = open ? open.closes : DEFAULT_END
+  for (const a of appointments) {
+    if (clinicDateOf(a.starts_at) !== date) continue
+    start = Math.min(start, clinicMinutesOfDay(a.starts_at))
+    end = Math.max(end, clinicMinutesOfDay(a.ends_at) || 24 * 60)
+  }
+  return {
+    start: Math.floor(start / 60) * 60,
+    end: Math.min(Math.ceil(end / 60) * 60, 24 * 60),
+    open,
+    slot: hours?.slot_minutes ?? DEFAULT_SLOT,
+  }
+}
 
 const weekdayShort = new Intl.DateTimeFormat("en-AU", {
   weekday: "short",
@@ -62,6 +109,8 @@ export function CalendarPage({
   )
   const { data: practitioners } = useSuspenseQuery(practitionersQuery)
   const schedule = useQuery(appointmentsForDatesQuery(dates))
+  // Opening hours shape the day view; until they arrive (or if they fail) the default frame shows.
+  const hours = useQuery(clinicHoursQuery)
   const appointments = schedule.data ?? []
   const [prefill, setPrefill] = useState<SlotPrefill | null>(null)
   const [selected, setSelected] = useState<Appointment | null>(null)
@@ -178,6 +227,7 @@ export function CalendarPage({
           <div className="max-lg:hidden">
             <DayGrid
               date={date}
+              frame={dayFrame(date, hours.data, appointments)}
               practitioners={practitioners}
               appointments={appointments}
               onSlot={(practitionerId, time) =>
@@ -279,22 +329,32 @@ export function CalendarPage({
 
 function DayGrid({
   date,
+  frame,
   practitioners,
   appointments,
   onSlot,
   onSelect,
 }: {
   date: string
+  frame: DayFrame
   practitioners: Array<{ id: string; name: string; title: string }>
   appointments: Appointment[]
   onSlot: (practitionerId: string, time: string) => void
   onSelect: (a: Appointment) => void
 }) {
+  const { start: DAY_START, end: DAY_END, open, slot } = frame
+  const px = (minutes: number) => ((minutes - DAY_START) / 60) * HOUR_PX
   const hours = Array.from(
     { length: (DAY_END - DAY_START) / 60 },
     (_, i) => DAY_START / 60 + i,
   )
   const height = px(DAY_END)
+  const slotStarts = open
+    ? Array.from(
+        { length: Math.floor((open.closes - open.opens) / slot) },
+        (_, i) => open.opens + i * slot,
+      )
+    : []
   const nowMin =
     clinicDateOf(new Date().toISOString()) === date
       ? clinicMinutesOfDay(new Date().toISOString())
@@ -302,6 +362,15 @@ function DayGrid({
 
   return (
     <div className="overflow-x-auto rounded-card border border-line bg-paper shadow-card">
+      {open ? null : (
+        <p
+          className="border-line border-b bg-oat px-4 py-2.5 text-sm text-stone"
+          data-testid="calendar-closed"
+        >
+          The clinic is closed on this day. Use New appointment to book outside
+          opening hours.
+        </p>
+      )}
       <div
         className="grid"
         style={{
@@ -346,8 +415,7 @@ function DayGrid({
                   style={{ top: px(h * 60) }}
                 />
               ))}
-              {Array.from({ length: (DAY_END - DAY_START) / 15 }, (_, i) => {
-                const m = DAY_START + i * 15
+              {slotStarts.map((m) => {
                 const time = `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`
                 return (
                   <button
@@ -356,7 +424,7 @@ function DayGrid({
                     aria-label={`Book ${p.name} at ${time}`}
                     onClick={() => onSlot(p.id, time)}
                     className="absolute inset-x-0 opacity-0 transition-opacity hover:bg-clay-tint/50 hover:opacity-100 focus-visible:opacity-100"
-                    style={{ top: px(m), height: HOUR_PX / 4 }}
+                    style={{ top: px(m), height: (HOUR_PX * slot) / 60 }}
                   />
                 )
               })}

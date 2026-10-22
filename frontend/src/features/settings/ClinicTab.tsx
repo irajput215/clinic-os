@@ -11,6 +11,7 @@ import { Card, ErrorState, Field, FormAlert, Mono } from "@/design/primitives"
 import { focusFirstError } from "@/lib/form"
 import { describeError } from "@/lib/http"
 import { z } from "@/lib/zod"
+import { HoursCard } from "./HoursCard"
 
 // MIRROR: backend/app/modules/identity_tenancy/schemas.py `normalise_display_name` (1-120 printable
 // characters once whitespace runs are collapsed). The server normalises and decides; this only
@@ -59,6 +60,7 @@ export function ClinicTab() {
           <ClinicNameForm current={profile.data.display_name} />
         )}
       </Card>
+      <HoursCard />
     </div>
   )
 }

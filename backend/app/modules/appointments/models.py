@@ -91,11 +91,35 @@ _DURATION_SQL = " OR ".join(
 _RELEASED_SQL = _in(RELEASED_STATUSES)
 
 # Availability defaults (no document fixes them: recorded in the contract). A tenant may hold its own
-# row in `appointment_settings`; without one, these apply.
+# `appointment_settings` row and seven `appointment_hours` rows; without them, these apply.
 DEFAULT_OPENS_AT: Final[time] = time(9, 0)
 DEFAULT_CLOSES_AT: Final[time] = time(17, 0)
 # ISO weekdays, Monday = 1.
+WEEKDAYS: Final[tuple[int, ...]] = (1, 2, 3, 4, 5, 6, 7)
 DEFAULT_WORKING_DAYS: Final[tuple[int, ...]] = (1, 2, 3, 4, 5)
+# The step between offered start times (`docs2/sdlc/04-calendar-and-booking/api.md`, "Clinic hours,
+# slot length and booking emails"). A closed vocabulary, so the calendar grid stays legible.
+SLOT_MINUTES_ALLOWED: Final[tuple[int, ...]] = (10, 15, 20, 30, 60)
+DEFAULT_SLOT_MINUTES: Final[int] = 15
+# Opening and closing times sit on 5-minute marks.
+TIME_GRANULARITY_MINUTES: Final[int] = 5
+
+# The booking emails (`appointment_notifications`): what is sent, and where each row is in its life.
+NOTIFICATION_KINDS: Final[tuple[str, ...]] = ("CONFIRMATION", "REMINDER")
+NOTIFICATION_STATUSES: Final[tuple[str, ...]] = (
+    "PENDING",
+    "SENDING",
+    "SENT",
+    "SKIPPED",
+    "FAILED",
+)
+# Why a row was skipped or failed: codes, never provider text.
+NOTIFICATION_OUTCOMES: Final[tuple[str, ...]] = (
+    "BOOKING_NOT_LIVE",
+    "STARTED",
+    "NO_EMAIL",
+    "SMTP_ERROR",
+)
 
 _TIMESTAMPTZ = sa.DateTime(timezone=True)
 
@@ -170,32 +194,135 @@ class Appointment(SQLModel, table=True):
 
 
 class AppointmentSettings(SQLModel, table=True):
-    """A tenant's bookable hours. Optional: without a row, the module defaults apply.
+    """A tenant's booking settings. Optional: without a row, the module defaults apply.
 
-    Availability editing is out of scope for this phase (requirements, "Out of scope"), so no route
-    writes this table; it exists so the hours are tenant configuration rather than a code constant,
-    and an operator can set them before the admin screen does.
+    Written by the Practice Owner (`PUT /api/v1/appointment-settings`, `tenant:configure`); its
+    opening hours are the seven `appointment_hours` rows that reference it.
     """
 
     __tablename__ = "appointment_settings"
     __table_args__ = (
-        sa.CheckConstraint("closes_at > opens_at", name="hours"),
         sa.CheckConstraint(
-            "cardinality(working_days) BETWEEN 1 AND 7"
-            " AND working_days <@ ARRAY[1, 2, 3, 4, 5, 6, 7]::smallint[]",
-            name="working_days",
+            f"slot_minutes IN ({', '.join(str(m) for m in SLOT_MINUTES_ALLOWED)})",
+            name="slot_minutes",
         ),
     )
 
     tenant_id: uuid.UUID = Field(
         primary_key=True, foreign_key="tenants.id", ondelete="RESTRICT"
     )
-    opens_at: time = Field(default=DEFAULT_OPENS_AT)
-    closes_at: time = Field(default=DEFAULT_CLOSES_AT)
-    working_days: list[int] = Field(
-        default_factory=lambda: list(DEFAULT_WORKING_DAYS),
-        sa_column=sa.Column(sa.ARRAY(sa.SmallInteger()), nullable=False),
+    slot_minutes: int = Field(
+        default=DEFAULT_SLOT_MINUTES,
+        sa_type=sa.SmallInteger(),
+        sa_column_kwargs={"server_default": str(DEFAULT_SLOT_MINUTES)},
     )
+    created_at: datetime = Field(default_factory=_utcnow, sa_type=_TIMESTAMPTZ)
+    updated_at: datetime = Field(
+        default_factory=_utcnow,
+        sa_type=_TIMESTAMPTZ,
+        sa_column_kwargs={"onupdate": _utcnow},
+    )
+
+
+_ON_THE_MARK = (
+    "extract(minute FROM {c})::int % " + str(TIME_GRANULARITY_MINUTES) + " = 0"
+    " AND extract(second FROM {c}) = 0"
+)
+
+
+class AppointmentHours(SQLModel, table=True):
+    """One weekday's opening hours. Seven rows per configured clinic; closed = both times `NULL`.
+
+    A row per weekday, always, so closing a day is an `UPDATE` and the application role needs no
+    `DELETE`. One interval per day: two openings of one day cannot overlap by construction.
+    """
+
+    __tablename__ = "appointment_hours"
+    __table_args__ = (
+        sa.CheckConstraint("weekday BETWEEN 1 AND 7", name="weekday"),
+        sa.CheckConstraint(
+            "(opens_at IS NULL) = (closes_at IS NULL)", name="open_or_closed"
+        ),
+        sa.CheckConstraint(
+            "opens_at IS NULL OR closes_at > opens_at", name="opens_before_closes"
+        ),
+        sa.CheckConstraint(
+            "opens_at IS NULL OR ("
+            + _ON_THE_MARK.format(c="opens_at")
+            + " AND "
+            + _ON_THE_MARK.format(c="closes_at")
+            + ")",
+            name="on_the_mark",
+        ),
+        sa.ForeignKeyConstraint(
+            ["tenant_id"],
+            ["appointment_settings.tenant_id"],
+            name="fk_appointment_hours_tenant_settings",
+            ondelete="CASCADE",
+        ),
+    )
+
+    tenant_id: uuid.UUID = Field(primary_key=True)
+    weekday: int = Field(primary_key=True, sa_type=sa.SmallInteger())
+    opens_at: time | None = None
+    closes_at: time | None = None
+
+
+class AppointmentNotification(SQLModel, table=True):
+    """The booking-email outbox (D-009): one confirmation and at most one reminder per booking.
+
+    Written on the booking's own transaction; sent by `app.modules.appointments.notifications`.
+    `UNIQUE (tenant_id, appointment_id, kind)` makes a second reminder for one booking
+    unrepresentable. No address, name or time is stored here: the sender reads them at send time.
+    """
+
+    __tablename__ = "appointment_notifications"
+    __table_args__ = (
+        sa.CheckConstraint(f"kind IN ({_in(NOTIFICATION_KINDS)})", name="kind"),
+        sa.CheckConstraint(f"status IN ({_in(NOTIFICATION_STATUSES)})", name="status"),
+        sa.CheckConstraint(
+            f"outcome IS NULL OR outcome IN ({_in(NOTIFICATION_OUTCOMES)})",
+            name="outcome",
+        ),
+        sa.CheckConstraint("attempts >= 0", name="attempts"),
+        sa.CheckConstraint("(status = 'SENT') = (sent_at IS NOT NULL)", name="sent_at"),
+        sa.UniqueConstraint(
+            "tenant_id",
+            "appointment_id",
+            "kind",
+            name="uq_appointment_notifications_one_per_kind",
+        ),
+        sa.ForeignKeyConstraint(
+            ["tenant_id", "appointment_id"],
+            ["appointments.tenant_id", "appointments.id"],
+            name="fk_appointment_notifications_tenant_appointment",
+            ondelete="RESTRICT",
+        ),
+        # The sender's scan: one tenant's due rows.
+        sa.Index(
+            "ix_appointment_notifications_tenant_status_due",
+            "tenant_id",
+            "status",
+            "due_at",
+        ),
+    )
+
+    id: uuid.UUID = Field(
+        default_factory=uuid.uuid4,
+        primary_key=True,
+        sa_column_kwargs={"server_default": sa.text("gen_random_uuid()")},
+    )
+    tenant_id: uuid.UUID = Field(
+        foreign_key="tenants.id", ondelete="RESTRICT", nullable=False
+    )
+    appointment_id: uuid.UUID = Field(nullable=False)
+    kind: str
+    status: str = Field(default="PENDING")
+    outcome: str | None = None
+    due_at: datetime = Field(sa_type=_TIMESTAMPTZ)
+    attempts: int = Field(default=0, sa_type=sa.SmallInteger())
+    claimed_at: datetime | None = Field(default=None, sa_type=_TIMESTAMPTZ)
+    sent_at: datetime | None = Field(default=None, sa_type=_TIMESTAMPTZ)
     created_at: datetime = Field(default_factory=_utcnow, sa_type=_TIMESTAMPTZ)
     updated_at: datetime = Field(
         default_factory=_utcnow,

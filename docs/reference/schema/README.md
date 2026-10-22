@@ -4,7 +4,9 @@
 
 | Name | Columns | Comment | Type |
 | ---- | ------- | ------- | ---- |
-| [public.appointment_settings](public.appointment_settings.md) | 6 |  | BASE TABLE |
+| [public.appointment_hours](public.appointment_hours.md) | 4 |  | BASE TABLE |
+| [public.appointment_notifications](public.appointment_notifications.md) | 12 |  | BASE TABLE |
+| [public.appointment_settings](public.appointment_settings.md) | 4 |  | BASE TABLE |
 | [public.appointments](public.appointments.md) | 13 |  | BASE TABLE |
 | [public.audit_log](public.audit_log.md) | 16 |  | BASE TABLE |
 | [public.care_relationships](public.care_relationships.md) | 10 |  | BASE TABLE |
@@ -266,6 +268,9 @@
 ```mermaid
 erDiagram
 
+"public.appointment_hours" }o--|| "public.appointment_settings" : "FOREIGN KEY (tenant_id) REFERENCES appointment_settings(tenant_id) ON DELETE CASCADE"
+"public.appointment_notifications" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.appointment_notifications" }o--|| "public.appointments" : "FOREIGN KEY (tenant_id, appointment_id) REFERENCES appointments(tenant_id, id) ON DELETE RESTRICT"
 "public.appointment_settings" |o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.appointments" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.appointments" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
@@ -311,13 +316,31 @@ erDiagram
 "public.user_roles" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.user_roles" }o--|| "public.roles" : "FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE RESTRICT"
 
-"public.appointment_settings" {
+"public.appointment_hours" {
   time_without_time_zone closes_at
-  timestamp_with_time_zone created_at
   time_without_time_zone opens_at
   uuid tenant_id FK
+  smallint weekday
+}
+"public.appointment_notifications" {
+  uuid appointment_id FK
+  smallint attempts
+  timestamp_with_time_zone claimed_at
+  timestamp_with_time_zone created_at
+  timestamp_with_time_zone due_at
+  uuid id
+  varchar kind
+  varchar outcome
+  timestamp_with_time_zone sent_at
+  varchar status
+  uuid tenant_id FK
   timestamp_with_time_zone updated_at
-  smallint__ working_days
+}
+"public.appointment_settings" {
+  timestamp_with_time_zone created_at
+  smallint slot_minutes
+  uuid tenant_id FK
+  timestamp_with_time_zone updated_at
 }
 "public.appointments" {
   timestamp_with_time_zone created_at

@@ -1,0 +1,29 @@
+name: Booking Reminders
+
+# Sends the booking confirmations and reminders that are due, by calling production's job endpoint
+# (docs/reference/decisions/D-009-scheduled-jobs-and-booking-reminders.md). Inert until the owner
+# enables it: the repository variable BOOKING_REMINDERS_URL and the secret BOOKING_REMINDERS_TOKEN
+# (the same value as the app's BOOKING_NOTIFICATIONS_RUN_TOKEN). The endpoint is idempotent, so a
+# late or doubled run sends nothing twice. GitHub's scheduler may run late under load.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  send-due:
+    if: github.repository == 'irajput215/clinic-os' && vars.BOOKING_REMINDERS_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Send what is due
+        env:
+          URL: ${{ vars.BOOKING_REMINDERS_URL }}
+          TOKEN: ${{ secrets.BOOKING_REMINDERS_TOKEN }}
+        # Counts only come back; no identifier, address or time is ever in the answer.
+        run: |
+          curl --fail-with-body --silent --show-error --max-time 120 \
+            --request POST --header "Authorization: Bearer ${TOKEN}" "${URL}"

@@ -771,6 +771,28 @@ def display_names(
     }
 
 
+def contact_emails(
+    session: Session, *, tenant_id: uuid.UUID, patient_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, str]:
+    """`{id: email}` for the **live** patients among `patient_ids` that have an email address.
+
+    For the booking emails (`app.modules.appointments.notifications`), on the caller's tenant
+    transaction. An absent, soft-deleted, other tenant's or address-less patient is simply missing,
+    and the caller skips that email. The address is used to send and is never logged.
+    """
+    if not patient_ids:
+        return {}
+    rows = session.exec(
+        select(col(Patient.id), col(Patient.email)).where(
+            Patient.tenant_id == tenant_id,
+            col(Patient.id).in_(sorted(set(patient_ids))),
+            col(Patient.deleted_at).is_(None),
+            col(Patient.email).is_not(None),
+        )
+    ).all()
+    return {patient_id: email for patient_id, email in rows if email}
+
+
 def queue_display_names(
     batch: ReadBatch, *, tenant_id: uuid.UUID, patient_ids: Sequence[uuid.UUID]
 ) -> Pending[dict[uuid.UUID, str]]:

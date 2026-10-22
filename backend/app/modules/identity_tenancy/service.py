@@ -95,6 +95,24 @@ def active_tenant_id_for_slug(session: Session, slug: str) -> uuid.UUID | None:
     return tenant.id
 
 
+def active_tenant_ids(session: Session) -> list[uuid.UUID]:
+    """Every `ACTIVE` organisation's id: the input of a scheduled job that runs one tenant at a time.
+
+    `tenants` is global, so this is the one read a job makes across tenants, and it returns
+    identifiers only; everything the job then does runs in one tenant's own transaction.
+    """
+    table = Tenant.metadata.tables[Tenant.__tablename__]
+    return list(
+        session.connection()
+        .execute(
+            sa_select(table.c.id)
+            .where(table.c.status == ACTIVE_STATUS)
+            .order_by(table.c.id)
+        )
+        .scalars()
+    )
+
+
 def tenant_is_active(session: Session, *, tenant_id: uuid.UUID) -> bool:
     """Whether the tenant this request resolved is allowed to transact.
 

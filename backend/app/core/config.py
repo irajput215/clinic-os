@@ -6,6 +6,7 @@ from pydantic import (
     Field,
     HttpUrl,
     PostgresDsn,
+    SecretStr,
     computed_field,
     field_validator,
     model_validator,
@@ -117,6 +118,13 @@ class Settings(BaseSettings):
     # only, so speed can be judged at the origin rather than from wherever the observer sits
     # (`docs/reference/performance.md`). On by default, which is what production runs.
     SERVER_TIMING_ENABLED: bool = True
+
+    # The bearer token of `POST /api/v1/internal/booking-notifications/run`, the endpoint a scheduler
+    # calls to send due booking reminders (`docs/reference/decisions/D-009-...`). Unset (the default)
+    # turns the endpoint off: it answers `404`. At least 32 characters when set; never logged.
+    BOOKING_NOTIFICATIONS_RUN_TOKEN: SecretStr | None = Field(
+        default=None, min_length=32
+    )
 
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":

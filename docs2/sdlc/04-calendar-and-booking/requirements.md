@@ -17,6 +17,8 @@
 - R5 Public booking at `/book/<clinic-slug>` without sign-in: visit type, then questionnaire and details (18+, AU mobile, consent to the APP 5 collection notice), then a slot. It returns a reference.
 - R6 A public booking appears on the clinic calendar, marked as from the booking page, for intake.
 - R7 All times are Australia/Sydney.
+- R8 (2026-10-08) The Practice Owner sets the clinic's opening hours per weekday (or closes a day) and the slot length in Settings > Clinic. The public booking page offers only times inside those hours, on that slot grid; the calendar's day view follows the same hours and grid. Others are not offered the control and are refused by the server.
+- R9 (2026-10-08) A booking, public or by staff, emails the patient a confirmation, and a reminder 24 hours before, when outgoing email is configured: the clinic's display name, the date and time, the reference and how to change it, and nothing clinical. A cancelled booking is never reminded, and no booking is reminded twice.
 
 ## Non-functional
 
@@ -24,6 +26,6 @@
 
 ## Out of scope (this phase)
 
-- Rostering and availability editing.
+- Rostering (per-practitioner availability). Clinic-wide opening hours are R8.
 - Upfront payment (Tyro).
-- SMS/email confirmations.
+- SMS confirmations.

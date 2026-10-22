@@ -32,6 +32,7 @@ from sqlalchemy import TextClause, text
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
+from app.core.config import settings
 from app.core.db import tenant_transaction
 from app.core.reads import Plan, ReadBatch, run_plan
 from app.modules.appointments.models import (
@@ -39,16 +40,21 @@ from app.modules.appointments.models import (
     APPOINTMENT_TYPES,
     DEFAULT_CLOSES_AT,
     DEFAULT_OPENS_AT,
+    DEFAULT_SLOT_MINUTES,
     DEFAULT_WORKING_DAYS,
     LEGAL_TRANSITIONS,
     RELEASED_STATUSES,
+    WEEKDAYS,
     Appointment,
-    AppointmentSettings,
 )
 from app.modules.appointments.schemas import (
     AppointmentCreate,
     AppointmentRead,
+    AppointmentSettingsRead,
+    AppointmentSettingsSaved,
+    AppointmentSettingsUpdate,
     DayAppointment,
+    DayHours,
     DaySchedule,
     PractitionerRead,
     PublicBookingRequest,
@@ -115,11 +121,50 @@ class AppointmentRefused(Exception):
 
 @dataclass(frozen=True)
 class Availability:
-    """A tenant's bookable hours: its `appointment_settings` row, or the module defaults."""
+    """A tenant's bookable hours and slot length: its own settings, or the module defaults.
 
-    opens_at: time
-    closes_at: time
-    working_days: tuple[int, ...]
+    `hours` has one entry per ISO weekday, Monday first; a closed day is `(None, None)`.
+    """
+
+    slot_minutes: int
+    hours: tuple[tuple[time | None, time | None], ...]
+    is_default: bool
+
+    def open_days(self) -> tuple[list[int], list[time], list[time]]:
+        """The open weekdays and their times, as three parallel lists (the slot query's input)."""
+        weekdays: list[int] = []
+        opens: list[time] = []
+        closes: list[time] = []
+        for weekday, (opens_at, closes_at) in zip(WEEKDAYS, self.hours, strict=True):
+            if opens_at is not None and closes_at is not None:
+                weekdays.append(weekday)
+                opens.append(opens_at)
+                closes.append(closes_at)
+        return weekdays, opens, closes
+
+    def as_read(self) -> AppointmentSettingsRead:
+        return AppointmentSettingsRead(
+            slot_minutes=self.slot_minutes,
+            hours=[
+                DayHours(weekday=weekday, opens_at=opens_at, closes_at=closes_at)
+                for weekday, (opens_at, closes_at) in zip(
+                    WEEKDAYS, self.hours, strict=True
+                )
+            ],
+            is_default=self.is_default,
+        )
+
+
+DEFAULT_AVAILABILITY: Final[Availability] = Availability(
+    slot_minutes=DEFAULT_SLOT_MINUTES,
+    hours=tuple(
+        (DEFAULT_OPENS_AT, DEFAULT_CLOSES_AT)
+        if weekday in DEFAULT_WORKING_DAYS
+        else (None, None)
+        for weekday in WEEKDAYS
+    ),
+    is_default=True,
+)
 
 
 # -- practitioners ---------------------------------------------------------------------------------
@@ -562,8 +607,48 @@ def _insert(
             payload={"patient_id": str(patient_id), "source": source},
         ),
     )
+    _enqueue_notifications(
+        session, tenant_id=tenant_id, appointment_id=appointment.id, starts_at=starts_at
+    )
     session.refresh(appointment)
     return appointment
+
+
+# The booking emails (D-009), written on the booking's own transaction: a confirmation due now, and
+# a reminder due 24 hours before the start when that is still ahead. Nothing about the patient is
+# stored here; the sender reads the address when it sends.
+REMINDER_LEAD: Final[timedelta] = timedelta(hours=24)
+_ENQUEUE_SQL = text(
+    "INSERT INTO appointment_notifications"
+    " (id, tenant_id, appointment_id, kind, status, due_at, attempts, created_at, updated_at)"
+    " SELECT gen_random_uuid(), :tenant_id, :appointment_id, k.kind, 'PENDING', k.due_at, 0,"
+    " now(), now()"
+    " FROM (VALUES ('CONFIRMATION', now()),"
+    " ('REMINDER', CAST(:starts_at AS timestamptz) - CAST(:lead AS interval)))"
+    " AS k(kind, due_at)"
+    " WHERE k.kind = 'CONFIRMATION' OR k.due_at > now()"
+)
+
+
+def _enqueue_notifications(
+    session: Session,
+    *,
+    tenant_id: uuid.UUID,
+    appointment_id: uuid.UUID,
+    starts_at: datetime,
+) -> None:
+    """Queue the confirmation and the reminder, only while outgoing email is configured."""
+    if not settings.emails_enabled:
+        return
+    session.connection().execute(
+        _ENQUEUE_SQL,
+        {
+            "tenant_id": tenant_id,
+            "appointment_id": appointment_id,
+            "starts_at": starts_at,
+            "lead": REMINDER_LEAD,
+        },
+    )
 
 
 def record_client_tenant_id_ignored(
@@ -682,34 +767,57 @@ def change_status(
 # -- public booking --------------------------------------------------------------------------------
 
 
+# The settings row and its seven days in one statement. No row: the module defaults.
+_AVAILABILITY_SQL = text(
+    "SELECT s.slot_minutes, h.weekday, h.opens_at, h.closes_at"
+    " FROM appointment_settings s"
+    " LEFT JOIN appointment_hours h ON h.tenant_id = s.tenant_id"
+    " WHERE s.tenant_id = :tenant_id"
+    " ORDER BY h.weekday"
+)
+
+
 def _availability(session: Session, *, tenant_id: uuid.UUID) -> Availability:
-    row = session.exec(
-        select(AppointmentSettings).where(AppointmentSettings.tenant_id == tenant_id)
-    ).first()
-    if row is None:
-        return Availability(DEFAULT_OPENS_AT, DEFAULT_CLOSES_AT, DEFAULT_WORKING_DAYS)
-    return Availability(row.opens_at, row.closes_at, tuple(row.working_days))
+    rows = (
+        session.connection().execute(_AVAILABILITY_SQL, {"tenant_id": tenant_id}).all()
+    )
+    if not rows:
+        return DEFAULT_AVAILABILITY
+    by_day = {row[1]: (row[2], row[3]) for row in rows if row[1] is not None}
+    # A weekday with no row is closed: fail closed, never open by omission.
+    return Availability(
+        slot_minutes=int(rows[0][0]),
+        hours=tuple(by_day.get(weekday, (None, None)) for weekday in WEEKDAYS),
+        is_default=False,
+    )
 
 
 # The slot grid, in SQL, so "tomorrow", "09:00" and "Monday" are Sydney's (R7) on the database clock.
-# Days: tomorrow to `horizon` days out, working days only. Times: from opening, one slot per type
-# length, the last one ending at or before closing. A local time is turned into an instant with
+# Days: tomorrow to `horizon` days out, open days only, each with its own hours. Times: from opening,
+# one start every `step` minutes (the clinic's slot length), each lasting the type's length and the
+# last one ending at or before closing. A local time is turned into an instant with
 # `timestamp AT TIME ZONE`, which is what makes 09:00 mean 09:00 in Sydney through a DST change.
 _SLOTS_SQL = text(
     """
     WITH today AS (SELECT (now() AT TIME ZONE :zone)::date AS d),
+    hours AS (
+        SELECT * FROM unnest(
+            CAST(:weekdays AS int[]), CAST(:opens AS time[]), CAST(:closes AS time[])
+        ) AS h(weekday, opens_at, closes_at)
+    ),
     days AS (
-        SELECT t.d + n AS day
-        FROM today t, generate_series(1, :horizon) AS n
-        WHERE extract(isodow FROM t.d + n)::int = ANY(:working_days)
+        SELECT t.d + n AS day, h.opens_at, h.closes_at
+        FROM today t
+        CROSS JOIN generate_series(1, :horizon) AS n
+        JOIN hours h ON h.weekday = extract(isodow FROM t.d + n)::int
     ),
     candidates AS (
         SELECT p.practitioner_id, (local_start AT TIME ZONE :zone) AS starts_at
         FROM days
         CROSS JOIN LATERAL generate_series(
-            days.day + CAST(:opens_at AS time),
-            days.day + CAST(:closes_at AS time) - make_interval(mins => :minutes),
-            make_interval(mins => :minutes)
+            days.day + days.opens_at,
+            days.day + days.closes_at - make_interval(mins => :minutes),
+            make_interval(mins => :step)
         ) AS local_start
         CROSS JOIN unnest(CAST(:practitioner_ids AS uuid[])) AS p(practitioner_id)
     )
@@ -742,17 +850,19 @@ def _slots(
 ) -> list[dict[str, Any]]:
     if not practitioners:
         return []
-    hours = _availability(session, tenant_id=tenant_id)
+    availability = _availability(session, tenant_id=tenant_id)
+    weekdays, opens, closes = availability.open_days()
     _role, minutes = APPOINTMENT_TYPES[appointment_type]
     result = session.connection().execute(
         _SLOTS_SQL,
         {
             "zone": TIMEZONE,
             "horizon": PUBLIC_HORIZON_DAYS,
-            "working_days": list(hours.working_days),
-            "opens_at": hours.opens_at,
-            "closes_at": hours.closes_at,
+            "weekdays": weekdays,
+            "opens": opens,
+            "closes": closes,
             "minutes": minutes,
+            "step": availability.slot_minutes,
             "practitioner_ids": [p.id for p in practitioners],
             "only_practitioner": only_practitioner,
             "only_start": only_start,
@@ -824,12 +934,13 @@ def booking_reference(appointment_id: uuid.UUID) -> str:
 
 def public_book(
     *, tenant_id: uuid.UUID, body: PublicBookingRequest, source_ip: str | None
-) -> str:
+) -> uuid.UUID:
     """Book from the public page: validate the slot, create or match the patient, book, audit.
 
     One transaction: the patient record, the booking and both audit events commit together or not at
     all, so a refused booking (`409 SLOT_TAKEN`) leaves no stray patient behind. The answer is the
-    same reference whether the patient was new or matched.
+    booking's id, whose reference (`booking_reference`) is the same shape whether the patient was new
+    or matched.
     """
     with tenant_transaction(
         tenant_id=tenant_id, actor_role="PUBLIC_BOOKING", source_ip=source_ip
@@ -881,4 +992,168 @@ def public_book(
             overlap_code=SLOT_TAKEN,
             source_ip=source_ip,
         )
-        return booking_reference(appointment.id)
+        return appointment.id
+
+
+# -- clinic hours and slot length ------------------------------------------------------------------
+#
+# `docs2/sdlc/04-calendar-and-booking/api.md`, "Clinic hours, slot length and booking emails". The
+# hours are PUBLIC (every member reads them; the booking page offers slots inside them). A change is
+# the Practice Owner's (`tenant:configure`, decided by the router) and is audited
+# `tenant.config_changed` on its own transaction (INV-4).
+
+TENANT_CONFIG_CHANGED: Final[str] = "tenant.config_changed"
+
+
+def get_settings(*, tenant_id: uuid.UUID) -> AppointmentSettingsRead:
+    with tenant_transaction(tenant_id=tenant_id) as session:
+        return _availability(session, tenant_id=tenant_id).as_read()
+
+
+def _record_settings_change(
+    session: Session,
+    *,
+    tenant_id: uuid.UUID,
+    result: str,
+    changed_fields: Sequence[str],
+    reason: str | None = None,
+) -> None:
+    audit.record(
+        session,
+        audit.AuditEvent(
+            action=TENANT_CONFIG_CHANGED,
+            result=result,
+            resource_id=tenant_id,
+            reason=reason,
+            payload={"changed_fields": list(changed_fields), "step_up": False},
+        ),
+    )
+
+
+_SETTINGS_FIELDS: Final[tuple[str, ...]] = ("hours", "slot_minutes")
+
+
+def record_settings_denial(*, actor: Actor, reason: str) -> None:
+    """Audit a refused change on its own transaction; a failure here fails the request closed."""
+    with tenant_transaction(
+        tenant_id=actor.tenant_id, actor_id=actor.user_id, actor_role=actor.actor_role
+    ) as session:
+        _record_settings_change(
+            session,
+            tenant_id=actor.tenant_id,
+            result="DENIED",
+            changed_fields=_SETTINGS_FIELDS,
+            reason=reason,
+        )
+
+
+_UPSERT_SETTINGS_SQL = text(
+    "INSERT INTO appointment_settings (tenant_id, slot_minutes, created_at, updated_at)"
+    " VALUES (:tenant_id, :slot_minutes, now(), now())"
+    " ON CONFLICT (tenant_id) DO UPDATE"
+    " SET slot_minutes = EXCLUDED.slot_minutes, updated_at = now()"
+)
+_UPSERT_HOURS_SQL = text(
+    "INSERT INTO appointment_hours (tenant_id, weekday, opens_at, closes_at)"
+    " SELECT :tenant_id, h.weekday, h.opens_at, h.closes_at"
+    " FROM unnest(CAST(:weekdays AS smallint[]), CAST(:opens AS time[]),"
+    " CAST(:closes AS time[])) AS h(weekday, opens_at, closes_at)"
+    " ON CONFLICT (tenant_id, weekday) DO UPDATE"
+    " SET opens_at = EXCLUDED.opens_at, closes_at = EXCLUDED.closes_at"
+)
+# Upcoming live bookings that start or end outside their day's new hours (or on a closed day). They
+# are kept: the count only tells the owner to look. Local times are Sydney's (R7).
+_OUTSIDE_HOURS_SQL = text(
+    """
+    SELECT count(*) FROM appointments a
+    LEFT JOIN unnest(CAST(:weekdays AS int[]), CAST(:opens AS time[]), CAST(:closes AS time[]))
+        AS h(weekday, opens_at, closes_at)
+        ON h.weekday = extract(isodow FROM a.starts_at AT TIME ZONE :zone)::int
+    WHERE a.tenant_id = :tenant_id
+      AND a.starts_at > now()
+      AND a.status NOT IN ('CANCELLED', 'NO_SHOW', 'COMPLETED')
+      AND (h.weekday IS NULL
+           OR (a.starts_at AT TIME ZONE :zone)::time < h.opens_at
+           OR (a.ends_at AT TIME ZONE :zone)::time > h.closes_at
+           OR (a.ends_at AT TIME ZONE :zone)::date <> (a.starts_at AT TIME ZONE :zone)::date)
+    """
+)
+
+
+def update_settings(
+    *,
+    actor: Actor,
+    body: AppointmentSettingsUpdate,
+    client_tenant_id_supplied: bool,
+) -> AppointmentSettingsSaved:
+    """Save the slot length and the seven days (upserts; the caller authorised `tenant:configure`).
+
+    The current settings are read first so the event names only what changed; saving what the
+    clinic already has writes nothing and records nothing. A `tenant_id` the client sent was dropped
+    by the schema and is recorded `DENIED` `CLIENT_TENANT_ID_IGNORED` on the same transaction.
+    """
+    tenant_id = actor.tenant_id
+    wanted = Availability(
+        slot_minutes=body.slot_minutes,
+        hours=tuple((day.opens_at, day.closes_at) for day in body.hours),
+        is_default=False,
+    )
+    with tenant_transaction(
+        tenant_id=tenant_id, actor_id=actor.user_id, actor_role=actor.actor_role
+    ) as session:
+        if client_tenant_id_supplied:
+            _record_settings_change(
+                session,
+                tenant_id=tenant_id,
+                result="DENIED",
+                changed_fields=_SETTINGS_FIELDS,
+                reason=CLIENT_TENANT_ID_IGNORED,
+            )
+        current = _availability(session, tenant_id=tenant_id)
+        changed = [
+            name
+            for name, differs in (
+                ("hours", current.hours != wanted.hours),
+                ("slot_minutes", current.slot_minutes != wanted.slot_minutes),
+            )
+            if differs or current.is_default
+        ]
+        weekdays, opens, closes = wanted.open_days()
+        if changed:
+            connection = session.connection()
+            connection.execute(
+                _UPSERT_SETTINGS_SQL,
+                {"tenant_id": tenant_id, "slot_minutes": wanted.slot_minutes},
+            )
+            connection.execute(
+                _UPSERT_HOURS_SQL,
+                {
+                    "tenant_id": tenant_id,
+                    "weekdays": list(WEEKDAYS),
+                    "opens": [opens_at for opens_at, _ in wanted.hours],
+                    "closes": [closes_at for _, closes_at in wanted.hours],
+                },
+            )
+            _record_settings_change(
+                session,
+                tenant_id=tenant_id,
+                result="SUCCESS",
+                changed_fields=sorted(changed),
+            )
+        outside = (
+            session.connection()
+            .execute(
+                _OUTSIDE_HOURS_SQL,
+                {
+                    "tenant_id": tenant_id,
+                    "zone": TIMEZONE,
+                    "weekdays": weekdays,
+                    "opens": opens,
+                    "closes": closes,
+                },
+            )
+            .scalar_one()
+        )
+        return AppointmentSettingsSaved(
+            **wanted.as_read().model_dump(), bookings_outside_hours=int(outside)
+        )
