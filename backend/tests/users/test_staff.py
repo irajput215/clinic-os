@@ -87,12 +87,17 @@ def _invite_body(
 def _audit(
     tenant_id: uuid.UUID | None, action: str = "user.create"
 ) -> list[dict[str, Any]]:
-    """The tenant's events for one action, oldest first, read as the owner (bypasses RLS)."""
+    """The tenant's events for one action, oldest first, read as the owner (bypasses RLS).
+
+    Leaves out the organisation's own creation (D-008: verifying the signup writes `user.create`
+    with the founder as actor and target), so what remains is this test's own work.
+    """
     with engine.connect() as conn:
         rows = conn.execute(
             text(
                 "SELECT action, result, reason, actor_id, resource_id, metadata AS payload, request_id"
                 " FROM audit_log WHERE tenant_id = :tenant_id AND action = :action"
+                " AND actor_id IS DISTINCT FROM resource_id"
                 " ORDER BY timestamp, event_id"
             ),
             {"tenant_id": tenant_id, "action": action},

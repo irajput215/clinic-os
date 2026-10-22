@@ -32,6 +32,7 @@ from app.modules.users_roles.models import (
     Permission,
     Role,
     RolePermission,
+    SignupRequest,
     StaffInvitation,
     UserRole,
 )
@@ -53,6 +54,7 @@ __all__ = [
     "PrescriptionEvent",
     "Role",
     "RolePermission",
+    "SignupRequest",
     "StaffInvitation",
     "StepUpGrant",
     "Tenant",

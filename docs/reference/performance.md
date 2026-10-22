@@ -51,7 +51,9 @@ production.
 **Production runs** come from `.github/workflows/measure-production.yml`, which runs
 `scripts/measure-production.py` after every deploy and on demand. It reads production only. With the
 optional `PROBE_EMAIL` / `PROBE_PASSWORD` repository secrets it also signs in as one probe clinic
-("Performance probe (synthetic, no patients)", registered through the public signup on first use) and
+("Performance probe (synthetic, no patients)", registered through the public signup on first use;
+since D-008 the owner of `PROBE_EMAIL` opens the emailed link once, and until then the report says
+so and skips the authenticated reads) and
 measures the authenticated reads; it never touches another tenant.
 
 **Round trips are pinned by tests**, per hot endpoint, so a change that adds a round trip fails CI
@@ -218,9 +220,11 @@ hot endpoint in `tests/performance/test_round_trips.py`.
    (plus storage at $0.35/GB-month), more when autoscaling above 0.25 CU. Neon console: Project
    `clinic-os` > Branches > main > Compute > Edit > Scale to zero: off.
 3. **Probe account for authenticated production timing** (optional). Add repository secrets
-   `PROBE_EMAIL` and `PROBE_PASSWORD` (a new address and a strong password); Measure Production then
-   registers one clinic named "Performance probe (synthetic, no patients)" on first use and times the
-   authenticated reads after every deploy.
+   `PROBE_EMAIL` and `PROBE_PASSWORD` (a new address you can read and a strong password); Measure
+   Production then registers one clinic named "Performance probe (synthetic, no patients)" on first
+   use. Signup is verified by email (D-008) and the script cannot read that mailbox, so open the
+   emailed link once ("Confirm and sign in"); from the next run on it times the authenticated reads
+   after every deploy.
 4. **Query statistics** (optional): enable `pg_stat_statements` on `neondb` from the Neon console SQL
    editor (`CREATE EXTENSION IF NOT EXISTS pg_stat_statements;`) so slow-query statistics exist when
    real traffic arrives. It writes to the production database, so it was not done from here.

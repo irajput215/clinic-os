@@ -95,7 +95,7 @@ therapeutic good and a patient.** It is the screen worth demonstrating.
 
 | # | Actor | Action | Feature | Today |
 |:---:|---|---|---|---|
-| 1 | Clinic owner | Signs up with a clinic name and their email | 01, 02 | Built: `POST /users/signup`, `/signup` |
+| 1 | Clinic owner | Signs up with a clinic name and their email, then opens the emailed link | 01, 02 | Built: `POST /users/signup` and `/signup/verify`, `/signup` and `/verify-email`; nothing exists until the link is used ([D-008](decisions/D-008-signup-email-verification.md)) |
 | 2 | System | Creates the `tenants` row: slug, legal name, `ACTIVE`, `ap-southeast-2` | 01 | Table exists |
 | 3 | System | Makes the signer that tenant's administrator | 03 | Built: Practice Owner, same transaction |
 | 4 | Administrator | Adds staff and assigns roles | 03 | Built: invite by email (`POST /users/staff`), Administration > Staff; the person sets their own password |

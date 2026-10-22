@@ -13,7 +13,14 @@ the app as much as the app. This script reports what is location independent ins
 
 ``total`` is printed too, for the record, and labelled as including the observer's own distance.
 Standard library only: it runs on a bare CI runner. Every request is a read; nothing is written
-except the probe account's own sign-in.
+except the probe account's own sign-in, and its one-time registration.
+
+**The probe account is verified once, by a person.** Signup is verified by email
+(`docs/reference/decisions/D-008-signup-email-verification.md`) and this script cannot read the
+probe's mailbox. The first run that finds no account registers the probe clinic, which emails a link
+to ``PROBE_EMAIL``; the owner of that mailbox opens it once ("Confirm and sign in"). Until then
+the report says the probe is waiting for verification and skips the authenticated reads; every run
+after it signs in as before.
 
 Usage: ``python scripts/measure-production.py [--base-url URL] [--samples N]``. A Markdown report is
 written to stdout and, in GitHub Actions, to the job summary.
@@ -133,15 +140,26 @@ def _post(url: str, *args: str) -> tuple[int, str]:
     return (int(status) if status.isdigit() else 0), body
 
 
-def sign_in(base_url: str) -> str | None:
-    """Sign the probe account in, registering its probe clinic the first time it is used.
+#: Why the authenticated reads were skipped, for the report.
+NO_PROBE = "_No probe account configured: authenticated reads not measured._"
+PROBE_UNVERIFIED = (
+    "_The probe account cannot sign in: open the link emailed to `PROBE_EMAIL` once "
+    '("Confirm and sign in"), and check `PROBE_PASSWORD`. Authenticated reads not measured._'
+)
+
+
+def sign_in(base_url: str) -> tuple[str | None, str]:
+    """Sign the probe account in; register its probe clinic when no account exists yet.
 
     The probe clinic is the only tenant this script ever touches. It is created through the public
-    signup, exactly as a clinic would be, and holds no patients.
+    signup, exactly as a clinic would be, and holds no patients. Signup creates nothing until its
+    emailed link is used (D-008), so a run that has to register answers no token and says why; a
+    run after the owner verified the probe signs in. The second element is the report's note when
+    there is no token.
     """
     email, password = os.environ.get("PROBE_EMAIL"), os.environ.get("PROBE_PASSWORD")
     if not email or not password:
-        return None
+        return None, NO_PROBE
     login = (
         f"{base_url}{API}/login/access-token",
         "--data-urlencode",
@@ -151,6 +169,8 @@ def sign_in(base_url: str) -> str | None:
     )
     status, body = _post(*login)
     if status == 400:
+        # No account (or not yet verified, which is the same to sign-in). Registering again while a
+        # link is waiting only sends a fresh one, which the owner may use instead.
         signup = json.dumps(
             {
                 "email": email,
@@ -166,12 +186,12 @@ def sign_in(base_url: str) -> str | None:
             "--data",
             signup,
         )
-        status, body = _post(*login)
+        return None, PROBE_UNVERIFIED
     try:
         token = json.loads(body)["access_token"]
     except ValueError, KeyError:
-        return None
-    return token if isinstance(token, str) else None
+        return None, PROBE_UNVERIFIED
+    return (token, "") if isinstance(token, str) else (None, PROBE_UNVERIFIED)
 
 
 def main() -> int:
@@ -212,7 +232,7 @@ def main() -> int:
         burst = list(pool.map(lambda _: fetch(f"{base}{API}/health/ready/"), range(n)))
     lines.append(row("readiness, 5 concurrent", burst))
 
-    token = sign_in(base)
+    token, skipped = sign_in(base)
     if token:
         auth = {"Authorization": f"Bearer {token}"}
         week_start = time.strftime("%Y-%m-%d", time.gmtime())
@@ -239,10 +259,7 @@ def main() -> int:
                 )
             )
     else:
-        lines += [
-            "",
-            "_No probe account configured: authenticated reads not measured._",
-        ]
+        lines += ["", skipped]
 
     # Where the origin is: the response headers name the platform's edge and proxies, which is
     # evidence for the app's region when it cannot be read from the platform itself. Header names

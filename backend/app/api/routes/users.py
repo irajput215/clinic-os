@@ -12,8 +12,6 @@ from app.api.deps import (
     get_current_active_superuser,
 )
 from app.core.config import settings
-from app.core.db import tenant_transaction
-from app.core.rate_limit import signup_rate_limit
 from app.core.security import get_password_hash, verify_password
 from app.models import (
     Message,
@@ -21,13 +19,10 @@ from app.models import (
     User,
     UserCreate,
     UserPublic,
-    UserRegister,
     UsersPublic,
     UserUpdate,
     UserUpdateMe,
 )
-from app.modules.identity_tenancy.service import create_tenant_for_signup
-from app.modules.users_roles import service as users_roles_service
 from app.utils import generate_new_account_email, send_email
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -168,74 +163,9 @@ def delete_user_me(session: SessionDep, current_user: ActiveTenantUser) -> Any:
     return _deactivate(session, current_user)
 
 
-@router.post(
-    "/signup",
-    response_model=UserPublic,
-    dependencies=[Depends(signup_rate_limit)],
-)
-def register_user(session: SessionDep, user_in: UserRegister) -> Any:
-    """
-    Register an organisation, or a plain account.
-
-    This is step ① of `docs/reference/business-flow.md`. A `clinic_name` registers the
-    organisation and makes the signer its administrator; without one the account is
-    created unattached, which is what a platform administrator does.
-
-    Gated by `USERS_OPEN_REGISTRATION`. That is what makes self-registration safe:
-    a signup can only ever reach the tenant it just created.
-
-    **Organisation registration is one transaction.** The tenant, the account and the
-    Practice Owner grant commit together or not at all, so a failure anywhere leaves no
-    half-provisioned account: no organisation without an administrator, and no account
-    pointing at an organisation whose roles were never written. Every write runs on the
-    one `tenant_transaction` session, which is also what makes the role provisioning's
-    forced-RLS inserts legal (`app.tenant_id` is set inside that transaction). The tenant
-    id is drawn before the transaction opens so the context can name it.
-
-    **A taken email is answered explicitly (`400`), which discloses that the address has an
-    account.** That is a recorded residual risk, not an oversight (`docs/progress.md` §2). No
-    feature document requires signup to be non-enumerating (T-AUTH.9 covers sign-in), and a uniform
-    answer would not remove the signal while signup signs its owner straight in: whoever posts a
-    new address can sign in with the password they chose, and whoever posts a taken one cannot. Removing it needs email verification before the
-    first sign-in, which changes the product flow (`docs2/sdlc/01-auth-and-shell` R10) and makes
-    signup depend on outbound mail in production. Until that is decided, the 20/min signup limit
-    (`app/core/rate_limit.py`) bounds the rate at which the answer can be harvested.
-    """
-    if not settings.USERS_OPEN_REGISTRATION:
-        raise HTTPException(
-            status_code=403,
-            detail="Open user registration is forbidden on this server",
-        )
-    user = crud.get_user_by_email(session=session, email=user_in.email)
-    if user:
-        raise HTTPException(
-            status_code=400,
-            detail="The user with this email already exists in the system",
-        )
-
-    user_create = UserCreate.model_validate(user_in)
-    if user_in.clinic_name is None:
-        # An unattached account owns no tenant data, so it needs no tenant context and no
-        # second write: one insert, one commit.
-        return crud.create_user(session=session, user_create=user_create)
-
-    tenant_id = uuid.uuid4()
-    new_user = User.model_validate(
-        user_create, update={"hashed_password": get_password_hash(user_create.password)}
-    )
-    with tenant_transaction(tenant_id=tenant_id, actor_id=new_user.id) as tx:
-        tenant = create_tenant_for_signup(tx, user_in.clinic_name, tenant_id=tenant_id)
-        new_user.tenant_id = tenant.id
-        tx.add(new_user)
-        tx.flush()
-        # Feature 03: the seven system roles are tenant-scoped, so a new organisation needs its own
-        # copies, and the signer becomes its Practice Owner. Without this the account would be
-        # authenticated but hold no permission and every route would deny it (fail closed).
-        users_roles_service.provision_tenant_in_transaction(
-            tx, tenant_id=tenant.id, owner_user_id=new_user.id
-        )
-        # Serialised inside the transaction, while the row is still bound to a live session.
-        return UserPublic.model_validate(new_user)
+# Organisation signup (`POST /users/signup`) moved to `app.modules.users_roles.router` with email
+# verification (`docs/reference/decisions/D-008-signup-email-verification.md`): `users_roles` owns the
+# user lifecycle and every `/users/*` route (`docs/reference/build-contract.md` §7).
 
 
 @router.get("/{user_id}", response_model=UserPublic)

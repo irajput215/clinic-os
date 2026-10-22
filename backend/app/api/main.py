@@ -25,6 +25,7 @@ from app.modules.users_roles.router import (
     invitations_router,
     permissions_router,
     roles_router,
+    signup_router,
     staff_router,
     user_roles_router,
 )
@@ -35,6 +36,7 @@ api_router.include_router(login.router)
 # Before the legacy `users.router`: its `/users/{user_id}` would otherwise capture the literal
 # `staff` segment (and answer `422` for a non-UUID id). `test_staff.py` pins the order.
 api_router.include_router(staff_router)
+api_router.include_router(signup_router)
 api_router.include_router(invitations_router)
 api_router.include_router(users.router)
 api_router.include_router(utils.router)

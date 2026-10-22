@@ -21,6 +21,7 @@ from sqlalchemy import text
 
 from app.core.config import settings
 from app.core.db import engine
+from tests.utils.signup import sign_up
 
 PATIENTS_URL = f"{settings.API_V1_STR}/patients"
 
@@ -63,22 +64,11 @@ class PatientsApi:
         if clinic_name is not None:
             signup["clinic_name"] = clinic_name
 
-        created = self._client.post(f"{settings.API_V1_STR}/users/signup", json=signup)
-        assert created.status_code == 200, created.text
-        account = created.json()
-        tenant_id = uuid.UUID(account["tenant_id"]) if account["tenant_id"] else None
-        if tenant_id is not None:
-            self._tenant_ids.append(tenant_id)
-
-        token = self._client.post(
-            f"{settings.API_V1_STR}/login/access-token",
-            data={"username": email, "password": password},
-        )
-        assert token.status_code == 200, token.text
+        owner = sign_up(self._client, signup)
+        if owner.tenant_id is not None:
+            self._tenant_ids.append(owner.tenant_id)
         return TenantSession(
-            tenant_id=tenant_id,
-            user_id=uuid.UUID(account["id"]),
-            headers={"Authorization": f"Bearer {token.json()['access_token']}"},
+            tenant_id=owner.tenant_id, user_id=owner.user_id, headers=owner.headers
         )
 
     def create_raw(self, session: TenantSession, **overrides: Any) -> Response:

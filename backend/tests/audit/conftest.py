@@ -66,6 +66,25 @@ def audit_count(tenant_id: uuid.UUID) -> int:
     return len(audit_rows(tenant_id))
 
 
+#: Every organisation's trail opens with its own creation: verifying the signup writes `user.create`
+#: for the founder (`docs/reference/decisions/D-008-signup-email-verification.md`). It is the chain's
+#: genesis event, so a case's own events start at chain sequence `FOUNDING_EVENTS + 1`.
+FOUNDING_EVENTS = 1
+
+
+def case_rows(tenant_id: uuid.UUID) -> list[dict[str, Any]]:
+    """The tenant's rows after its founding event: what the case itself wrote, oldest first."""
+    rows = audit_rows(tenant_id)
+    assert [row["action"] for row in rows[:FOUNDING_EVENTS]] == ["user.create"], (
+        "the trail does not open with the organisation's creation"
+    )
+    return rows[FOUNDING_EVENTS:]
+
+
+def case_count(tenant_id: uuid.UUID) -> int:
+    return len(case_rows(tenant_id))
+
+
 def actions_of(tenant_id: uuid.UUID) -> list[str]:
     return [str(row["action"]) for row in audit_rows(tenant_id)]
 

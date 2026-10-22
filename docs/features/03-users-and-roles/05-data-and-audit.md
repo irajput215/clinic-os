@@ -32,6 +32,9 @@ only.
 | `user_roles.granted_by`, `granted_at` | SENSITIVE | pseud | never | actor and timeline evidence |
 | `staff_invitations.sent_at`, `expires_at`, `accepted_at`, `invited_by` | SENSITIVE | pseud | never | onboarding timeline; the interim home of `users.status = INVITED` (`03-design.md`) |
 | `staff_invitations.pending_password_digest` | INTERNAL | never | never | SHA-256 of the hash of a random secret nobody holds; never a digest of a password a person chose |
+| `signup_requests.email`, `full_name`, `clinic_name` | SENSITIVE | never | never | an unverified organisation signup ([D-008](../../reference/decisions/D-008-signup-email-verification.md)); deleted at verification or after expiry |
+| `signup_requests.hashed_password` | **SECRET** control set | never | never | the chosen password's Argon2 verifier until verification copies it to the account; `NULL` for a request made for an address that already had an account |
+| `signup_requests.link_id`, `sent_at`, `expires_at`, `send_count` | INTERNAL | yes | never | which link is current, and the resend cap |
 | `user_roles.last_reviewed_at` | SENSITIVE | yes | never | access-review evidence (`22` US-30) |
 | Audit `reason` (free text) | SENSITIVE | never | never | may contain clinical detail; captured but never logged (`12 §3`) |
 
@@ -68,6 +71,12 @@ envelope's `actor_id`, and the invitation expiry is the event's timestamp plus
 `user.permission_change` `GRANT`. Refusals write `user.create` `DENIED` with `PERMISSION_NOT_HELD`,
 `GRANT_EXCEEDS_ACTOR`, `EMAIL_UNAVAILABLE` or `CLIENT_TENANT_ID_IGNORED` (the last alongside the
 successful create). Accepting the invitation writes nothing: the catalogue has no credential event.
+
+**Signup verification (2026-10-08, D-008).** Verifying an organisation signup creates the tenant and
+its first account, and writes `user.create` `SUCCESS` in the new tenant's audit log on the creating
+transaction (actor and target the new account, `added = ["PRACTICE_OWNER"]`). Before verification no
+tenant exists, so a signup request writes no audit event (the audit log is tenant-scoped); the request
+row itself is the record until it is used or expires.
 
 **Resend (2026-10-08).** Re-sending an invitation emits `user.create` again, because it re-issues the
 invitation whose expiry `USER_CREATED` records, and the closed catalogue has no `USER_INVITED`

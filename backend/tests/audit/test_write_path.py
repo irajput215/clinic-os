@@ -21,9 +21,12 @@ from app.core.db import engine, tenant_transaction
 from app.modules.audit import service
 from app.modules.audit.models import GENESIS_HASH
 from tests.audit.conftest import (
+    FOUNDING_EVENTS,
     AuditApi,
     audit_count,
     audit_rows,
+    case_count,
+    case_rows,
     chain_report,
     tamper,
 )
@@ -42,7 +45,7 @@ PATIENT = {
 
 def test_audit_writes_in_the_same_transaction(api: AuditApi) -> None:
     """F1: a domain change and its audit row commit together, and exactly one event per change."""
-    assert audit_count(api.tenant_id) == 0
+    assert case_count(api.tenant_id) == 0
 
     created = api.rbac.client.post(
         f"{settings.API_V1_STR}/patients", json=PATIENT, headers=api.headers
@@ -50,7 +53,7 @@ def test_audit_writes_in_the_same_transaction(api: AuditApi) -> None:
     assert created.status_code == 201, created.text
     patient_id = created.json()["id"]
 
-    rows = audit_rows(api.tenant_id)
+    rows = case_rows(api.tenant_id)
     assert [row["action"] for row in rows] == ["patient.create"], (
         "one create must produce exactly one `patient.create` event"
     )
@@ -108,7 +111,7 @@ def test_rollback_leaves_no_orphan_event(api: AuditApi) -> None:
             )
             raise RuntimeError("the business write failed")
 
-    assert audit_count(api.tenant_id) == 0
+    assert case_count(api.tenant_id) == 0
 
 
 def test_audit_write_failure_rolls_back_business_operation(
@@ -216,7 +219,7 @@ def test_payload_allowlist_rejects_clinical_content(
                 service.AuditEvent(action=action, result="SUCCESS", payload=payload),
             )
     assert "AUDIT_PAYLOAD_REJECTED" in str(refusal.value)
-    assert audit_count(api.tenant_id) == 0, "a refused payload wrote a row anyway"
+    assert case_count(api.tenant_id) == 0, "a refused payload wrote a row anyway"
 
 
 def test_a_sentinel_clinical_value_never_reaches_the_payload(api: AuditApi) -> None:
@@ -250,7 +253,7 @@ def test_an_action_outside_the_catalogue_is_refused(api: AuditApi) -> None:
                 session, service.AuditEvent(action="patient.purge", result="SUCCESS")
             )
     assert "AUDIT_PAYLOAD_REJECTED" in str(refusal.value)
-    assert audit_count(api.tenant_id) == 0
+    assert case_count(api.tenant_id) == 0
 
 
 def test_a_result_outside_the_envelope_is_refused(api: AuditApi) -> None:
@@ -309,7 +312,7 @@ def test_hash_chain_links_consecutive_events(api: AuditApi) -> None:
 
     report = chain_report(api.tenant_id)
     assert report.verified is True
-    assert report.events == 3
+    assert report.events == FOUNDING_EVENTS + 3
     assert report.head_hash == rows[-1]["hash"]
 
 
@@ -346,7 +349,7 @@ def test_hash_chain_verification_detects_a_modified_row(api: AuditApi) -> None:
     assert report.verified is False
     assert report.first_break is not None
     assert report.first_break.reason == "HASH_MISMATCH"
-    assert report.first_break.sequence == 2
+    assert report.first_break.sequence == FOUNDING_EVENTS + 2
     assert report.first_break.event_id == ids[1]
 
 
@@ -357,7 +360,7 @@ def test_hash_chain_verification_detects_a_relinked_row(api: AuditApi) -> None:
     so only the *linkage* catches it. Detecting it needs the walk, not a per-row digest check.
     """
     ids = _three_events(api)
-    rows = audit_rows(api.tenant_id)
+    rows = case_rows(api.tenant_id)
 
     # Skip the middle event: the third now claims the first as its predecessor.
     tamper(
@@ -377,7 +380,7 @@ def test_hash_chain_verification_detects_a_relinked_row(api: AuditApi) -> None:
     # walk expects the second row's hash at that position. That is the honest reason, and it is the
     # one an incident report needs: `PREV_HASH_MISMATCH` at sequence 3 says a link was rewritten.
     assert report.first_break.reason == "PREV_HASH_MISMATCH"
-    assert report.first_break.sequence == 3
+    assert report.first_break.sequence == FOUNDING_EVENTS + 3
     assert report.first_break.event_id == ids[2]
 
 
@@ -394,7 +397,7 @@ def test_hash_chain_verification_detects_a_deleted_middle_row(api: AuditApi) -> 
     assert report.verified is False
     assert report.first_break is not None
     assert report.first_break.reason == "PREV_HASH_MISMATCH"
-    assert report.first_break.sequence == 2
+    assert report.first_break.sequence == FOUNDING_EVENTS + 2
     assert report.first_break.event_id == ids[2]
 
 
@@ -405,9 +408,11 @@ def test_a_truncated_chain_is_detected(api: AuditApi) -> None:
     the genesis value, so the history it claims to continue is missing.
     """
     ids = _three_events(api)
+    # The chain's real start: the organisation's founding event (`conftest.FOUNDING_EVENTS`).
+    genesis = audit_rows(api.tenant_id)[0]["event_id"]
     tamper(
         "DELETE FROM audit_log WHERE tenant_id = :tenant_id AND event_id = :event_id",
-        {"tenant_id": api.tenant_id, "event_id": ids[0]},
+        {"tenant_id": api.tenant_id, "event_id": genesis},
     )
 
     report = chain_report(api.tenant_id)
@@ -415,7 +420,7 @@ def test_a_truncated_chain_is_detected(api: AuditApi) -> None:
     assert report.first_break is not None
     assert report.first_break.reason == "PREV_HASH_MISMATCH"
     assert report.first_break.sequence == 1
-    assert report.first_break.event_id == ids[1]
+    assert report.first_break.event_id == ids[0]
 
 
 def test_concurrent_writers_do_not_fork_the_chain(api: AuditApi) -> None:
@@ -444,7 +449,7 @@ def test_concurrent_writers_do_not_fork_the_chain(api: AuditApi) -> None:
     with ThreadPoolExecutor(max_workers=5) as pool:
         list(pool.map(write, range(5)))
 
-    rows = audit_rows(api.tenant_id)
+    rows = case_rows(api.tenant_id)
     assert len(rows) == 5
     prev_hashes = [row["prev_hash"] for row in rows]
     assert len(set(prev_hashes)) == len(prev_hashes), (
@@ -469,7 +474,7 @@ def test_chain_order_is_timestamp_then_event_id(api: AuditApi) -> None:
             {"moment": same_moment, "tenant_id": api.tenant_id, "event_id": event_id},
         )
 
-    rows = audit_rows(api.tenant_id)
+    rows = case_rows(api.tenant_id)
     assert [row["event_id"] for row in rows] == sorted(ids, key=str), (
         "the chain is no longer walked in `(timestamp, event_id)` order"
     )

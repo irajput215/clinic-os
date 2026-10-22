@@ -30,7 +30,14 @@ from app.modules.audit.archive import (
     S3ObjectLockSink,
 )
 from app.modules.audit.models import GENESIS_HASH
-from tests.audit.conftest import AuditApi, audit_rows, chain_report, tamper
+from tests.audit.conftest import (
+    FOUNDING_EVENTS,
+    AuditApi,
+    audit_rows,
+    case_rows,
+    chain_report,
+    tamper,
+)
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 PATIENTS = f"{settings.API_V1_STR}/patients"
@@ -112,7 +119,7 @@ def test_export_refuses_a_broken_chain(api: AuditApi) -> None:
 def test_export_window_is_half_open_and_keeps_its_linkage(api: AuditApi) -> None:
     """A ranged export reports the linkage it inherited rather than pretending to be genesis."""
     _seed(api, 3)
-    rows = audit_rows(api.tenant_id)
+    rows = case_rows(api.tenant_id)
     after_first = rows[0]["timestamp"] + timedelta(microseconds=1)
 
     with tenant_transaction(tenant_id=api.tenant_id) as session:
@@ -198,7 +205,7 @@ def test_verify_audit_chain_entry_point_reports_ok(api: AuditApi) -> None:
     assert completed.returncode == 0, completed.stderr
     report = json.loads(completed.stdout.strip().splitlines()[-1])
     assert report["verified"] is True
-    assert report["events"] == 2
+    assert report["events"] == FOUNDING_EVENTS + 2
     assert report["head_hash"] == audit_rows(api.tenant_id)[-1]["hash"]
     assert report["report_sha256"], "the report carries a self-digest"
 

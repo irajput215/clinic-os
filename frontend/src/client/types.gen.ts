@@ -610,6 +610,34 @@ export type NewPassword = {
 };
 
 /**
+ * OrganisationSignup
+ *
+ * The body of `POST /api/v1/users/signup` (D-008). Strict: any other key is `422`.
+ *
+ * The field rules are the ones `UserRegister` had (password 8 to 128 characters, the rest at most
+ * 255). `clinic_name` registers an organisation; without it the account belongs to none, which is
+ * what a platform administrator registers.
+ */
+export type OrganisationSignup = {
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Password
+     */
+    password: string;
+    /**
+     * Full Name
+     */
+    full_name?: string | null;
+    /**
+     * Clinic Name
+     */
+    clinic_name?: string | null;
+};
+
+/**
  * OwnPermissionsRead
  *
  * The caller's own effective permission codes, sorted (`GET /api/v1/users/me/permissions`).
@@ -1317,6 +1345,48 @@ export type RolesPublic = {
      * Count
      */
     count: number;
+};
+
+/**
+ * SignupAccepted
+ *
+ * The one answer to a signup, whatever the address: this attempt's id and the link's window.
+ *
+ * `request_id` identifies the attempt (for "Send the email again"), never an account.
+ */
+export type SignupAccepted = {
+    /**
+     * Request Id
+     */
+    request_id: string;
+    /**
+     * Expires In Hours
+     */
+    expires_in_hours: number;
+};
+
+/**
+ * SignupResend
+ *
+ * The body of `POST /api/v1/users/signup/resend`.
+ */
+export type SignupResend = {
+    /**
+     * Request Id
+     */
+    request_id: string;
+};
+
+/**
+ * SignupVerify
+ *
+ * The body of `POST /api/v1/users/signup/verify`: the emailed token, only ever in a body.
+ */
+export type SignupVerify = {
+    /**
+     * Token
+     */
+    token: string;
 };
 
 /**
@@ -2276,28 +2346,6 @@ export type UserPublic = {
 };
 
 /**
- * UserRegister
- */
-export type UserRegister = {
-    /**
-     * Email
-     */
-    email: string;
-    /**
-     * Password
-     */
-    password: string;
-    /**
-     * Full Name
-     */
-    full_name?: string | null;
-    /**
-     * Clinic Name
-     */
-    clinic_name?: string | null;
-};
-
-/**
  * UserRoleRead
  *
  * One role an account holds inside the caller's tenant.
@@ -2680,6 +2728,93 @@ export type usersResendInvitationResponses = {
 
 export type usersResendInvitationResponse = usersResendInvitationResponses[keyof usersResendInvitationResponses];
 
+export type usersRegisterUserData = {
+    body: OrganisationSignup;
+    path?: never;
+    query?: never;
+    url: '/api/v1/users/signup';
+};
+
+export type usersRegisterUserErrors = {
+    /**
+     * Open registration is off
+     */
+    403: unknown;
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+    /**
+     * Outgoing mail is not configured, so nothing is created
+     */
+    503: unknown;
+};
+
+export type usersRegisterUserError = usersRegisterUserErrors[keyof usersRegisterUserErrors];
+
+export type usersRegisterUserResponses = {
+    /**
+     * Successful Response
+     */
+    202: SignupAccepted;
+};
+
+export type usersRegisterUserResponse = usersRegisterUserResponses[keyof usersRegisterUserResponses];
+
+export type usersResendSignupEmailData = {
+    body: SignupResend;
+    path?: never;
+    query?: never;
+    url: '/api/v1/users/signup/resend';
+};
+
+export type usersResendSignupEmailErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type usersResendSignupEmailError = usersResendSignupEmailErrors[keyof usersResendSignupEmailErrors];
+
+export type usersResendSignupEmailResponses = {
+    /**
+     * Successful Response
+     */
+    202: Message;
+};
+
+export type usersResendSignupEmailResponse = usersResendSignupEmailResponses[keyof usersResendSignupEmailResponses];
+
+export type usersVerifySignupData = {
+    body: SignupVerify;
+    path?: never;
+    query?: never;
+    url: '/api/v1/users/signup/verify';
+};
+
+export type usersVerifySignupErrors = {
+    /**
+     * The link is invalid, expired, replaced or already used
+     */
+    400: unknown;
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type usersVerifySignupError = usersVerifySignupErrors[keyof usersVerifySignupErrors];
+
+export type usersVerifySignupResponses = {
+    /**
+     * Successful Response
+     */
+    200: Token;
+};
+
+export type usersVerifySignupResponse = usersVerifySignupResponses[keyof usersVerifySignupResponses];
+
 export type usersAcceptInvitationData = {
     body: InvitationAccept;
     path?: never;
@@ -2849,31 +2984,6 @@ export type usersUpdatePasswordMeResponses = {
 };
 
 export type usersUpdatePasswordMeResponse = usersUpdatePasswordMeResponses[keyof usersUpdatePasswordMeResponses];
-
-export type usersRegisterUserData = {
-    body: UserRegister;
-    path?: never;
-    query?: never;
-    url: '/api/v1/users/signup';
-};
-
-export type usersRegisterUserErrors = {
-    /**
-     * Validation Error
-     */
-    422: HTTPValidationError;
-};
-
-export type usersRegisterUserError = usersRegisterUserErrors[keyof usersRegisterUserErrors];
-
-export type usersRegisterUserResponses = {
-    /**
-     * Successful Response
-     */
-    200: UserPublic;
-};
-
-export type usersRegisterUserResponse = usersRegisterUserResponses[keyof usersRegisterUserResponses];
 
 export type usersDeleteUserData = {
     body?: never;

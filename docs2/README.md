@@ -43,8 +43,9 @@ PLAYWRIGHT_BASE_URL=http://127.0.0.1:8000 bun run test
 `docker compose watch` builds the backend image, which builds this app, so <http://localhost:8000> is
 the production build. CI runs the Playwright suite the same way (`.github/workflows/playwright.yml`).
 
-Sign in with any account that belongs to an organisation. To create one, use `POST /api/v1/users/signup`
-with a `clinic_name` (open registration is on in development). The public booking page needs no account:
+Sign in with any account that belongs to an organisation. To create one, register at `/signup` (or
+`POST /api/v1/users/signup` with a `clinic_name`; open registration is on in development) and open the
+link it emails (Mailpit locally) to confirm. The public booking page needs no account:
 `/book/<clinic-slug>`.
 
 ## Feature map

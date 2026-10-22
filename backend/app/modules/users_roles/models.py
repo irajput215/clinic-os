@@ -193,3 +193,46 @@ class StaffInvitation(SQLModel, table=True):
     pending_password_digest: str = Field(max_length=64)
     accepted_at: datetime | None = Field(default=None, sa_type=_TIMESTAMPTZ)
     created_at: datetime = Field(default_factory=_utcnow, sa_type=_TIMESTAMPTZ)
+
+
+class SignupRequest(SQLModel, table=True):
+    """One organisation signup waiting for its emailed link to be used (D-008).
+
+    `docs/reference/decisions/D-008-signup-email-verification.md`. Nothing else exists until the link
+    is used: no tenant, no account, no grant. Verification copies the request into the account and
+    deletes every request for the address; an expired request is deleted by the next signup.
+
+    **Not a tenant table.** No organisation exists yet, so there is no `tenant_id` and no RLS, like the
+    legacy `user` table the request precedes; the module's service is the only reader.
+
+    `hashed_password` is the chosen password's verifier (the SECRET control set, as on `user`), or
+    `NULL` for a request made with an address that already had an account: that request was answered
+    with a notice instead of a link and can never be verified. `link_id` names the one link that is
+    current; a resend replaces it, which retires the previous link.
+    """
+
+    __tablename__ = "signup_requests"
+    __table_args__ = (
+        sa.CheckConstraint("expires_at > sent_at", name="expiry_after_send"),
+        sa.CheckConstraint("send_count >= 1", name="send_count_positive"),
+        sa.Index("ix_signup_requests_email_key", "email_key"),
+        sa.Index("ix_signup_requests_expires_at", "expires_at"),
+    )
+
+    id: uuid.UUID = Field(
+        default_factory=uuid.uuid4,
+        primary_key=True,
+        sa_column_kwargs={"server_default": sa.text("gen_random_uuid()")},
+    )
+    # As typed, which becomes the account's address; `email_key` is its lower-case form, the key
+    # every lookup uses (an address is unique case-insensitively, as on `user`).
+    email: str = Field(max_length=255)
+    email_key: str = Field(max_length=255)
+    full_name: str | None = Field(default=None, max_length=255)
+    clinic_name: str | None = Field(default=None, max_length=255)
+    hashed_password: str | None = Field(default=None)
+    link_id: uuid.UUID = Field(default_factory=uuid.uuid4)
+    sent_at: datetime = Field(sa_type=_TIMESTAMPTZ)
+    expires_at: datetime = Field(sa_type=_TIMESTAMPTZ)
+    send_count: int = Field(default=1)
+    created_at: datetime = Field(default_factory=_utcnow, sa_type=_TIMESTAMPTZ)
