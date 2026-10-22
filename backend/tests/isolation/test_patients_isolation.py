@@ -24,9 +24,9 @@ AS_APP_ROLE = text("SET LOCAL ROLE clinos_app")
 AS_TENANT = text("SELECT set_config('app.tenant_id', :tenant_id, true)")
 
 _TENANT = text(
-    "INSERT INTO tenants (id, slug, legal_name, status, data_region, retention_profile,"
-    " created_at, updated_at) VALUES (:id, :slug, :slug, 'ACTIVE', 'ap-southeast-2', 'default',"
-    " now(), now())"
+    "INSERT INTO tenants (id, slug, legal_name, display_name, status, data_region,"
+    " retention_profile, created_at, updated_at) VALUES (:id, :slug, :slug, :slug, 'ACTIVE',"
+    " 'ap-southeast-2', 'default', now(), now())"
 )
 _PATIENT = text(
     "INSERT INTO patients (tenant_id, given_name, family_name, date_of_birth, created_at,"

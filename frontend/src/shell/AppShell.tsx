@@ -11,7 +11,7 @@ import { ArrowLeft, ArrowRight, Menu, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import { approvalCountsQuery } from "@/data/approvals"
 import { isActionable, scriptsQuery } from "@/data/scripts"
-import { useClinicSlug } from "@/data/tenant"
+import { useClinicName, useClinicSlug } from "@/data/useClinic"
 import { formatLongDay } from "@/lib/format"
 import { currentUserQuery, displayName, signOut } from "@/lib/session"
 import { cn } from "@/lib/utils"
@@ -33,6 +33,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const counts = useNavCounts()
   const canAdminister = useCanAdminister()
   const clinicSlug = useClinicSlug()
+  const clinicName = useClinicName()
   const { data: me } = useQuery(currentUserQuery)
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -59,12 +60,13 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           <span className="block font-serif text-[19px] leading-tight font-semibold tracking-[-0.01em]">
             Clinic OS
           </span>
-          {/* The line is always laid out, so the block does not shift when the slug arrives. */}
+          {/* The line is always laid out, so the block does not shift when the name arrives. */}
           <span
             className="block h-4 truncate text-xs text-stone"
             data-testid="sidebar-clinic"
+            title={clinicName}
           >
-            {clinicSlug}
+            {clinicName}
           </span>
         </span>
       </Link>

@@ -34,11 +34,17 @@ from app.models import User
 # The audit module is reached through its service facade (`docs/reference/build-contract.md` §7).
 from app.modules.audit import service as audit
 from app.modules.identity_tenancy.models import (
+    DISPLAY_NAME_MAX_LENGTH,
     STEP_UP_MAX_LIFETIME_SECONDS,
     StepUpGrant,
     Tenant,
 )
-from app.modules.identity_tenancy.schemas import StepUpGrantRead
+from app.modules.identity_tenancy.schemas import (
+    PublicClinicRead,
+    StepUpGrantRead,
+    TenantProfileRead,
+    normalise_display_name,
+)
 
 # `retention_profile` names a retention schedule — none exists yet (open item L2,
 # retention by state and territory), so both paths use a placeholder.
@@ -46,6 +52,7 @@ DEFAULT_RETENTION_PROFILE = "default"
 
 DEMO_TENANT_SLUG = "demo-clinic"
 DEMO_TENANT_LEGAL_NAME = "Demo Clinic Pty Ltd"
+DEMO_TENANT_DISPLAY_NAME = "Demo Clinic"
 
 # The unique index behind "two clinics may share a name": `Field(unique=True, index=True)` renders as
 # a unique index under the naming convention (`app.core.metadata`), and PostgreSQL reports the index
@@ -142,14 +149,71 @@ def session_account_from_rows(
 
 
 def tenant_display_name(session: Session, *, tenant_id: uuid.UUID) -> str | None:
-    """The organisation's name as its own staff see it, or `None` when the row cannot be read.
+    """The organisation's public display name, or `None` when the row cannot be read.
 
     For the caller's **own** resolved tenant only (a staff invitation names the clinic the invitee
     is joining). `tenants` is global with no RLS, so the caller must pass the tenant the session
-    resolved and never a request value.
+    resolved and never a request value. Never `legal_name`: that is CONFIDENTIAL, and an email leaves
+    the platform.
     """
-    tenant = session.get(Tenant, tenant_id)
-    return None if tenant is None else tenant.legal_name
+    table = Tenant.metadata.tables[Tenant.__tablename__]
+    return (
+        session.connection()
+        .execute(sa_select(table.c.display_name).where(table.c.id == tenant_id))
+        .scalar_one_or_none()
+    )
+
+
+def display_name_from_slug(slug: str) -> str:
+    """The name a slug reads as (`green-valley-clinic` -> `Green Valley Clinic`).
+
+    The fallback for a clinic name that normalises to nothing, and the rule the migration that added
+    `display_name` backfilled existing tenants with: the name their public page already showed.
+    """
+    words = [word[:1].upper() + word[1:] for word in slug.split("-") if word]
+    return " ".join(words)[:DISPLAY_NAME_MAX_LENGTH].rstrip() or "Clinic"
+
+
+def signup_display_name(clinic_name: str, *, slug: str) -> str:
+    """The display name a new clinic starts with: the name typed at signup, normalised.
+
+    Signup accepts up to 255 characters (the legal name's bound); the display name keeps the first
+    120, cut at the last whole word that fits when there is one. A name with nothing printable in it
+    falls back to the slug's reading, so signup never fails on the display name.
+    """
+    try:
+        return normalise_display_name(clinic_name)
+    except ValueError:
+        pass
+    collapsed = " ".join(
+        "".join(" " if not ch.isprintable() else ch for ch in clinic_name).split()
+    )
+    if len(collapsed) > DISPLAY_NAME_MAX_LENGTH:
+        cut = collapsed[: DISPLAY_NAME_MAX_LENGTH + 1]
+        collapsed = (
+            cut.rsplit(" ", 1)[0] if " " in cut else cut[:DISPLAY_NAME_MAX_LENGTH]
+        ).rstrip()
+    return collapsed or display_name_from_slug(slug)
+
+
+def public_clinic_for_slug(session: Session, slug: str) -> PublicClinicRead | None:
+    """What an unauthenticated visitor may know about the clinic behind a slug: its display name.
+
+    The same resolution as `active_tenant_id_for_slug` (only an `ACTIVE` organisation; anything else
+    is `None`, so the caller's `404` is uniform), reading **only** the PUBLIC column. `legal_name`,
+    the id and the status never leave this function.
+    """
+    table = Tenant.metadata.tables[Tenant.__tablename__]
+    row = (
+        session.connection()
+        .execute(
+            sa_select(table.c.display_name).where(
+                table.c.slug == slug, table.c.status == ACTIVE_STATUS
+            )
+        )
+        .one_or_none()
+    )
+    return None if row is None else PublicClinicRead(display_name=row[0])
 
 
 def slugify(clinic_name: str) -> str:
@@ -200,6 +264,7 @@ def create_tenant_for_signup(
                     id=tenant_id if tenant_id is not None else uuid.uuid4(),
                     slug=slug,
                     legal_name=clinic_name,
+                    display_name=signup_display_name(clinic_name, slug=slug),
                     retention_profile=DEFAULT_RETENTION_PROFILE,
                 )
                 session.add(tenant)
@@ -225,12 +290,129 @@ def seed_demo_tenant(session: Session) -> Tenant:
     tenant = Tenant(
         slug=DEMO_TENANT_SLUG,
         legal_name=DEMO_TENANT_LEGAL_NAME,
+        display_name=DEMO_TENANT_DISPLAY_NAME,
         retention_profile=DEFAULT_RETENTION_PROFILE,
     )
     session.add(tenant)
     session.commit()
     session.refresh(tenant)
     return tenant
+
+
+# --------------------------------------------------------------------------------------------
+# The clinic's display name (`docs2/sdlc/01-auth-and-shell/api.md`, "Clinic display name")
+# --------------------------------------------------------------------------------------------
+#
+# A PUBLIC presentation setting, not a security setting: it changes what the sidebar, the booking page
+# and the clinic's emails call the clinic, and nothing about who may do what. So it is not R12's
+# step-up-gated `PATCH /tenants/current` (which still refuses every security setting), but its own
+# sub-resource, authorised by `tenant:configure` (Practice Owner only) and audited as
+# `tenant.config_changed` with `changed_fields` and `step_up: false` on the same transaction.
+
+TENANT_CONFIG_CHANGED: Final[str] = "tenant.config_changed"
+# Recorded (never returned) when a client put a `tenant_id` in the body: it is ignored, the change
+# lands on the session's tenant, and the attempt is on the trail (INV-1).
+CLIENT_TENANT_ID_IGNORED: Final[str] = "CLIENT_TENANT_ID_IGNORED"
+_DISPLAY_NAME_FIELDS: Final[tuple[str, ...]] = ("display_name",)
+
+
+def _record_config_change(
+    session: Session,
+    *,
+    tenant_id: uuid.UUID,
+    result: str,
+    changed_fields: Sequence[str],
+    reason: str | None = None,
+) -> None:
+    audit.record(
+        session,
+        audit.AuditEvent(
+            action=TENANT_CONFIG_CHANGED,
+            result=result,
+            resource_id=tenant_id,
+            reason=reason,
+            payload={"changed_fields": list(changed_fields), "step_up": False},
+        ),
+    )
+
+
+def tenant_profile(*, tenant_id: uuid.UUID) -> TenantProfileRead | None:
+    """The caller's own clinic's PUBLIC profile. Only the display name column is read."""
+    with tenant_transaction(tenant_id=tenant_id) as session:
+        name = tenant_display_name(session, tenant_id=tenant_id)
+    return None if name is None else TenantProfileRead(display_name=name)
+
+
+def record_display_name_denial(
+    *, tenant_id: uuid.UUID, actor_id: uuid.UUID, actor_role: str | None, reason: str
+) -> None:
+    """Audit a display-name change the policy layer refused before anything was written.
+
+    Its own transaction, because nothing else is written. A failure here propagates, so a refusal
+    that cannot be audited fails closed (`500`), never a silent `403`.
+    """
+    with tenant_transaction(
+        tenant_id=tenant_id, actor_id=actor_id, actor_role=actor_role
+    ) as session:
+        _record_config_change(
+            session,
+            tenant_id=tenant_id,
+            result="DENIED",
+            changed_fields=_DISPLAY_NAME_FIELDS,
+            reason=reason,
+        )
+
+
+def update_display_name(
+    *,
+    tenant_id: uuid.UUID,
+    actor_id: uuid.UUID,
+    actor_role: str | None,
+    display_name: str,
+    client_tenant_id_supplied: bool,
+) -> TenantProfileRead:
+    """Rename the caller's own clinic. The caller has already authorised `tenant:configure`.
+
+    One conditional `UPDATE` on the session's tenant id (the only `UPDATE` the application role holds
+    on `tenants` is on these two columns), then the event, on one transaction (INV-4): a failed audit
+    write rolls the rename back. Saving the name the clinic already has writes nothing and records
+    nothing, so the trail holds changes only. A `tenant_id` the client sent was dropped by the schema;
+    the attempt is recorded `DENIED` `CLIENT_TENANT_ID_IGNORED` on the same transaction.
+    """
+    table = Tenant.metadata.tables[Tenant.__tablename__]
+    with tenant_transaction(
+        tenant_id=tenant_id, actor_id=actor_id, actor_role=actor_role
+    ) as session:
+        if client_tenant_id_supplied:
+            _record_config_change(
+                session,
+                tenant_id=tenant_id,
+                result="DENIED",
+                changed_fields=_DISPLAY_NAME_FIELDS,
+                reason=CLIENT_TENANT_ID_IGNORED,
+            )
+        changed = (
+            session.connection()
+            .execute(
+                update(table)
+                .where(
+                    table.c.id == tenant_id,
+                    table.c.display_name.is_distinct_from(display_name),
+                )
+                .values(display_name=display_name, updated_at=func.now())
+                .returning(table.c.id)
+            )
+            .first()
+            is not None
+        )
+        if changed:
+            _record_config_change(
+                session,
+                tenant_id=tenant_id,
+                result="SUCCESS",
+                changed_fields=_DISPLAY_NAME_FIELDS,
+            )
+    return TenantProfileRead(display_name=display_name)
 
 
 # --------------------------------------------------------------------------------------------

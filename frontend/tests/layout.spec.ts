@@ -577,6 +577,7 @@ test("administration and settings fit every width", async ({
     ["profile", "Save profile"],
     ["password", "Change password"],
     ["account", "Deactivate account"],
+    ["clinic", "Save clinic name"],
   ] as const) {
     await page.goto(`/settings?tab=${tab}`)
     await checkEveryWidth(page, testInfo, `settings-${tab}`, [

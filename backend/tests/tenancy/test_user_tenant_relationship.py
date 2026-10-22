@@ -19,6 +19,7 @@ def test_a_user_belongs_to_a_tenant_and_the_tenant_lists_its_users() -> None:
         tenant = Tenant(
             slug="relationship-clinic",
             legal_name="Relationship Clinic",
+            display_name="Relationship Clinic",
             retention_profile="default",
         )
         session.add(tenant)

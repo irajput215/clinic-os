@@ -42,6 +42,8 @@ setup("sign up a clinic and add patients", async ({ request, baseURL }) => {
     fullName: "Dr Sarah Okafor",
     // backend/app/modules/identity_tenancy/service.py `slugify`: lower-case, hyphenated.
     slug: `ironbark-medical-${run}`,
+    // Signup sets the display name from the clinic name (`signup_display_name`).
+    name: clinicName,
   }
 
   const signup = await request.post("/api/v1/users/signup", {

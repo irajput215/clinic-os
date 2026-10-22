@@ -118,7 +118,10 @@ ACTION_CATALOGUE: Final[tuple[tuple[str, tuple[str, ...]], ...]] = (
     ),
     ("TGA_DOCUMENT", ("tga_document.ingest", "tga_document.extract")),
     ("USER", ("user.permission_change", "user.create", "user.deactivate")),
-    ("TENANT", ("tenant.security_config_change",)),
+    # `tenant.config_changed` registered 2026-10-08 with the clinic display name
+    # (`docs/features/04-audit-log/05-data-and-audit.md`): feature 01 names it
+    # (`01-tenancy-and-clinics/05-data-and-audit.md`) for a tenant configuration change.
+    ("TENANT", ("tenant.security_config_change", "tenant.config_changed")),
     ("INTEGRATION", ("integration.request",)),
     ("AUDIT", ("audit.read",)),
     # Registered with the appointments module (2026-10-07, owner-approved, recorded in
@@ -252,6 +255,9 @@ PAYLOAD_ALLOW_LIST: Final[MappingProxyType[str, frozenset[str]]] = MappingProxyT
         # invitation whose expiry `USER_CREATED` records, and the closed catalogue has no
         # `USER_INVITED` (`03-users-and-roles/05-data-and-audit.md`, "Resend"; OPEN-3).
         "user.create": frozenset({"target_user_id", "added", "change", "step_up"}),
+        # `01-tenancy-and-clinics/05-data-and-audit.md`: `changed_fields` (names only) and the step-up
+        # flag. A display-name change carries `["display_name"]` and never the name itself.
+        "tenant.config_changed": frozenset({"changed_fields", "step_up"}),
         # A booking: the patient it is for and where it came from (`STAFF` or `PUBLIC_BOOKING`, R6).
         # Never the time, the type or a name - those live in the row the event points at.
         "appointment.create": frozenset({"patient_id", "source"}),

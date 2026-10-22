@@ -3,6 +3,8 @@ export const SETTINGS_TABS = {
   profile: "Profile",
   password: "Password",
   account: "Account",
+  // Offered only to whoever may change the clinic's settings (`tenant:configure`).
+  clinic: "Clinic",
 } as const
 export type SettingsTab = keyof typeof SETTINGS_TABS
 export const SETTINGS_TAB_KEYS = Object.keys(SETTINGS_TABS) as SettingsTab[]

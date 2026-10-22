@@ -22,6 +22,7 @@ appointment and no staff detail beyond a practitioner's display name ever leaves
 | `POST /appointments` | yes | `patient:update` | session | `AppointmentCreate` | `AppointmentRead` (201) | `appointment.create` |
 | `POST /appointments/{id}/status` | yes | `patient:update` | both | `AppointmentStatusUpdate` | `AppointmentRead` | `appointment.state_change` |
 | `GET /patients/{id}/appointments` | yes | `patient:read` | both | none | `AppointmentRead[]` | deferred with `patient.read` (T1-34) |
+| `GET /public/{slug}` | **no** | none | slug, server-side | none | `PublicClinicRead` (`display_name` only) | none (PUBLIC data only) |
 | `GET /public/{slug}/slots?type=` | **no** | none | slug, server-side | query | `PublicSlot[]` | none (no personal data read) |
 | `POST /public/{slug}/bookings` | **no** | none | slug, server-side | `PublicBookingRequest` (JSON only) | `{reference}` (201) | `patient.create` (when new), `appointment.create` |
 
@@ -57,6 +58,7 @@ from app.modules.appointments.schemas import (
     PublicSlot,
 )
 from app.modules.identity_tenancy import service as identity_tenancy
+from app.modules.identity_tenancy.schemas import PublicClinicRead
 from app.modules.users_roles.catalog import APPOINTMENT_PERMISSIONS
 from app.modules.users_roles.policy import ResourceRef, enforce
 from app.modules.users_roles.service import authorize
@@ -200,14 +202,19 @@ def _clinic(session: SessionDep, clinic_slug: str) -> uuid.UUID:
         else None
     )
     if tenant_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "code": "CLINIC_NOT_FOUND",
-                "message": "This booking page isn't available.",
-            },
-        )
+        raise _clinic_not_found()
     return tenant_id
+
+
+def _clinic_not_found() -> HTTPException:
+    """One answer for an unknown, malformed or inactive clinic, so none is distinguishable."""
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail={
+            "code": "CLINIC_NOT_FOUND",
+            "message": "This booking page isn't available.",
+        },
+    )
 
 
 def _json_only(request: Request) -> None:
@@ -229,6 +236,28 @@ def _json_only(request: Request) -> None:
 
 
 ClinicDep = Annotated[uuid.UUID, Depends(_clinic)]
+
+
+@public_router.get(
+    "/{clinic_slug}",
+    response_model=PublicClinicRead,
+    dependencies=[Depends(public_slots_rate_limit)],
+    responses={404: {"description": "No such clinic, or not taking bookings"}},
+)
+def read_public_clinic(*, session: SessionDep, clinic_slug: str) -> PublicClinicRead:
+    """The clinic's public display name, for the booking page's heading. Unauthenticated.
+
+    Only the PUBLIC display name: never `legal_name`, the tenant id or the status. Resolved like the
+    other public routes (only an `ACTIVE` clinic; anything else is the same `404 CLINIC_NOT_FOUND`).
+    """
+    clinic = (
+        identity_tenancy.public_clinic_for_slug(session, clinic_slug)
+        if _SLUG.match(clinic_slug)
+        else None
+    )
+    if clinic is None:
+        raise _clinic_not_found()
+    return clinic
 
 
 @public_router.get(

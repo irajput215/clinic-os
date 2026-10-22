@@ -80,8 +80,8 @@ test("a public booking reaches the clinic's calendar", async ({
   const firstDay = sydneyDate(new Date(first.starts_at))
 
   await page.goto(`/book/${clinic.slug}`)
-  // The page names the clinic from its slug: the only public identity a clinic has.
-  await expect(page.getByText(/^Ironbark Medical [0-9a-f]{8}$/i)).toBeVisible()
+  // The page names the clinic by its PUBLIC display name (`GET /public/{slug}`), never its legal name.
+  await expect(page.getByTestId("booking-clinic")).toHaveText(clinic.name)
   await expect(page.getByText("Preview data")).toHaveCount(0)
   await page.getByRole("button", { name: /Initial doctor consult/ }).click()
   await page.getByRole("button", { name: "Continue" }).click()

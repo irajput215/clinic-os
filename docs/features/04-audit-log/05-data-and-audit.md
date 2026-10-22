@@ -75,7 +75,7 @@ This list is closed:
 | `TGA_APPROVAL` | `tga_approval.create`, `tga_approval.modify`, `tga_approval.state_change`, `tga_approval.match`, `tga_approval.verify`, `tga_approval.read` |
 | `TGA_DOCUMENT` | `tga_document.ingest`, `tga_document.extract` |
 | `USER` | `user.permission_change`, `user.create`, `user.deactivate` |
-| `TENANT` | `tenant.security_config_change` |
+| `TENANT` | `tenant.security_config_change`, `tenant.config_changed` |
 | `INTEGRATION` | `integration.request` |
 | `AUDIT` | `audit.read` |
 | `APPOINTMENT` | `appointment.create`, `appointment.state_change`, `appointment.read` |
@@ -109,6 +109,14 @@ record the interim care-team upkeep, with the patient as the resource. `tga_appr
 `prescription.modify` gained its payload row (`patient_id`, `changed_fields` - names only - and, on an
 addendum's new version, `supersedes_id`) and `prescription.reject` its (`patient_id`, `from_state`; the
 cancel reason code is the envelope's `reason`).
+
+**Registered 2026-10-08 (Milestone 4, clinic display name): `tenant.config_changed`.** Feature 01
+names it (`01-tenancy-and-clinics/05-data-and-audit.md`, "Audit events emitted") and the catalogue had
+no action for a tenant setting that is not a security setting. It carries `changed_fields` (field names
+only, e.g. `["display_name"]`) and `step_up`, and nothing else (`backend/app/modules/audit/actions.py`).
+Feature 01 describes the event as "a security setting change with step-up"; the display name is not a
+security setting and is written with `step_up: false`. That widening is recorded here and in
+`docs2/sdlc/01-auth-and-shell/api.md` for the Security Lead to confirm (OPEN until confirmed).
 
 Events beyond the envelope carry the mandatory per-action fields from doc 07 §1 — for example
 `prescription.dispatch_blocked` carries `block_reason` and `approval_id`, and `audit.read` carries

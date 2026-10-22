@@ -20,34 +20,46 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { changePassword, deactivateMe, updateMe } from "@/data/account"
+import { useCanConfigureClinic } from "@/data/useClinic"
 import {
   Card,
   Field,
   FormAlert,
   Mono,
+  NotForYourRole,
   PageHeader,
   Pill,
+  SkeletonRows,
   TabBar,
 } from "@/design/primitives"
 import { focusFirstError } from "@/lib/form"
 import { describeError } from "@/lib/http"
 import { currentUserQuery, signOut } from "@/lib/session"
 import { z } from "@/lib/zod"
+import { ClinicTab } from "./ClinicTab"
 import { SETTINGS_TAB_KEYS, SETTINGS_TABS, type SettingsTab } from "./tabs"
 
 export function SettingsPage({ tab }: { tab: SettingsTab }) {
   const navigate = useNavigate()
   const { data: me } = useSuspenseQuery(currentUserQuery)
+  const canConfigureClinic = useCanConfigureClinic()
+  const keys = SETTINGS_TAB_KEYS.filter(
+    (key) => key !== "clinic" || canConfigureClinic,
+  )
 
   return (
     <>
       <PageHeader
         title="Settings"
-        subtitle="Your own account: how you appear, how you sign in. Changes here apply only to you."
+        subtitle={
+          tab === "clinic"
+            ? "Your clinic: how it appears to your staff and your patients. Changes here apply to everyone in your clinic."
+            : "Your own account: how you appear, how you sign in. Changes here apply only to you."
+        }
       />
       <TabBar
         label="Settings"
-        tabs={SETTINGS_TAB_KEYS.map((key) => ({
+        tabs={keys.map((key) => ({
           key,
           label: SETTINGS_TABS[key],
         }))}
@@ -60,6 +72,15 @@ export function SettingsPage({ tab }: { tab: SettingsTab }) {
         {tab === "profile" ? <ProfileTab me={me} /> : null}
         {tab === "password" ? <PasswordTab /> : null}
         {tab === "account" ? <AccountTab me={me} /> : null}
+        {tab === "clinic" ? (
+          canConfigureClinic === undefined ? (
+            <SkeletonRows rows={2} />
+          ) : canConfigureClinic ? (
+            <ClinicTab />
+          ) : (
+            <NotForYourRole />
+          )
+        ) : null}
       </div>
     </>
   )

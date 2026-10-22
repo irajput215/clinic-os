@@ -133,8 +133,9 @@ test("an owner invites a doctor, resends the invite, and the new link signs them
   await expect(
     theirs.getByRole("link", { name: invitee.fullName }),
   ).toBeVisible()
-  // The session is in the owner's organisation (a doctor holds no `tenant:read`, so the sidebar
-  // names no clinic; the account says which one it is).
+  // The session is in the owner's organisation: the sidebar names its clinic (the display name is
+  // PUBLIC, read by every member), and the account says which organisation it is.
+  await expect(theirs.getByTestId("sidebar-clinic")).toHaveText(owner.name)
   const tenantOf = async (token: string | null) =>
     (
       (await (

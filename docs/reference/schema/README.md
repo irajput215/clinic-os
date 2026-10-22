@@ -21,7 +21,7 @@
 | [public.signup_requests](public.signup_requests.md) | 11 |  | BASE TABLE |
 | [public.staff_invitations](public.staff_invitations.md) | 8 |  | BASE TABLE |
 | [public.step_up_grants](public.step_up_grants.md) | 9 |  | BASE TABLE |
-| [public.tenants](public.tenants.md) | 8 |  | BASE TABLE |
+| [public.tenants](public.tenants.md) | 9 |  | BASE TABLE |
 | [public.tga_approval_events](public.tga_approval_events.md) | 9 |  | BASE TABLE |
 | [public.tga_approvals](public.tga_approvals.md) | 23 |  | BASE TABLE |
 | [public.user](public.user.md) | 8 |  | BASE TABLE |
@@ -535,6 +535,7 @@ erDiagram
 "public.tenants" {
   timestamp_with_time_zone created_at
   varchar_32_ data_region
+  varchar_120_ display_name
   uuid id
   varchar_255_ legal_name
   varchar_64_ retention_profile

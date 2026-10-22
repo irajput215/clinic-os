@@ -15,6 +15,7 @@
 | Invitation status ("Invited", expiry, "Invitation expired") and "Resend invite" (R18), backed by `GET /users/staff` and `POST /users/staff/{user_id}/invitation`; e2e in `tests/staff.spec.ts`, API in `backend/tests/users/test_staff_invitations.py` | done |
 | Revoke an outstanding invitation | open: not defined by any document (`docs/features/03-users-and-roles/01-requirements.md` OPEN-7) |
 | Signup verified by email with one answer for every address (D-008), backed by `POST /users/signup`, `/signup/resend`, `/signup/verify`; e2e in `tests/account.spec.ts`, API in `backend/tests/users/test_signup.py` | done |
+| Clinic display name (R19): `GET`/`PATCH /tenants/current/profile`, `GET /public/{slug}`, Settings > Clinic, sidebar and booking page; e2e in `tests/clinic-settings.spec.ts`, API in `backend/tests/tenancy/test_display_name.py` | done |
 | Served by the backend at `/` from the production build; CI e2e runs against that build ([ADR-F005](../../adr/ADR-F005-one-app-served-by-the-backend.md)) | done |
 
 `GET /api/v1/users/me/permissions` is served by `backend/app/modules/users_roles/router.py`

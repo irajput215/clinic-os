@@ -4,7 +4,7 @@ import { expect, test } from "./fixtures"
 /**
  * The API calls a cold load of Today makes (docs2/architecture.md "Speed measures"): the page itself
  * is one call, `GET /dashboard/today`; the shell adds the session, its permission set, the clinic's
- * slug and the two sidebar counts. Each is asked once, and none waits for another that it does
+ * display name and slug, and the two sidebar counts. Each is asked once, and none waits for another that it does
  * not need: the session and the permission set start together (`routes/_app.tsx`).
  *
  * The owner holds `tenant:read`, so the slug is asked; it waits for the permission set by design
@@ -14,6 +14,7 @@ const EXPECTED = [
   "/api/v1/dashboard/today",
   "/api/v1/prescriptions?limit=100",
   "/api/v1/tenants/current",
+  "/api/v1/tenants/current/profile",
   "/api/v1/tga-approvals?limit=1",
   "/api/v1/users/me",
   "/api/v1/users/me/permissions",
@@ -44,8 +45,14 @@ test("a cold load of Today asks each API question once, with no waterfall", asyn
   await expect(
     page.getByRole("heading", { level: 1, name: "Today's clinic" }),
   ).toBeVisible()
-  // The slug is the last read (after the permission set); it labels the sidebar.
+  // The clinic's display name labels the sidebar; the slug (asked after the permission set) builds
+  // the booking link, so it is the last read.
   await expect(page.getByTestId("sidebar-clinic")).not.toBeEmpty()
+  await expect(
+    page
+      .getByRole("navigation", { name: "Main" })
+      .getByRole("link", { name: "Booking page" }),
+  ).toBeVisible()
   await page.waitForLoadState("networkidle")
 
   expect(calls.map((c) => c.path).sort()).toEqual(EXPECTED)
@@ -61,11 +68,12 @@ test("a cold load of Today asks each API question once, with no waterfall", asyn
   const today = await finished("/api/v1/dashboard/today")
   const scripts = await finished("/api/v1/prescriptions?limit=100")
   const approvals = await finished("/api/v1/tga-approvals?limit=1")
+  const profile = await finished("/api/v1/tenants/current/profile")
 
   // Session and permissions are in flight together: each started before the other finished.
   expect(permissions.start).toBeLessThan(me.end)
   expect(me.start).toBeLessThan(permissions.end)
   // So are the page's own read and the sidebar's counts: nothing waits for `/users/me`.
-  for (const other of [today, scripts, approvals])
+  for (const other of [today, scripts, approvals, profile])
     expect(other.start).toBeLessThan(me.end)
 })
