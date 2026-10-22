@@ -92,7 +92,7 @@ does in the meantime; nothing below is built, and no work may assume an answer.
 | | - the approval validity boundary | `valid_to` half-open | | [D-006](decisions/D-006-approval-grain-and-validity-boundary.md) |
 | | - the roles bound by the treating relationship, the relationship's source of truth, and whether practice-wide screens are filtered | the matrix as written; relationships only by explicit, audited care-team upkeep; practice-wide screens audited, not filtered | (with the Security Lead for the source) | [D-007](decisions/D-007-treating-relationship-rule.md) Interims 1 and 3; §3.2 `06-authentication-rbac.md` item 5 |
 | | - the cancel-reason vocabulary, who may cancel a colleague's script, and correcting a dispatched script | a closed interim list; only the drafter or prescriber; no correction once dispatched | | [D-010](decisions/D-010-prescription-corrections.md) |
-| **Booking reminders trigger** | Which scheduler calls the reminder job in production | Confirmations are sent at once; reminders wait in the outbox until the owner sets the job token and URL, and one whose appointment has started is skipped, never sent late | Practice Owner | D-009 (scheduled jobs and booking reminders) |
+| **Booking reminders trigger** | Which scheduler calls the reminder job in production | Confirmations are sent at once; reminders wait in the outbox until the owner sets the job token and URL, and one whose appointment has started is skipped, never sent late | Practice Owner | [D-009](decisions/D-009-scheduled-jobs-and-booking-reminders.md) |
 
 ---
 
