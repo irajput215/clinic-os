@@ -458,6 +458,42 @@ def test_concurrent_writers_do_not_fork_the_chain(api: AuditApi) -> None:
     assert chain_report(api.tenant_id).verified is True
 
 
+def test_a_writer_that_records_first_but_commits_last_still_extends_the_chain(
+    api: AuditApi,
+) -> None:
+    """The chain follows commit order, whatever order the events were recorded in.
+
+    Writer A records its event, then writer B records and commits before A does. If an event's
+    timestamp were taken when it was recorded, A's row would be older than B's yet chained after it,
+    and the next writer would chain onto B again: a fork. The database takes the timestamp under the
+    chain lock, at commit, so A's row is newer than B's and the next event extends A.
+    """
+
+    def event(purpose: str) -> service.AuditEvent:
+        return service.AuditEvent(
+            action="patient.read", result="SUCCESS", payload={"purpose": purpose}
+        )
+
+    with tenant_transaction(tenant_id=api.tenant_id, actor_id=api.user_id) as first:
+        recorded_first = service.record(first, event("RECORDED_FIRST"))
+        with tenant_transaction(
+            tenant_id=api.tenant_id, actor_id=api.user_id
+        ) as second:
+            recorded_second = service.record(second, event("COMMITTED_FIRST"))
+    with tenant_transaction(tenant_id=api.tenant_id, actor_id=api.user_id) as third:
+        service.record(third, event("AFTER_BOTH"))
+
+    rows = case_rows(api.tenant_id)
+    by_id = {row["event_id"]: row for row in rows}
+    assert (
+        by_id[recorded_second.event_id]["timestamp"]
+        < (by_id[recorded_first.event_id]["timestamp"])
+    )
+    prev_hashes = [row["prev_hash"] for row in rows]
+    assert len(set(prev_hashes)) == len(prev_hashes), "the chain forked"
+    assert chain_report(api.tenant_id).verified is True
+
+
 def test_chain_order_is_timestamp_then_event_id(api: AuditApi) -> None:
     """The order the chain is walked in is the primary key, and it is total.
 

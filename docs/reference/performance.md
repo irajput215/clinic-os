@@ -220,15 +220,43 @@ fork a tenant's chain. Every audited request is one trip cheaper, writes include
 | `GET /prescriptions` | 6 / 5 | **5 / 4** |
 | `GET /appointments` (one week) | 6 / 5 | **5 / 4** |
 
-What remains above three on an audited read is the audit's one trip (the lock must be held before
-the head is read, so the two cannot share a statement) and, on lists, a second step that depends on
-the first (names for the page's ids). Carrying the lock and head in the route's own last read flight
-would remove the audit's trip too; it is route by route and is not done.
+**The audit costs no round trip (2026-10-27).** The remaining trip, the chain lock with the read of
+the chain's head, now travels with `COMMIT` too. One flight carries the lock, then one chained
+`INSERT ... SELECT` per event, then `COMMIT` (`app.modules.audit.service.record_many`). Each insert
+reads the tenant's head itself and derives from it, under the lock:
+
+- `prev_hash`, the head's hash (or the genesis value);
+- `timestamp`, the database clock, but at least one microsecond after the head's, so the new row is
+  always the newest by the chain's order. A timestamp taken in the application when the event was
+  recorded would not be: a writer that records first but commits last would chain after a row that
+  is newer than its own, and the next writer would fork the chain. The concurrent-writer test caught
+  exactly that in a first version, and a deterministic test now pins it;
+- `hash`, computed exactly as `compute_hash` does: the application supplies the event's canonical
+  JSON cut at those two values, and the database fills them in and hashes the result with
+  `sha256()`. Every chain test recomputes the stored rows in Python, byte for byte.
+
+The statements run in order on the server, so each insert takes its snapshot only once the lock is
+held: concurrent writers still cannot fork a chain, and the lock is now held only for that one
+flight. A failing insert still fails the `COMMIT` and the operation (INV-4).
+
+| Request (seeded / empty) | Insert with `COMMIT` | Whole audit with `COMMIT` |
+|---|---|---|
+| `GET /dashboard/today` | 6 / 5 | **5 / 4** |
+| `GET /patients`, `POST /patients/search` | 4 / 4 | **3 / 3** |
+| `GET /patients/{id}` | 4 / 4 | **3 / 3** |
+| a patient's consult notes, bookings, approvals, activity | 4 / 4 | **3 / 3** |
+| a patient's scripts | 5 / 4 | **4 / 3** |
+| `GET /tga-approvals` | 6 / 5 | **5 / 4** |
+| `GET /prescriptions` | 5 / 4 | **4 / 3** |
+| `GET /appointments` (one week) | 5 / 4 | **4 / 3** |
+
+Every single-resource read now meets the Milestone 3 budget of three round trips, audited or not.
+What remains above three is a list whose second step depends on its first (the names for the
+page's ids, on a seeded clinic) and Today, which reads three sections and their lookups.
 
 "Core only" on a seeded clinic shows what the per-row lookups cost once there is data (Today 32,
-scripts 17): the empty-clinic counts hid them. A read above three round trips is an audited read
-(the audit event costs one: the chain lock with the head read; its insert rides with `COMMIT`) or a
-read whose second step depends on the first (names for the page's ids).
+scripts 17): the empty-clinic counts hid them. A read above three round trips is a read whose second step depends on the first (names for the
+page's ids); the audit event costs none.
 
 At ~216 ms per round trip, Today goes from about 7.6 s of database waiting (35 round trips) to about
 1.5 s (7); at a co-located ~1 ms it would be single-digit milliseconds either way.
