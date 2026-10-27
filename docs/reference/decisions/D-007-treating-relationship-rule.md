@@ -96,7 +96,8 @@ decision.
   says so, and a refused record shows "You have no care relationship with this patient" with what to do
   next; it never says anything else about the record.
 - Every patient-level read now writes an audit event (`patient.read`, `clinical_record.read`,
-  `appointment.read`, `prescription.read`, `tga_approval.read`), which costs the two audit round trips on
-  the reads that were not audited before; the pinned counts in
-  `backend/tests/performance/test_round_trips.py` carry the reason.
+  `appointment.read`, `prescription.read`, `tga_approval.read`), which cost two round trips when this
+  decision was made. Since 2026-10-27 the whole audit write travels with `COMMIT` and costs none
+  (`docs/reference/performance.md` §4); the pinned counts are in
+  `backend/tests/performance/test_round_trips.py`.
 - Closing C13 replaces Interim 1, not the mechanism: whatever the source, it writes the same rows.

@@ -39,14 +39,25 @@ from functools import cache
 from hmac import compare_digest
 from typing import Any, Final, Protocol, cast
 
-from sqlalchemy import Insert, and_, insert, or_
+from sqlalchemy import (
+    Insert,
+    String,
+    and_,
+    bindparam,
+    func,
+    insert,
+    literal,
+    literal_column,
+    or_,
+)
 from sqlalchemy import Table as sa_Table
 from sqlalchemy import inspect as sa_inspect
+from sqlalchemy import select as sa_select
 from sqlalchemy.sql.elements import ColumnElement
 from sqlmodel import Session, col, select, text
 
 from app.core.config import settings
-from app.core.db import driver_sql, run_pipelined, send_with_commit
+from app.core.db import send_with_commit
 from app.modules.audit.actions import (
     ACTIONS,
     PAYLOAD_ALLOW_LIST,
@@ -196,29 +207,124 @@ def compute_hash(entry: AuditLogEntry) -> str:
     ).hexdigest()
 
 
-_CHAIN_LOCK_SQL: Final = driver_sql(
-    text("SELECT pg_advisory_xact_lock(:class_id, :key)")
-)
-#: The head of one tenant's chain: the newest row by the primary key's order.
-_CHAIN_HEAD_SQL: Final = driver_sql(
-    text(
-        "SELECT hash FROM audit_log WHERE tenant_id = :tenant_id"
-        " ORDER BY timestamp DESC, event_id DESC LIMIT 1"
-    )
-)
+_CHAIN_LOCK_SQL: Final = text("SELECT pg_advisory_xact_lock(:class_id, :key)")
 
 
 @cache
-def _audit_insert() -> tuple[Insert, tuple[tuple[str, str], ...]]:
-    """The audit row's insert, and each column's name with the attribute that holds it.
+def _chained_insert() -> Insert:
+    """One audit row, chained to the tenant's head by the database, in one statement.
 
-    Built on first use, never at import: reading a mapper's attributes configures every mapper, and at
-    import time not every model is registered yet (`scripts/prestart.sh` imports this module long
-    before the rest). The column and attribute names differ for `metadata`.
+    The statement reads the head of the tenant's chain (the newest row by the primary key's order)
+    and derives from it, under the chain lock, the two values that must follow it:
+
+    - `prev_hash`: the head's hash, or the genesis value for a tenant's first event;
+    - `timestamp`: the database clock, but always at least one microsecond after the head's, so the
+      new row is the newest by the chain's order even if the clock steps back.
+
+    It then computes the row's `hash` exactly as `compute_hash` does. The writer supplies the event's
+    canonical JSON cut at those two values (`prefix`, `middle`, `tail`; `timestamp` is the last key),
+    and the database fills them in: `SHA-256(prefix ‖ prev_hash ‖ middle ‖ timestamp ‖ tail ‖
+    prev_hash)`, hex encoded. Neither value needs escaping inside the JSON (hex, and an ISO timestamp
+    in UTC at microsecond precision, `_timestamp_form`). Every chain test recomputes the stored rows
+    in Python, so a single differing byte fails them.
+
+    Built on first use, never at import: reading a mapper configures every mapper, and at import time
+    not every model is registered yet (`scripts/prestart.sh` imports this module long before the rest).
     """
-    mapper = sa_inspect(AuditLogEntry)
-    columns = tuple((prop.columns[0].name, prop.key) for prop in mapper.column_attrs)
-    return insert(cast(sa_Table, mapper.local_table)), columns
+    table = cast(sa_Table, sa_inspect(AuditLogEntry).local_table)
+    derived = ("prev_hash", "hash", "timestamp")
+    written = [c for c in table.columns if c.name not in derived]
+    tenant = bindparam("tenant_id", type_=table.c.tenant_id.type)
+
+    def newest(column: Any) -> Any:  # noqa: ANN401 - a SQLAlchemy column
+        return (
+            sa_select(column)
+            .where(table.c.tenant_id == tenant)
+            .order_by(table.c.timestamp.desc(), table.c.event_id.desc())
+            .limit(1)
+            .scalar_subquery()
+        )
+
+    head = sa_select(
+        func.coalesce(newest(table.c.hash), bindparam("genesis", type_=String)).label(
+            "prev"
+        ),
+        # `greatest` ignores a NULL, so a tenant's first event takes the clock as it is.
+        func.greatest(
+            func.clock_timestamp(),
+            newest(table.c.timestamp) + literal_column("interval '1 microsecond'"),
+        ).label("at"),
+    ).subquery("head")
+    at_text = func.to_char(
+        func.timezone("UTC", head.c.at), literal('YYYY-MM-DD"T"HH24:MI:SS.US')
+    )
+    digest = func.encode(
+        func.sha256(
+            func.convert_to(
+                bindparam("prefix", type_=String)
+                + head.c.prev
+                + bindparam("middle", type_=String)
+                + at_text
+                + bindparam("tail", type_=String)
+                + head.c.prev,
+                literal("UTF8"),
+            )
+        ),
+        literal("hex"),
+    )
+    rows = sa_select(
+        *[bindparam(c.name, type_=c.type) for c in written],
+        head.c.prev,
+        head.c.at,
+        digest,
+    ).select_from(head)
+    return insert(table).from_select(
+        [*[c.name for c in written], "prev_hash", "timestamp", "hash"], rows
+    )
+
+
+@cache
+def _written_attributes() -> tuple[tuple[str, str], ...]:
+    """Each audit column the writer supplies, with the model attribute that holds it."""
+    return tuple(
+        (prop.columns[0].name, prop.key)
+        for prop in sa_inspect(AuditLogEntry).column_attrs
+        if prop.columns[0].name not in ("prev_hash", "hash", "timestamp")
+    )
+
+
+#: Stand in for the two values the database fills in while the canonical JSON is cut. Neither can
+#: occur in a real event: `<` and `>` never appear in a hex hash or an ISO timestamp.
+_PREV_PLACEHOLDER: Final = "<prev_hash>"
+_AT_PLACEHOLDER: Final = "<timestamp>"
+_PLACEHOLDER_MOMENT: Final = datetime(2000, 1, 1, tzinfo=UTC)
+
+
+def _cut_canonical_json(entry: AuditLogEntry) -> tuple[str, str, str]:
+    """The event's canonical JSON around its `prev_hash` and `timestamp` values (`_chained_insert`)."""
+    entry.prev_hash = _PREV_PLACEHOLDER
+    entry.timestamp = _PLACEHOLDER_MOMENT
+    serialised = canonical_json(canonical_payload(entry)).replace(
+        f'"timestamp":"{_timestamp_form(_PLACEHOLDER_MOMENT)}"',
+        f'"timestamp":"{_AT_PLACEHOLDER}"',
+    )
+    prefix, found_prev, rest = serialised.partition(
+        f'"prev_hash":"{_PREV_PLACEHOLDER}"'
+    )
+    middle, found_at, tail = rest.partition(f'"timestamp":"{_AT_PLACEHOLDER}"')
+    if (
+        not (found_prev and found_at)
+        or _PREV_PLACEHOLDER in tail
+        or _AT_PLACEHOLDER in tail
+    ):
+        raise AssertionError(
+            "the canonical form must hold each derived value exactly once"
+        )
+    return (
+        prefix + '"prev_hash":"',
+        '"' + middle + '"timestamp":"',
+        '"' + tail,
+    )
 
 
 def _chain_lock_key(tenant_id: uuid.UUID) -> int:
@@ -333,28 +439,43 @@ def _validate(event: AuditEvent) -> None:
         )
 
 
-def record(session: Session, event: AuditEvent) -> AuditLogEntry:
+@dataclass(frozen=True)
+class RecordedEvent:
+    """What a caller learns from a write: the event's identifier.
+
+    Not its timestamp or hash: the database assigns both, under the chain lock, when the transaction
+    commits (`record_many`).
+    """
+
+    event_id: uuid.UUID
+
+
+def record(session: Session, event: AuditEvent) -> RecordedEvent:
     """Insert one audit event on the caller's transaction, chained to the tenant's previous hash.
 
-    Returns the entry with `hash` and `prev_hash` set, so a caller can report the head hash without a
-    second query. The row itself is inserted with the transaction's `COMMIT`, in the same flight
-    (`record_many`). Raises
-    [`AuditWriteRefused`][app.modules.audit.service.AuditWriteRefused] for a payload or action the
-    catalogue does not name, at once and before anything is queued; a database error from the insert
-    fails the `COMMIT`, so the caller's transaction is the one that fails (R4).
+    Raises [`AuditWriteRefused`][app.modules.audit.service.AuditWriteRefused] for a payload or action
+    the catalogue does not name, at once and before anything is queued. The row is written with the
+    transaction's `COMMIT` (`record_many`); a database error there fails the `COMMIT`, so the caller's
+    transaction is the one that fails (R4).
     """
-    [entry] = record_many(session, [event])
-    return entry
+    [recorded] = record_many(session, [event])
+    return recorded
 
 
-def record_many(session: Session, events: Sequence[AuditEvent]) -> list[AuditLogEntry]:
-    """Insert several events on the caller's transaction, chained in order, in one round trip.
+def record_many(session: Session, events: Sequence[AuditEvent]) -> list[RecordedEvent]:
+    """Insert several events on the caller's transaction, chained in order, at no round trip of its own.
 
-    For a request that reads several kinds of record at once (the Today page audits each section it
-    read): one chain lock with its head, then every row in one insert that travels with `COMMIT`.
-    Each event is validated before anything is written, so one refused event refuses them all, and
-    the caller's transaction fails (R4). The timestamps strictly increase in the given order, so the chain's order (timestamp, then
-    id) is the order the events were given in.
+    Each event is validated first, so one refused event refuses them all and the caller's transaction
+    fails (R4). The database assigns each timestamp under the chain lock, strictly after the head's,
+    so the chain's order (timestamp, then id) is the order the events were written in.
+
+    Everything is sent with the transaction's `COMMIT`, in one flight (`send_with_commit`), after every
+    other change the transaction made: the tenant's chain lock, then one chained insert per event,
+    then `COMMIT`. The database runs them in that order, so each insert takes its snapshot only once
+    the lock is held and reads the head the previous writer committed, or the row this transaction
+    inserted just before it; two concurrent writers can never chain onto the same head (a fork, which
+    verification would report as a break). The lock is `xact`-scoped and held only for that flight. A
+    failing insert fails the `COMMIT` and the whole operation (R4, INV-4).
     """
     for event in events:
         _validate(event)
@@ -369,64 +490,46 @@ def record_many(session: Session, events: Sequence[AuditEvent]) -> list[AuditLog
     actor_id = None if raw_actor is None else uuid.UUID(raw_actor)
     actor_role = _session_info(session, "actor_role")
 
-    # Serialise every writer for this tenant before reading the head of its chain. Without this, two
-    # concurrent writers read the same `prev_hash` and insert two rows chaining to the same
-    # predecessor: a fork, which verification reports as a break even though nothing was tampered
-    # with. The lock is `xact`-scoped, so `COMMIT`/`ROLLBACK` releases it.
-    #
-    # The lock and the read of the head travel in one flight (`run_pipelined`), but they remain two
-    # statements: the read takes its snapshot only once the lock is held, so it always sees the
-    # head the previous writer committed. One statement holding both would read a snapshot taken
-    # before the wait and could fork the chain.
-    _, head = run_pipelined(
-        session,
-        [
-            (
-                _CHAIN_LOCK_SQL,
-                {"class_id": _CHAIN_LOCK_CLASS, "key": _chain_lock_key(tenant_id)},
-            ),
-            (_CHAIN_HEAD_SQL, {"tenant_id": tenant_id}),
-        ],
-    )
-    prev_hash = GENESIS_HASH if not head else str(head[0][0])
-
-    entries: list[AuditLogEntry] = []
-    previous: datetime | None = None
+    attributes = _written_attributes()
+    rows: list[dict[str, Any]] = []
+    recorded: list[RecordedEvent] = []
     for event in events:
-        timestamp = datetime.now(UTC)
-        if previous is not None and timestamp <= previous:
-            timestamp = previous + timedelta(microseconds=1)
-        previous = timestamp
         entry = _entry(
             event,
             event_id=uuid.uuid4(),
-            timestamp=timestamp,
-            prev_hash=prev_hash,
+            timestamp=_PLACEHOLDER_MOMENT,
+            prev_hash=_PREV_PLACEHOLDER,
             tenant_id=tenant_id,
             actor_id=actor_id,
             actor_role=actor_role,
             request_id=request_id,
             correlation_id=correlation_id,
         )
-        entry.hash = compute_hash(entry)
-        prev_hash = entry.hash
-        entries.append(entry)
+        prefix, middle, tail = _cut_canonical_json(entry)
+        row = {column: getattr(entry, attribute) for column, attribute in attributes}
+        rows.append(
+            {
+                **row,
+                "genesis": GENESIS_HASH,
+                "prefix": prefix,
+                "middle": middle,
+                "tail": tail,
+            }
+        )
+        recorded.append(RecordedEvent(event_id=entry.event_id))
 
-    # The rows travel with the transaction's `COMMIT`, in the same flight (`send_with_commit`): the
-    # insert is still inside the caller's transaction, after everything else it wrote, and a failed
-    # insert fails the `COMMIT` and the whole operation (R4, INV-4). The chain lock is held from the
-    # head's read until that `COMMIT`, so no other writer can chain onto the same head meanwhile.
-    statement, columns = _audit_insert()
-    rows = [
-        {column: getattr(entry, attribute) for column, attribute in columns}
-        for entry in entries
-    ]
+    lock = {"class_id": _CHAIN_LOCK_CLASS, "key": _chain_lock_key(tenant_id)}
 
-    def insert_rows(queued: Session) -> None:
-        queued.connection().execute(statement, rows)
+    def write(queued: Session) -> None:
+        connection = queued.connection()
+        connection.execute(_CHAIN_LOCK_SQL, lock)
+        statement = _chained_insert()
+        # One statement per event, in order: each reads the head the one before it wrote.
+        for row in rows:
+            connection.execute(statement, row)
 
-    send_with_commit(session, insert_rows)
-    return entries
+    send_with_commit(session, write)
+    return recorded
 
 
 def chain(session: Session, *, tenant_id: uuid.UUID) -> Iterator[AuditLogEntry]:
@@ -884,7 +987,7 @@ def read_events(
 
 def audit_read_denial(
     session: Session, *, filters: AuditFilters, reason: str
-) -> AuditLogEntry:
+) -> RecordedEvent:
     """Record a refused or empty audit read, including a cross-tenant identifier lookup.
 
     The design requires a denial to be audited with the same fidelity as a success (control 6, R7),
