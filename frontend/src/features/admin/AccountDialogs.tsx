@@ -40,7 +40,6 @@ const schema = (creating: boolean) =>
               "Use at least 8 characters.",
             ),
       confirm_password: z.string(),
-      is_superuser: z.boolean(),
       is_active: z.boolean(),
     })
     .refine((v) => v.password === v.confirm_password, {
@@ -54,7 +53,6 @@ const toForm = (account?: UserPublic): FormValues => ({
   full_name: account?.full_name ?? "",
   password: "",
   confirm_password: "",
-  is_superuser: account?.is_superuser ?? false,
   is_active: account?.is_active ?? true,
 })
 
@@ -110,11 +108,7 @@ export function AccountFormDialog({
     />
   )
 
-  const toggle = (
-    name: "is_superuser" | "is_active",
-    label: string,
-    hint: string,
-  ) => (
+  const toggle = (name: "is_active", label: string, hint: string) => (
     <Controller
       control={form.control}
       name={name}
@@ -211,11 +205,6 @@ export function AccountFormDialog({
               "is_active",
               "Active",
               "An inactive account can't sign in.",
-            )}
-            {toggle(
-              "is_superuser",
-              "Superuser",
-              "Platform administration across every organisation.",
             )}
           </div>
 

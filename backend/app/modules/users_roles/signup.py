@@ -261,11 +261,21 @@ def _usable(request: SignupRequest | None, claims: LinkClaims) -> bool:
 
 
 def _create_account(
-    session: Session, request: SignupRequest, user_id: uuid.UUID
+    session: Session,
+    request: SignupRequest,
+    user_id: uuid.UUID,
+    *,
+    tenant_id: uuid.UUID | None,
 ) -> User:
+    """Insert the account with its organisation already set.
+
+    The application role holds no `UPDATE` on `user.tenant_id` (an account is never moved between
+    organisations), so the tenant is created first and the account is inserted into it.
+    """
     assert request.hashed_password is not None
     user = User(
         id=user_id,
+        tenant_id=tenant_id,
         email=request.email,
         full_name=request.full_name,
         hashed_password=request.hashed_password,
@@ -305,12 +315,20 @@ def verify_signup(*, token: str) -> str | None:
                 return None
             if _registered_address(session, request.email_key) is not None:
                 return None
-            user = _create_account(session, request, user_id)
-            if request.clinic_name is not None:
-                tenant = identity_tenancy.create_tenant_for_signup(
+            tenant = (
+                None
+                if request.clinic_name is None
+                else identity_tenancy.create_tenant_for_signup(
                     session, request.clinic_name, tenant_id=tenant_id
                 )
-                user.tenant_id = tenant.id
+            )
+            user = _create_account(
+                session,
+                request,
+                user_id,
+                tenant_id=None if tenant is None else tenant.id,
+            )
+            if tenant is not None:
                 session.flush()
                 users_roles.provision_tenant_in_transaction(
                     session, tenant_id=tenant.id, owner_user_id=user.id

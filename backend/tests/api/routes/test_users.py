@@ -549,3 +549,44 @@ def test_delete_user_without_privileges(
     )
     assert r.status_code == 403
     assert r.json()["detail"] == "The user doesn't have enough privileges"
+
+
+def test_create_user_refuses_a_superuser(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """Superuser status comes only from `FIRST_SUPERUSER`; the app role cannot set it later."""
+    username = random_email()
+    r = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=superuser_token_headers,
+        json={
+            "email": username,
+            "password": random_lower_string(),
+            "is_superuser": True,
+        },
+    )
+    assert r.status_code == 422
+    assert crud.get_user_by_email(session=db, email=username) is None
+
+
+def test_update_user_refuses_to_change_superuser_status(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    user = crud.create_user(
+        session=db,
+        user_create=UserCreate(email=random_email(), password=random_lower_string()),
+    )
+    r = client.patch(
+        f"{settings.API_V1_STR}/users/{user.id}",
+        headers=superuser_token_headers,
+        json={"is_superuser": True},
+    )
+    assert r.status_code == 422
+    db.refresh(user)
+    assert user.is_superuser is False
+    unchanged = client.patch(
+        f"{settings.API_V1_STR}/users/{user.id}",
+        headers=superuser_token_headers,
+        json={"is_superuser": False, "full_name": "Still Allowed"},
+    )
+    assert unchanged.status_code == 200

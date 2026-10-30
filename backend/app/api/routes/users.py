@@ -27,6 +27,8 @@ from app.utils import generate_new_account_email, send_email
 
 router = APIRouter(prefix="/users", tags=["users"])
 
+SUPERUSER_NOT_EDITABLE = "Superuser status can't be changed here; it is set only by FIRST_SUPERUSER at start-up."
+
 
 @router.get(
     "/",
@@ -56,7 +58,12 @@ def read_users(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:
 def create_user(*, session: SessionDep, user_in: UserCreate) -> Any:
     """
     Create new user.
+
+    Never a superuser: that flag is set only by `FIRST_SUPERUSER` at start-up. The application role
+    cannot change it afterwards (migration `e1a4c7b9d2f3`), so it is not granted from an API either.
     """
+    if user_in.is_superuser:
+        raise HTTPException(status_code=422, detail=SUPERUSER_NOT_EDITABLE)
     user = crud.get_user_by_email(session=session, email=user_in.email)
     if user:
         raise HTTPException(
@@ -209,6 +216,11 @@ def update_user(
             status_code=404,
             detail="The user with this id does not exist in the system",
         )
+    if (
+        user_in.is_superuser is not None
+        and user_in.is_superuser != db_user.is_superuser
+    ):
+        raise HTTPException(status_code=422, detail=SUPERUSER_NOT_EDITABLE)
     if user_in.email:
         existing_user = crud.get_user_by_email(session=session, email=user_in.email)
         if existing_user and existing_user.id != user_id:
