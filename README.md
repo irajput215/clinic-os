@@ -1,92 +1,132 @@
-# Full Stack FastAPI Template
+# ClinicOS
 
-[![Test Docker Compose](../../actions/workflows/test-docker-compose.yml/badge.svg)](../../actions/workflows/test-docker-compose.yml)
 [![Test Backend](../../actions/workflows/test-backend.yml/badge.svg)](../../actions/workflows/test-backend.yml)
+[![Test Docker Compose](../../actions/workflows/test-docker-compose.yml/badge.svg)](../../actions/workflows/test-docker-compose.yml)
 
-## Technology Stack and Features
+A multi-tenant clinical prescribing platform for Australian clinics: patients, appointments, consult
+notes, TGA approvals, prescriptions and pharmacy dispatch, with every change audited.
 
-- ⚡ [**FastAPI**](https://fastapi.tiangolo.com) for the Python backend API.
-  - 🧰 [SQLModel](https://sqlmodel.tiangolo.com) for the Python SQL database interactions (ORM).
-  - 🔍 [Pydantic](https://docs.pydantic.dev), used by FastAPI, for the data validation and settings management.
-  - 💾 [PostgreSQL](https://www.postgresql.org) as the SQL database.
-- 🚀 [React](https://react.dev) for the frontend.
-  - 🧩 Built into the backend application and served by FastAPI on the same domain as the API.
-  - 💃 Using TypeScript, hooks, [Vite](https://vitejs.dev), and other parts of a modern frontend stack.
-  - 🎨 [Tailwind CSS](https://tailwindcss.com) and [shadcn/ui](https://ui.shadcn.com) for the frontend components.
-  - 🤖 An automatically generated frontend client.
-  - 🧪 [Playwright](https://playwright.dev) for end-to-end testing.
-  - 🦇 Dark mode support.
-- ☁️ [FastAPI Cloud](https://fastapicloud.com) for deployment.
-- 🐋 [Docker Compose](https://www.docker.com) for local services and self-hosted deployment.
-  - 📞 [Traefik](https://traefik.io) as a reverse proxy with automatic HTTPS.
-- 🔒 Secure password hashing by default.
-- 🔑 JWT (JSON Web Token) authentication.
-- 📫 Email-based password recovery.
-- ✉️ [React Email](https://react.email) for email templates.
-- 📬 [Mailpit](https://mailpit.axllent.org) for local email testing during development.
-- ✅ Tests with [Pytest](https://pytest.org).
-- 🏭 CI (continuous integration) and CD (continuous deployment) based on GitHub Actions.
+**Stack:** FastAPI + SQLModel + PostgreSQL (Neon) · React + TanStack + Tailwind · FastAPI Cloud.
 
-### Dashboard Login
+> **Status: MVP.** `docs/` describes the target design; the code in `backend/app/` is what exists.
 
-![Dashboard login screenshot](img/login.png)
+## Quick start
 
-### Dashboard - Admin
+```bash
+cp .env.example .env                  # then replace every REPLACE_ME
+docker compose up -d db mailpit       # local Postgres + mail catcher
 
-![Admin dashboard screenshot](img/dashboard.png)
+cd backend
+uv sync
+uv run bash scripts/prestart.sh       # migrations + first superuser
+uv run fastapi dev app/main.py        # API on :8000
 
-### Dashboard - Items
+cd .. && bun install && bun run dev   # app on :5174
+```
 
-![Items dashboard screenshot](img/dashboard-items.png)
+Tests: `cd backend && uv run pytest` · `bun run test` (Playwright). Full guide: [HOW_TO_RUN.md](HOW_TO_RUN.md).
 
-### Dashboard - Dark Mode
+## File structure
 
-![Dark mode dashboard screenshot](img/dashboard-dark.png)
+```
+clinic-os/
+├── backend/
+│   ├── app/
+│   │   ├── main.py            # FastAPI app, middleware, serves the built frontend
+│   │   ├── core/              # config, db + tenant transactions, security, logging, timing
+│   │   ├── modules/           # one folder per domain: models · schemas · service · router
+│   │   │   ├── identity_tenancy/   users_roles/    clinics/
+│   │   │   ├── patients/           care_relationships/  clinical_records/
+│   │   │   ├── appointments/       tga_approvals/  prescriptions/
+│   │   │   └── dashboard/          audit/
+│   │   ├── api/               # legacy template routes (frozen) + shared dependencies
+│   │   ├── db_models.py       # registers every table for Alembic
+│   │   └── alembic/           # migrations
+│   └── tests/
+├── frontend/src/
+│   ├── routes/                # TanStack Router pages
+│   ├── features/              # screens per domain
+│   ├── data/                  # TanStack Query hooks
+│   └── client/                # generated API SDK
+├── docs/                      # features, tasks, reference (build contract, schema, performance)
+└── scripts/                   # client generation, schema diagram, production timing
+```
 
-### React Email Templates
+## Data flow
 
-![Email templates screenshot](img/react-email.png)
+```mermaid
+flowchart LR
+    B[Browser<br/>React app] -->|HTTPS + JWT| R[FastAPI router]
+    R --> D[Auth dependency<br/>session, tenant, permissions]
+    D -->|deny → 401/403/404| B
+    D --> S[Module service]
+    S --> T[tenant_transaction<br/>SET LOCAL app.tenant_id]
+    T --> P[(PostgreSQL<br/>row-level security)]
+    S --> A[Audit log<br/>same transaction]
+    A --> P
+    S -.->|prescriptions| X[Pharmacy dispatch<br/>outbox]
+```
 
-### Mailpit - Local Email Testing
+1. The browser sends a request with a bearer token.
+2. The auth dependency verifies the session and **resolves the tenant from the account** — never from
+   the request.
+3. The module service checks permissions, then runs inside `tenant_transaction`, so Postgres
+   row-level security only shows that tenant's rows.
+4. The audit event is written in the same transaction; if it fails, the change fails.
 
-![Mailpit screenshot](img/mailpit.png)
+## Data model
 
-### Interactive API Documentation
+Every clinical table carries `tenant_id` (omitted below for brevity). Full generated schema:
+[docs/reference/schema](docs/reference/schema/README.md).
 
-![API docs](img/docs.png)
+```mermaid
+erDiagram
+    TENANTS ||--o{ USER : "staff"
+    TENANTS ||--o{ CLINICS : has
+    TENANTS ||--o{ ROLES : defines
+    TENANTS ||--o{ PATIENTS : has
+    TENANTS ||--o{ AUDIT_LOG : records
 
-## How to Use It
+    USER ||--o{ USER_ROLES : granted
+    ROLES ||--o{ USER_ROLES : ""
+    ROLES ||--o{ ROLE_PERMISSIONS : ""
+    PERMISSIONS ||--o{ ROLE_PERMISSIONS : ""
+    USER ||--o{ STAFF_INVITATIONS : invites
 
-Click the **Use this template** button at the top of this page to create a new repository.
+    PATIENTS ||--o{ CARE_RELATIONSHIPS : "cared for by"
+    USER ||--o{ CARE_RELATIONSHIPS : practitioner
+    CLINICS |o--o{ CARE_RELATIONSHIPS : at
 
-## Run It Locally
+    PATIENTS ||--o{ APPOINTMENTS : books
+    APPOINTMENTS ||--o{ APPOINTMENT_NOTIFICATIONS : sends
 
-Start here: [HOW_TO_RUN.md](./HOW_TO_RUN.md) - prerequisites, configuration, running the backend and the app, tests, and troubleshooting.
+    PATIENTS ||--o{ CLINICAL_RECORDS : has
+    CLINICAL_RECORDS ||--o{ CLINICAL_RECORD_VERSIONS : versions
 
-## Backend Development
+    PATIENTS ||--o{ TGA_APPROVALS : holds
+    TGA_APPROVALS ||--o{ TGA_APPROVAL_EVENTS : history
 
-Backend docs: [backend/README.md](./backend/README.md).
+    PATIENTS ||--o{ PRESCRIPTIONS : receives
+    TGA_APPROVALS ||--o{ PRESCRIPTIONS : authorises
+    PRESCRIPTIONS ||--o{ PRESCRIPTION_EVENTS : history
+    PRESCRIPTIONS ||--o{ DISPATCH_ATTEMPTS : "sent to pharmacy"
+```
 
-## Frontend Development
+## Rules that always hold
 
-Frontend docs: [frontend/README.md](./frontend/README.md) and [docs2/](./docs2/README.md).
+- **Deny by default.** The backend is the only security boundary; the frontend only hides and warns.
+- **Tenant is resolved, never supplied.** A `tenant_id` from the client is ignored.
+- **`404`, not `403`,** across tenants.
+- **No patient data** in logs, metrics or error responses.
+- **Audit in the same transaction** as the change.
 
-## Deployment
+Full list: [AGENTS.md](AGENTS.md) and [docs/reference/build-contract.md](docs/reference/build-contract.md).
 
-FastAPI Cloud deployment: [deployment.md](./deployment.md).
+## More docs
 
-Self-hosted deployment with Docker Compose: [deployment-docker-compose.md](./deployment-docker-compose.md).
-
-## Development
-
-General development docs: [development.md](./development.md).
-
-This includes the local FastAPI and Vite workflow, Docker Compose services, `.env` configuration, and more.
-
-## Release Notes
-
-Check the file [release-notes.md](./release-notes.md).
+[docs/README.md](docs/README.md) · [development.md](development.md) · [deployment.md](deployment.md) ·
+[performance](docs/reference/performance.md) · [release-notes.md](release-notes.md)
 
 ## License
 
-The Full Stack FastAPI Template is licensed under the terms of the MIT license.
+MIT.
