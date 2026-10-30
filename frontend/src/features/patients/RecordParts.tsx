@@ -62,6 +62,9 @@ const MISSING_LABEL: Record<string, string> = {
   ADDRESS: "full address",
 }
 
+const missingText = (patient: PatientRead) =>
+  patient.escript_ready.missing.map((m) => MISSING_LABEL[m] ?? m).join(", ")
+
 /** Manual §3.4, the eScript-ready rule: verified IHI, sex and a complete street address. */
 export function EScriptChip({ patient }: { patient: PatientRead }) {
   if (patient.escript_ready.ready)
@@ -71,14 +74,10 @@ export function EScriptChip({ patient }: { patient: PatientRead }) {
       </Pill>
     )
   return (
-    <Pill
-      tone="warn"
-      title="An eScript needs a verified IHI, the patient's sex and a full street address"
-    >
-      Not eScript-ready: missing{" "}
-      {patient.escript_ready.missing
-        .map((m) => MISSING_LABEL[m] ?? m)
-        .join(", ")}
+    // Short, so the chip never widens a phone screen; what is missing is spelled out in the
+    // Identifiers card, where it can wrap.
+    <Pill tone="warn" title={`Missing: ${missingText(patient)}`}>
+      Not eScript-ready
     </Pill>
   )
 }
@@ -110,7 +109,7 @@ export function AlertChips({ patientId }: { patientId: string }) {
             {canUpdate ? (
               <button
                 type="button"
-                className="-mr-1 ml-0.5 inline-flex rounded-full p-0.5 hover:bg-black/10 max-lg:min-h-6 max-lg:min-w-6 max-lg:justify-center"
+                className="-mr-1 ml-0.5 inline-flex items-center justify-center rounded-full p-0.5 hover:bg-black/10 max-lg:-my-3 max-lg:-mr-3 max-lg:min-h-11 max-lg:min-w-11"
                 aria-label={`Remove alert: ${a.text}`}
                 disabled={remove.isPending}
                 onClick={() => remove.mutate(a.id)}
@@ -354,6 +353,11 @@ export function IdentifiersCard({ patient }: { patient: PatientRead }) {
   )
   return (
     <Card title="Identifiers" action={<EScriptChip patient={patient} />}>
+      {patient.escript_ready.ready ? null : (
+        <p className="mb-3 text-sm text-warn-deep">
+          An eScript needs {missingText(patient)} on this record.
+        </p>
+      )}
       <dl className="grid grid-cols-[130px_minmax(0,1fr)] gap-y-2.5 text-sm">
         {row(
           "Medicare",
