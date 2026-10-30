@@ -14,7 +14,9 @@
 | [public.clinical_records](public.clinical_records.md) | 9 |  | BASE TABLE |
 | [public.clinics](public.clinics.md) | 7 |  | BASE TABLE |
 | [public.dispatch_attempts](public.dispatch_attempts.md) | 18 |  | BASE TABLE |
-| [public.patients](public.patients.md) | 23 |  | BASE TABLE |
+| [public.patient_alerts](public.patient_alerts.md) | 9 |  | BASE TABLE |
+| [public.patient_emergency_contacts](public.patient_emergency_contacts.md) | 10 |  | BASE TABLE |
+| [public.patients](public.patients.md) | 29 |  | BASE TABLE |
 | [public.permissions](public.permissions.md) | 3 |  | BASE TABLE |
 | [public.prescription_events](public.prescription_events.md) | 8 |  | BASE TABLE |
 | [public.prescriptions](public.prescriptions.md) | 24 |  | BASE TABLE |
@@ -288,6 +290,10 @@ erDiagram
 "public.dispatch_attempts" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.dispatch_attempts" }o--|| "public.tga_approvals" : "FOREIGN KEY (tenant_id, approval_id) REFERENCES tga_approvals(tenant_id, id) ON DELETE RESTRICT"
 "public.dispatch_attempts" }o--|| "public.prescriptions" : "FOREIGN KEY (tenant_id, prescription_id) REFERENCES prescriptions(tenant_id, id) ON DELETE RESTRICT"
+"public.patient_alerts" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.patient_alerts" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
+"public.patient_emergency_contacts" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.patient_emergency_contacts" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
 "public.patients" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.patients" }o--o| "public.patients" : "FOREIGN KEY (merged_into_patient_id) REFERENCES patients(id) ON DELETE RESTRICT"
 "public.prescription_events" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
@@ -441,6 +447,29 @@ erDiagram
   varchar state
   uuid tenant_id FK
 }
+"public.patient_alerts" {
+  timestamp_with_time_zone created_at
+  uuid created_by
+  uuid id
+  uuid patient_id FK
+  timestamp_with_time_zone removed_at
+  uuid removed_by
+  uuid tenant_id FK
+  varchar_120_ text
+  varchar tone
+}
+"public.patient_emergency_contacts" {
+  timestamp_with_time_zone created_at
+  uuid created_by
+  uuid id
+  varchar_255_ name
+  uuid patient_id FK
+  varchar_64_ phone
+  varchar_100_ relationship
+  timestamp_with_time_zone removed_at
+  uuid removed_by
+  uuid tenant_id FK
+}
 "public.patients" {
   varchar address_line
   timestamp_with_time_zone created_at
@@ -455,15 +484,21 @@ erDiagram
   bytea ihi
   bytea ihi_blind_index
   bytea medicare_blind_index
+  smallint medicare_irn
   bytea medicare_number
   uuid merged_into_patient_id FK
   varchar phone
   varchar postcode
   varchar preferred_name
+  boolean receives_communications
   varchar sex_at_birth
   varchar state
+  varchar status
+  timestamp_with_time_zone status_changed_at
+  varchar_500_ status_reason
   varchar suburb
   uuid tenant_id FK
+  varchar_64_ timezone
   timestamp_with_time_zone updated_at
 }
 "public.permissions" {

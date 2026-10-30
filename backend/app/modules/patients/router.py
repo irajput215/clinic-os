@@ -116,10 +116,16 @@ from app.modules.patients import service
 from app.modules.patients.schemas import (
     MAX_CURSOR_LENGTH,
     MAX_PATIENTS_PAGE_SIZE,
+    AlertCreate,
+    AlertRead,
+    EmergencyContactCreate,
+    EmergencyContactRead,
     PatientCreate,
     PatientRead,
     PatientSearch,
     PatientsPublic,
+    PatientStatus,
+    PatientStatusChange,
     PatientUpdate,
 )
 from app.modules.users_roles.catalog import PATIENT_PERMISSIONS
@@ -131,7 +137,7 @@ router = APIRouter(prefix="/patients", tags=["patients"])
 # The only query parameters `GET /patients` honours. Anything else - `q` above all - is refused rather
 # than ignored: an ignored `?q=` would answer a search with the unfiltered list, and the term would
 # already be in the URL. Search is `POST /patients/search` (R12).
-_LIST_QUERY_PARAMETERS: Final[frozenset[str]] = frozenset({"limit", "cursor"})
+_LIST_QUERY_PARAMETERS: Final[frozenset[str]] = frozenset({"limit", "cursor", "status"})
 UNSUPPORTED_QUERY_PARAMETER: Final[str] = "UNSUPPORTED_QUERY_PARAMETER"
 INVALID_CURSOR: Final[str] = "INVALID_CURSOR"
 # The audit reason for a policy refusal, the code the clinical-records trail uses for the same case.
@@ -222,8 +228,13 @@ def list_patients(
     request: Request,
     limit: int = Query(default=MAX_PATIENTS_PAGE_SIZE, ge=1, le=MAX_PATIENTS_PAGE_SIZE),
     cursor: str | None = Query(default=None, max_length=MAX_CURSOR_LENGTH),
+    status_filter: list[PatientStatus] | None = Query(default=None, alias="status"),
 ) -> PatientsPublic:
-    """One keyset page of the caller's patients. Follow `next_cursor` for the next page."""
+    """One keyset page of the caller's patients. Follow `next_cursor` for the next page.
+
+    `status` (repeatable) chooses the lifecycle statuses; without it the list holds the active
+    patients, and archived, discharged and deceased records are left out (manual §3.2).
+    """
     context = _read_context(actor, request)
     _authorise(actor, context)
     if set(request.query_params) - _LIST_QUERY_PARAMETERS:
@@ -244,6 +255,7 @@ def list_patients(
             limit=limit,
             cursor=cursor,
             care_scope=_care_scope(actor),
+            statuses=status_filter,
         )
     except service.InvalidCursor as error:
         raise _invalid_cursor() from error
@@ -313,3 +325,128 @@ def update_patient(
     if isinstance(result, service.PatientRefusal):
         _raise_refusal(result)
     return result
+
+
+def _changed[T](result: T | service.PatientRefusal) -> T:
+    if isinstance(result, service.PatientRefusal):
+        _raise_refusal(result)
+    return result
+
+
+def _authorise_change(actor: Actor, request: Request, patient_id: uuid.UUID) -> None:
+    _authorise(
+        actor,
+        _read_context(actor, request),
+        permission=PATIENT_PERMISSIONS["update"],
+        action=service.PATIENT_UPDATE,
+        resource_id=patient_id,
+    )
+
+
+@router.post("/{patient_id}/status", response_model=PatientRead)
+def change_patient_status(
+    *,
+    actor: ActorDep,
+    request: Request,
+    patient_id: uuid.UUID,
+    change: PatientStatusChange,
+) -> PatientRead:
+    """Move the patient to another lifecycle status (manual §3.2). `BLOCKED`, `ARCHIVED` and
+    `DISCHARGED` need a reason; `DECEASED` needs the date. Audited as `patient.update`."""
+    _authorise_change(actor, request, patient_id)
+    try:
+        result = service.change_status(
+            actor=actor, patient_id=patient_id, change=change
+        )
+    except service.StatusReasonRequired as error:
+        raise _unprocessable("STATUS_REASON_REQUIRED", str(error)) from error
+    return _changed(result)
+
+
+@router.get(
+    "/{patient_id}/alerts",
+    response_model=list[AlertRead],
+    dependencies=[Depends(read_rate_limit)],
+)
+def list_patient_alerts(
+    *, actor: ActorDep, request: Request, patient_id: uuid.UUID
+) -> list[AlertRead]:
+    """The patient's active alert chips, oldest first."""
+    _authorise(actor, _read_context(actor, request), resource_id=patient_id)
+    return _changed(service.list_alerts(actor=actor, patient_id=patient_id))
+
+
+@router.post(
+    "/{patient_id}/alerts",
+    response_model=list[AlertRead],
+    status_code=status.HTTP_201_CREATED,
+)
+def add_patient_alert(
+    *, actor: ActorDep, request: Request, patient_id: uuid.UUID, alert_in: AlertCreate
+) -> list[AlertRead]:
+    """Add an alert chip; answers the patient's active alerts."""
+    _authorise_change(actor, request, patient_id)
+    return _changed(
+        service.add_alert(actor=actor, patient_id=patient_id, alert_in=alert_in)
+    )
+
+
+@router.post("/{patient_id}/alerts/{alert_id}/remove", response_model=list[AlertRead])
+def remove_patient_alert(
+    *, actor: ActorDep, request: Request, patient_id: uuid.UUID, alert_id: uuid.UUID
+) -> list[AlertRead]:
+    """Hide an alert. It is kept, with who added and removed it."""
+    _authorise_change(actor, request, patient_id)
+    return _changed(
+        service.remove_alert(actor=actor, patient_id=patient_id, alert_id=alert_id)
+    )
+
+
+@router.get(
+    "/{patient_id}/emergency-contacts",
+    response_model=list[EmergencyContactRead],
+    dependencies=[Depends(read_rate_limit)],
+)
+def list_patient_emergency_contacts(
+    *, actor: ActorDep, request: Request, patient_id: uuid.UUID
+) -> list[EmergencyContactRead]:
+    """The patient's emergency contacts, oldest first."""
+    _authorise(actor, _read_context(actor, request), resource_id=patient_id)
+    return _changed(service.list_emergency_contacts(actor=actor, patient_id=patient_id))
+
+
+@router.post(
+    "/{patient_id}/emergency-contacts",
+    response_model=list[EmergencyContactRead],
+    status_code=status.HTTP_201_CREATED,
+)
+def add_patient_emergency_contact(
+    *,
+    actor: ActorDep,
+    request: Request,
+    patient_id: uuid.UUID,
+    contact_in: EmergencyContactCreate,
+) -> list[EmergencyContactRead]:
+    """Add an emergency contact; answers the patient's contacts."""
+    _authorise_change(actor, request, patient_id)
+    return _changed(
+        service.add_emergency_contact(
+            actor=actor, patient_id=patient_id, contact_in=contact_in
+        )
+    )
+
+
+@router.post(
+    "/{patient_id}/emergency-contacts/{contact_id}/remove",
+    response_model=list[EmergencyContactRead],
+)
+def remove_patient_emergency_contact(
+    *, actor: ActorDep, request: Request, patient_id: uuid.UUID, contact_id: uuid.UUID
+) -> list[EmergencyContactRead]:
+    """Remove an emergency contact. The row is kept, with who added and removed it."""
+    _authorise_change(actor, request, patient_id)
+    return _changed(
+        service.remove_emergency_contact(
+            actor=actor, patient_id=patient_id, contact_id=contact_id
+        )
+    )

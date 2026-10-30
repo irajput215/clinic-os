@@ -119,6 +119,8 @@ NOTIFICATION_OUTCOMES: Final[tuple[str, ...]] = (
     "STARTED",
     "NO_EMAIL",
     "SMTP_ERROR",
+    # The patient opted out of communications (manual §3.4): reminders stop, confirmations do not.
+    "OPTED_OUT",
 )
 
 _TIMESTAMPTZ = sa.DateTime(timezone=True)

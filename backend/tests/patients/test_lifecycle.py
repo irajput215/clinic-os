@@ -156,6 +156,15 @@ def test_the_five_declared_paths_are_served() -> None:
         f"{PATIENTS_URL}/{{patient_id}}/care-relationships/{{care_relationship_id}}/end": {
             "post"
         },
+        # The patient record (docs3 feature 04): status, alerts and emergency contacts. A removal is a
+        # `POST .../remove` that keeps the row, as `.../end` does - never a `DELETE`.
+        f"{PATIENTS_URL}/{{patient_id}}/status": {"post"},
+        f"{PATIENTS_URL}/{{patient_id}}/alerts": {"get", "post"},
+        f"{PATIENTS_URL}/{{patient_id}}/alerts/{{alert_id}}/remove": {"post"},
+        f"{PATIENTS_URL}/{{patient_id}}/emergency-contacts": {"get", "post"},
+        f"{PATIENTS_URL}/{{patient_id}}/emergency-contacts/{{contact_id}}/remove": {
+            "post"
+        },
     }
 
     assert sorted(

@@ -177,6 +177,11 @@ class PatientsApi:
                     text("DELETE FROM care_relationships WHERE tenant_id = :tenant_id"),
                     {"tenant_id": tenant_id},
                 )
+                for table in ("patient_alerts", "patient_emergency_contacts"):
+                    conn.execute(
+                        text(f"DELETE FROM {table} WHERE tenant_id = :tenant_id"),  # noqa: S608
+                        {"tenant_id": tenant_id},
+                    )
                 conn.execute(
                     text("DELETE FROM patients WHERE tenant_id = :tenant_id"),
                     {"tenant_id": tenant_id},

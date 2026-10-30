@@ -65,14 +65,22 @@ def test_sentinel_clinical_value_absent_from_all_sinks(
         assert patients.read(tenant, created["id"]).status_code == 200
         # The validation-denial path: the body is parsed and refused. The value is on the wire
         # and in the validation error, which is exactly where a careless logger would echo it.
+        # (Eleven digits: a Medicare number is ten, so this one is refused with the sentinel in it.)
         assert (
             patients.create_raw(
                 tenant,
                 given_name=NAME_SENTINEL,
                 date_of_birth=DOB_SENTINEL,
-                medicare_number=MEDICARE_SENTINEL,
+                medicare_number=MEDICARE_SENTINEL + "9",
             ).status_code
             == 422
+        )
+        # The identifier write path: accepted, encrypted and masked (docs3 feature 04).
+        assert (
+            patients.create_raw(
+                tenant, given_name=NAME_SENTINEL, medicare_number=MEDICARE_SENTINEL
+            ).status_code
+            == 201
         )
         # The authentication-denial path, with a credential in the body.
         login = client.post(

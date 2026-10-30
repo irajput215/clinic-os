@@ -53,6 +53,8 @@ _CLEANUP_ORDER = (
     "appointment_hours",
     "appointment_settings",
     "care_relationships",
+    "patient_alerts",
+    "patient_emergency_contacts",
     "patients",
     "staff_invitations",
     "user_roles",

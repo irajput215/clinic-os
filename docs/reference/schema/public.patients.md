@@ -13,26 +13,34 @@
 | family_name | varchar |  | false |  |  |  |
 | gender_identity | varchar |  | true |  |  |  |
 | given_name | varchar |  | false |  |  |  |
-| id | uuid | gen_random_uuid() | false | [public.appointments](public.appointments.md) [public.care_relationships](public.care_relationships.md) [public.clinical_records](public.clinical_records.md) [public.patients](public.patients.md) [public.prescriptions](public.prescriptions.md) [public.tga_approvals](public.tga_approvals.md) |  |  |
+| id | uuid | gen_random_uuid() | false | [public.appointments](public.appointments.md) [public.care_relationships](public.care_relationships.md) [public.clinical_records](public.clinical_records.md) [public.patient_alerts](public.patient_alerts.md) [public.patient_emergency_contacts](public.patient_emergency_contacts.md) [public.patients](public.patients.md) [public.prescriptions](public.prescriptions.md) [public.tga_approvals](public.tga_approvals.md) |  |  |
 | ihi | bytea |  | true |  |  |  |
 | ihi_blind_index | bytea |  | true |  |  |  |
 | medicare_blind_index | bytea |  | true |  |  |  |
+| medicare_irn | smallint |  | true |  |  |  |
 | medicare_number | bytea |  | true |  |  |  |
 | merged_into_patient_id | uuid |  | true |  | [public.patients](public.patients.md) |  |
 | phone | varchar |  | true |  |  |  |
 | postcode | varchar |  | true |  |  |  |
 | preferred_name | varchar |  | true |  |  |  |
+| receives_communications | boolean | true | false |  |  |  |
 | sex_at_birth | varchar |  | true |  |  |  |
 | state | varchar |  | true |  |  |  |
+| status | varchar | 'CURRENT'::character varying | false |  |  |  |
+| status_changed_at | timestamp with time zone |  | true |  |  |  |
+| status_reason | varchar(500) |  | true |  |  |  |
 | suburb | varchar |  | true |  |  |  |
-| tenant_id | uuid |  | false | [public.appointments](public.appointments.md) [public.clinical_records](public.clinical_records.md) [public.prescriptions](public.prescriptions.md) [public.tga_approvals](public.tga_approvals.md) | [public.tenants](public.tenants.md) |  |
+| tenant_id | uuid |  | false | [public.appointments](public.appointments.md) [public.clinical_records](public.clinical_records.md) [public.patient_alerts](public.patient_alerts.md) [public.patient_emergency_contacts](public.patient_emergency_contacts.md) [public.prescriptions](public.prescriptions.md) [public.tga_approvals](public.tga_approvals.md) | [public.tenants](public.tenants.md) |  |
+| timezone | varchar(64) | 'Australia/Sydney'::character varying | false |  |  |  |
 | updated_at | timestamp with time zone |  | false |  |  |  |
 
 ## Constraints
 
 | Name | Type | Definition |
 | ---- | ---- | ---------- |
+| ck_patients_medicare_irn | CHECK | CHECK (((medicare_irn >= 1) AND (medicare_irn <= 9))) |
 | ck_patients_sex_at_birth | CHECK | CHECK (((sex_at_birth)::text = ANY ((ARRAY['FEMALE'::character varying, 'MALE'::character varying, 'INTERSEX'::character varying, 'UNKNOWN'::character varying])::text[]))) |
+| ck_patients_status | CHECK | CHECK (((status)::text = ANY ((ARRAY['CURRENT'::character varying, 'REVIEW'::character varying, 'WAITING_LIST'::character varying, 'CLAIMANT'::character varying, 'ARCHIVED'::character varying, 'DISCHARGED'::character varying, 'BLOCKED'::character varying, 'DECEASED'::character varying])::text[]))) |
 | fk_patients_merged_into_patient_id_patients | FOREIGN KEY | FOREIGN KEY (merged_into_patient_id) REFERENCES patients(id) ON DELETE RESTRICT |
 | fk_patients_tenant_id_tenants | FOREIGN KEY | FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT |
 | patients_created_at_not_null | n | NOT NULL created_at |
@@ -40,7 +48,10 @@
 | patients_family_name_not_null | n | NOT NULL family_name |
 | patients_given_name_not_null | n | NOT NULL given_name |
 | patients_id_not_null | n | NOT NULL id |
+| patients_receives_communications_not_null | n | NOT NULL receives_communications |
+| patients_status_not_null | n | NOT NULL status |
 | patients_tenant_id_not_null | n | NOT NULL tenant_id |
+| patients_timezone_not_null | n | NOT NULL timezone |
 | patients_updated_at_not_null | n | NOT NULL updated_at |
 | pk_patients | PRIMARY KEY | PRIMARY KEY (id) |
 | uq_patients_tenant_id_id | UNIQUE | UNIQUE (tenant_id, id) |
@@ -68,6 +79,8 @@ erDiagram
 "public.appointments" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
 "public.care_relationships" }o--|| "public.patients" : "FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE RESTRICT"
 "public.clinical_records" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
+"public.patient_alerts" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
+"public.patient_emergency_contacts" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
 "public.patients" }o--o| "public.patients" : "FOREIGN KEY (merged_into_patient_id) REFERENCES patients(id) ON DELETE RESTRICT"
 "public.prescriptions" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
 "public.tga_approvals" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
@@ -87,15 +100,21 @@ erDiagram
   bytea ihi
   bytea ihi_blind_index
   bytea medicare_blind_index
+  smallint medicare_irn
   bytea medicare_number
   uuid merged_into_patient_id FK
   varchar phone
   varchar postcode
   varchar preferred_name
+  boolean receives_communications
   varchar sex_at_birth
   varchar state
+  varchar status
+  timestamp_with_time_zone status_changed_at
+  varchar_500_ status_reason
   varchar suburb
   uuid tenant_id FK
+  varchar_64_ timezone
   timestamp_with_time_zone updated_at
 }
 "public.appointments" {
@@ -134,6 +153,29 @@ erDiagram
   uuid patient_id FK
   varchar record_type
   timestamp_with_time_zone signed_at
+  uuid tenant_id FK
+}
+"public.patient_alerts" {
+  timestamp_with_time_zone created_at
+  uuid created_by
+  uuid id
+  uuid patient_id FK
+  timestamp_with_time_zone removed_at
+  uuid removed_by
+  uuid tenant_id FK
+  varchar_120_ text
+  varchar tone
+}
+"public.patient_emergency_contacts" {
+  timestamp_with_time_zone created_at
+  uuid created_by
+  uuid id
+  varchar_255_ name
+  uuid patient_id FK
+  varchar_64_ phone
+  varchar_100_ relationship
+  timestamp_with_time_zone removed_at
+  uuid removed_by
   uuid tenant_id FK
 }
 "public.prescriptions" {

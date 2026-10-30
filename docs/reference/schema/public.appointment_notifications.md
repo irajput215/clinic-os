@@ -32,7 +32,7 @@
 | appointment_notifications_updated_at_not_null | n | NOT NULL updated_at |
 | ck_appointment_notifications_attempts | CHECK | CHECK ((attempts >= 0)) |
 | ck_appointment_notifications_kind | CHECK | CHECK (((kind)::text = ANY ((ARRAY['CONFIRMATION'::character varying, 'REMINDER'::character varying])::text[]))) |
-| ck_appointment_notifications_outcome | CHECK | CHECK (((outcome IS NULL) OR ((outcome)::text = ANY ((ARRAY['BOOKING_NOT_LIVE'::character varying, 'STARTED'::character varying, 'NO_EMAIL'::character varying, 'SMTP_ERROR'::character varying])::text[])))) |
+| ck_appointment_notifications_outcome | CHECK | CHECK (((outcome IS NULL) OR ((outcome)::text = ANY ((ARRAY['BOOKING_NOT_LIVE'::character varying, 'STARTED'::character varying, 'NO_EMAIL'::character varying, 'SMTP_ERROR'::character varying, 'OPTED_OUT'::character varying])::text[])))) |
 | ck_appointment_notifications_sent_at | CHECK | CHECK ((((status)::text = 'SENT'::text) = (sent_at IS NOT NULL))) |
 | ck_appointment_notifications_status | CHECK | CHECK (((status)::text = ANY ((ARRAY['PENDING'::character varying, 'SENDING'::character varying, 'SENT'::character varying, 'SKIPPED'::character varying, 'FAILED'::character varying])::text[]))) |
 | fk_appointment_notifications_tenant_appointment | FOREIGN KEY | FOREIGN KEY (tenant_id, appointment_id) REFERENCES appointments(tenant_id, id) ON DELETE RESTRICT |

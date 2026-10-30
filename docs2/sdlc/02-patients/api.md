@@ -13,6 +13,24 @@ Status: **Agreed 2026-10-07 (owner)**, as amended below to follow `docs/features
 | `POST` | `/api/v1/patients/{patient_id}/care-relationships` | same | `{practitioner_id}`; `201` gives the team. `409 ALREADY_IN_CARE_TEAM`, `422 PRACTITIONER_NOT_FOUND` |
 | `POST` | `/api/v1/patients/{patient_id}/care-relationships/{care_relationship_id}/end` | same | Ends it now; `404 RELATIONSHIP_NOT_FOUND` when not active |
 
+## The patient record (docs3 feature 04, 2026-10-30)
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/api/v1/patients?status=` | Repeatable lifecycle filter; without it the list holds the active patients (archived, discharged and deceased leave it). Search finds every status |
+| `POST` | `/api/v1/patients/{patient_id}/status` | `{status, reason?, deceased_at?}`; a reason is required for `BLOCKED`, `ARCHIVED`, `DISCHARGED`, the date for `DECEASED` (`422 STATUS_REASON_REQUIRED`) |
+| `GET`/`POST` | `/api/v1/patients/{patient_id}/alerts` | `{text, tone: INFO\|WARN\|DANGER}`; answers the active alerts |
+| `POST` | `/api/v1/patients/{patient_id}/alerts/{alert_id}/remove` | Hides it; the row is kept |
+| `GET`/`POST` | `/api/v1/patients/{patient_id}/emergency-contacts` | `{name, relationship, phone}` |
+| `POST` | `/api/v1/patients/{patient_id}/emergency-contacts/{contact_id}/remove` | Hides it; the row is kept |
+
+`PatientCreate`/`PatientUpdate` accept `medicare_number` (10 digits), `medicare_irn` (1-9), `ihi` (16
+digits, `800360…`), `receives_communications` and `timezone`. Identifiers are encrypted with a blind
+index and answered only as `medicare_masked` / `ihi_masked` (`•••• ` + last three); a 10-digit or IHI
+search term matches exactly through the index. `PatientRead` also carries `status`, `status_reason`
+and `escript_ready {ready, missing[]}`. A `BLOCKED` patient is refused new bookings (staff and public)
+and new script drafts (`422 PATIENT_BLOCKED`); reminders skip a patient who opted out.
+
 ## The agreed search and paging contract
 
 The proposal here was `GET /api/v1/patients?q=&cursor=`. `docs/` is normative and forbids that shape:

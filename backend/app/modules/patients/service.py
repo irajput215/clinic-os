@@ -84,12 +84,13 @@ import re
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Final
 
 from sqlalchemy import ColumnElement, literal, or_, tuple_
 from sqlmodel import Session, col, func, select
 
+from app.core import field_crypto
 from app.core.config import settings
 from app.core.db import tenant_transaction
 from app.core.reads import Pending, ReadBatch
@@ -98,11 +99,25 @@ from app.core.reads import Pending, ReadBatch
 # The import is one-way — `audit` knows nothing about `patients` — so there is no cycle.
 from app.modules.audit import service as audit
 from app.modules.care_relationships import service as care
-from app.modules.patients.models import Patient
+from app.modules.patients.models import (
+    DEFAULT_TIMEZONE,
+    INACTIVE_STATUSES,
+    PATIENT_STATUSES,
+    STATUSES_NEEDING_A_REASON,
+    Patient,
+    PatientAlert,
+    PatientEmergencyContact,
+)
 from app.modules.patients.schemas import (
+    AlertCreate,
+    AlertRead,
+    EmergencyContactCreate,
+    EmergencyContactRead,
+    EScriptReadiness,
     PatientCreate,
     PatientRead,
     PatientsPublic,
+    PatientStatusChange,
     PatientUpdate,
 )
 from app.modules.users_roles.policy import Actor, Decision
@@ -137,6 +152,91 @@ def _field_names(patient_in: PatientCreate | PatientUpdate) -> list[str]:
     requests that set the same fields produce the same payload.
     """
     return sorted(set(patient_in.model_fields_set))
+
+
+# The identifier columns, by the name the API uses, and the `kind` the crypto binds them to.
+_IDENTIFIERS: Final[dict[str, tuple[str, str]]] = {
+    "medicare_number": ("medicare_number", "medicare_blind_index"),
+    "ihi": ("ihi", "ihi_blind_index"),
+}
+
+
+def _set_identifiers(
+    patient: Patient, values: dict[str, object], *, tenant_id: uuid.UUID
+) -> None:
+    """Encrypt and index each identifier in `values` onto `patient`; an explicit `None` clears it.
+
+    The plaintext never reaches the row, a log or the audit payload (R8, INV-5).
+    """
+    for name, (column, index_column) in _IDENTIFIERS.items():
+        if name not in values:
+            continue
+        value = values.pop(name)
+        if value is None:
+            setattr(patient, column, None)
+            setattr(patient, index_column, None)
+            continue
+        assert isinstance(value, str)
+        setattr(
+            patient,
+            column,
+            field_crypto.encrypt(value, tenant_id=tenant_id, kind=name),
+        )
+        setattr(
+            patient,
+            index_column,
+            field_crypto.blind_index(value, tenant_id=tenant_id, kind=name),
+        )
+
+
+def escript_readiness(patient: Patient) -> EScriptReadiness:
+    """Manual §3.4: an eScript needs a verified IHI, the sex HI matching uses, and a full address."""
+    missing: list[str] = []
+    if not patient.ihi:
+        missing.append("IHI")
+    if patient.sex_at_birth in (None, "UNKNOWN"):
+        missing.append("SEX")
+    if not all((patient.address_line, patient.suburb, patient.state, patient.postcode)):
+        missing.append("ADDRESS")
+    return EScriptReadiness(ready=not missing, missing=missing)
+
+
+def to_read(patient: Patient) -> PatientRead:
+    """The patient as the API answers it: identifiers masked, readiness computed."""
+    return PatientRead(
+        id=patient.id,
+        given_name=patient.given_name,
+        family_name=patient.family_name,
+        preferred_name=patient.preferred_name,
+        date_of_birth=patient.date_of_birth,
+        sex_at_birth=patient.sex_at_birth,
+        gender_identity=patient.gender_identity,
+        address_line=patient.address_line,
+        suburb=patient.suburb,
+        state=patient.state,
+        postcode=patient.postcode,
+        phone=patient.phone,
+        email=patient.email,
+        deceased_at=patient.deceased_at,
+        status=patient.status,
+        status_reason=patient.status_reason,
+        medicare_masked=field_crypto.mask(
+            field_crypto.decrypt(
+                patient.medicare_number,
+                tenant_id=patient.tenant_id,
+                kind="medicare_number",
+            )
+        ),
+        medicare_irn=patient.medicare_irn,
+        ihi_masked=field_crypto.mask(
+            field_crypto.decrypt(patient.ihi, tenant_id=patient.tenant_id, kind="ihi")
+        ),
+        receives_communications=patient.receives_communications,
+        timezone=patient.timezone,
+        escript_ready=escript_readiness(patient),
+        created_at=patient.created_at,
+        updated_at=patient.updated_at,
+    )
 
 
 def _live_patient(
@@ -177,7 +277,11 @@ def create_patient(
     with tenant_transaction(
         tenant_id=tenant_id, actor_id=actor_id, actor_role=actor_role
     ) as session:
-        patient = Patient(tenant_id=tenant_id, **patient_in.model_dump())
+        values = patient_in.model_dump()
+        values["timezone"] = values.get("timezone") or DEFAULT_TIMEZONE
+        identifiers = {name: values.pop(name) for name in _IDENTIFIERS}
+        patient = Patient(tenant_id=tenant_id, **values)
+        _set_identifiers(patient, identifiers, tenant_id=tenant_id)
         session.add(patient)
         session.flush()
         audit.record(
@@ -190,7 +294,7 @@ def create_patient(
             ),
         )
         session.refresh(patient)
-        return PatientRead.model_validate(patient)
+        return to_read(patient)
 
 
 @dataclass(frozen=True)
@@ -218,6 +322,10 @@ class InvalidCursor(ValueError):
 NAME_PREFIX: Final[str] = "name_prefix"
 DATE_OF_BIRTH: Final[str] = "date_of_birth"
 REFERENCE: Final[str] = "reference"
+MEDICARE: Final[str] = "medicare_number"
+IHI: Final[str] = "ihi"
+_MEDICARE_WORD = re.compile(r"^\d{10}$")
+_IHI_WORD = re.compile(r"^800360\d{10}$")
 
 _ISO_DATE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
 _AU_DATE = re.compile(r"^(\d{1,2})/(\d{1,2})/(\d{4})$")
@@ -264,6 +372,11 @@ def parse_search(q: str) -> list[SearchTerm]:
     for word in q.lower().split():
         if (born := _as_date(word)) is not None:
             terms.append(SearchTerm(kind=DATE_OF_BIRTH, value=born))
+        elif _MEDICARE_WORD.match(word):
+            # Exact match through the blind index: the number is never compared in plaintext.
+            terms.append(SearchTerm(kind=MEDICARE, value=word))
+        elif _IHI_WORD.match(word):
+            terms.append(SearchTerm(kind=IHI, value=word))
         elif match := _REFERENCE.match(word):
             digits = match.group(1)
             padding = _UUID_HEX_DIGITS - len(digits)
@@ -281,8 +394,19 @@ def parse_search(q: str) -> list[SearchTerm]:
     return terms
 
 
-def _term_condition(term: SearchTerm) -> ColumnElement[bool]:
+def _term_condition(term: SearchTerm, *, tenant_id: uuid.UUID) -> ColumnElement[bool]:
     """The SQL predicate for one term. Each one is served by an index (see the migration)."""
+    if term.kind in (MEDICARE, IHI):
+        assert isinstance(term.value, str)
+        index = field_crypto.blind_index(
+            term.value, tenant_id=tenant_id, kind=term.kind
+        )
+        column = (
+            Patient.medicare_blind_index
+            if term.kind == MEDICARE
+            else Patient.ihi_blind_index
+        )
+        return col(column) == index
     if isinstance(term.value, date):
         return col(Patient.date_of_birth) == term.value
     if isinstance(term.value, tuple):
@@ -400,7 +524,7 @@ def _page(
         count = session.exec(counted).one()
     page, overflow = [patient for patient, _ in rows[:limit]], rows[limit:]
     return PatientsPublic(
-        data=[PatientRead.model_validate(patient) for patient in page],
+        data=[to_read(patient) for patient in page],
         count=count,
         next_cursor=(
             encode_cursor(tenant_id=tenant_id, scope=scope, patient_id=page[-1].id)
@@ -495,16 +619,26 @@ def list_patients(
     limit: int,
     cursor: str | None = None,
     care_scope: uuid.UUID | None = None,
+    statuses: Sequence[str] | None = None,
 ) -> PatientsPublic:
-    """One keyset page of the caller's live patients, by family name, given name, id. Audited."""
+    """One keyset page of the caller's live patients, by family name, given name, id. Audited.
+
+    Without `statuses` the list holds the active patients: archived, discharged and deceased records
+    are kept but leave the list (manual §3.2). Search still finds every status.
+    """
+    chosen = (
+        sorted(set(statuses))
+        if statuses
+        else [s for s in PATIENT_STATUSES if s not in INACTIVE_STATUSES]
+    )
     return _read(
         tenant_id=tenant_id,
         context=context,
-        scope=_LIST_SCOPE,
-        conditions=(),
+        scope=_LIST_SCOPE if not statuses else f"{_LIST_SCOPE}:{','.join(chosen)}",
+        conditions=[col(Patient.status).in_(chosen)],
         limit=limit,
         cursor=cursor,
-        query_filters=None,
+        query_filters=["status"] if statuses else None,
         care_scope=care_scope,
     )
 
@@ -528,7 +662,7 @@ def search_patients(
         tenant_id=tenant_id,
         context=context,
         scope=_search_scope(q),
-        conditions=[_term_condition(term) for term in terms],
+        conditions=[_term_condition(term, tenant_id=tenant_id) for term in terms],
         limit=limit,
         cursor=cursor,
         query_filters=sorted({term.kind for term in terms}),
@@ -638,7 +772,7 @@ def read_patient(
             return PatientRefusal(
                 status_code=access.decision.status_code, decision=access.decision
             )
-        return PatientRead.model_validate(patient)
+        return to_read(patient)
 
 
 @dataclass(frozen=True)
@@ -666,7 +800,7 @@ def patient_access(
             return PatientAccessResult(patient=None, access=None)
         patient, relationship = found
         return PatientAccessResult(
-            patient=PatientRead.model_validate(patient),
+            patient=to_read(patient),
             access=care.patient_access(
                 actor,
                 permission,
@@ -682,7 +816,44 @@ def get_patient(*, tenant_id: uuid.UUID, patient_id: uuid.UUID) -> PatientRead |
         patient = _live_patient(session, tenant_id=tenant_id, patient_id=patient_id)
         if patient is None:
             return None
-        return PatientRead.model_validate(patient)
+        return to_read(patient)
+
+
+def _patient_to_change(
+    session: Session, *, actor: Actor, patient_id: uuid.UUID
+) -> Patient | PatientRefusal:
+    """The live patient, locked, if the actor may change it; else an audited refusal.
+
+    A patient that is not the caller's own (absent, or another tenant's) is `404`; one a
+    relationship-bound grant cannot reach is the policy's `403` (T1-34). Both are audited
+    `patient.update` `DENIED` on this transaction.
+    """
+    found = _patient_and_relationship(
+        session, actor=actor, patient_id=patient_id, lock=True
+    )
+    access = (
+        None
+        if found is None
+        else care.patient_access(
+            actor, _UPDATE, patient_id=patient_id, care_relationship_id=found[1]
+        )
+    )
+    if found is None or access is None or not access.allowed:
+        audit.record(
+            session,
+            audit.AuditEvent(
+                action=PATIENT_UPDATE,
+                result="DENIED",
+                resource_id=patient_id,
+                reason=NOT_FOUND if access is None else access.reason,
+            ),
+        )
+        if access is None:
+            return PatientRefusal(status_code=404)
+        return PatientRefusal(
+            status_code=access.decision.status_code, decision=access.decision
+        )
+    return found[0]
 
 
 def update_patient(
@@ -705,33 +876,12 @@ def update_patient(
     with tenant_transaction(
         tenant_id=actor.tenant_id, actor_id=actor.user_id, actor_role=actor.actor_role
     ) as session:
-        found = _patient_and_relationship(
-            session, actor=actor, patient_id=patient_id, lock=True
-        )
-        access = (
-            None
-            if found is None
-            else care.patient_access(
-                actor, _UPDATE, patient_id=patient_id, care_relationship_id=found[1]
-            )
-        )
-        if found is None or access is None or not access.allowed:
-            audit.record(
-                session,
-                audit.AuditEvent(
-                    action=PATIENT_UPDATE,
-                    result="DENIED",
-                    resource_id=patient_id,
-                    reason=NOT_FOUND if access is None else access.reason,
-                ),
-            )
-            if access is None:
-                return PatientRefusal(status_code=404)
-            return PatientRefusal(
-                status_code=access.decision.status_code, decision=access.decision
-            )
-        patient = found[0]
-        patient.sqlmodel_update(patient_in.model_dump(exclude_unset=True))
+        patient = _patient_to_change(session, actor=actor, patient_id=patient_id)
+        if isinstance(patient, PatientRefusal):
+            return patient
+        values = patient_in.model_dump(exclude_unset=True)
+        _set_identifiers(patient, values, tenant_id=actor.tenant_id)
+        patient.sqlmodel_update(values)
         session.add(patient)
         session.flush()
         audit.record(
@@ -744,7 +894,7 @@ def update_patient(
             ),
         )
         session.refresh(patient)
-        return PatientRead.model_validate(patient)
+        return to_read(patient)
 
 
 def display_names(
@@ -791,6 +941,27 @@ def contact_emails(
         )
     ).all()
     return {patient_id: email for patient_id, email in rows if email}
+
+
+def opted_out_ids(
+    session: Session, *, tenant_id: uuid.UUID, patient_ids: Sequence[uuid.UUID]
+) -> set[uuid.UUID]:
+    """The patients among `patient_ids` who opted out of communications (manual §3.4).
+
+    Reminders, recalls and campaigns skip them; transactional messages (a booking confirmation, a
+    script notice) still send.
+    """
+    if not patient_ids:
+        return set()
+    return set(
+        session.exec(
+            select(Patient.id).where(
+                col(Patient.tenant_id) == tenant_id,
+                col(Patient.id).in_(sorted(set(patient_ids))),
+                col(Patient.receives_communications).is_(False),
+            )
+        ).all()
+    )
 
 
 def queue_display_names(
@@ -888,3 +1059,279 @@ def match_or_create_for_booking(
         ),
     )
     return patient.id
+
+
+# ---------------------------------------------------------------------------------------------
+# Status, alerts and emergency contacts (docs3 feature 04; manual §3.2, §3.4)
+# ---------------------------------------------------------------------------------------------
+
+
+class StatusReasonRequired(ValueError):
+    """`BLOCKED`, `ARCHIVED` and `DISCHARGED` record why; `DECEASED` records when."""
+
+
+def change_status(
+    *, actor: Actor, patient_id: uuid.UUID, change: PatientStatusChange
+) -> PatientRead | PatientRefusal:
+    """Move a patient to another lifecycle status, with its reason, audited on this transaction.
+
+    The audit carries the field names and the new status code - never the free-text reason, which
+    can name a person or a condition.
+    """
+    if change.status in STATUSES_NEEDING_A_REASON and not change.reason:
+        raise StatusReasonRequired("a reason is required for this status")
+    if change.status == "DECEASED" and change.deceased_at is None:
+        raise StatusReasonRequired("the date of death is required")
+    with tenant_transaction(
+        tenant_id=actor.tenant_id, actor_id=actor.user_id, actor_role=actor.actor_role
+    ) as session:
+        patient = _patient_to_change(session, actor=actor, patient_id=patient_id)
+        if isinstance(patient, PatientRefusal):
+            return patient
+        patient.status = change.status
+        patient.status_reason = change.reason
+        patient.status_changed_at = datetime.now(UTC)
+        if change.status == "DECEASED":
+            patient.deceased_at = change.deceased_at
+        session.add(patient)
+        session.flush()
+        audit.record(
+            session,
+            audit.AuditEvent(
+                action=PATIENT_UPDATE,
+                result="SUCCESS",
+                resource_id=patient.id,
+                reason=f"STATUS_{change.status}",
+                payload={"changed_fields": ["status", "status_reason"]},
+            ),
+        )
+        session.refresh(patient)
+        return to_read(patient)
+
+
+def blocked_patient_ids(
+    session: Session, *, tenant_id: uuid.UUID, patient_ids: Sequence[uuid.UUID]
+) -> set[uuid.UUID]:
+    """The `BLOCKED` patients among `patient_ids`, on the caller's transaction (manual §3.2).
+
+    A blocked patient takes no new booking and no new script until the block is lifted.
+    """
+    if not patient_ids:
+        return set()
+    return set(
+        session.exec(
+            select(Patient.id).where(
+                col(Patient.tenant_id) == tenant_id,
+                col(Patient.id).in_(list(patient_ids)),
+                col(Patient.status) == "BLOCKED",
+            )
+        ).all()
+    )
+
+
+def _active_alerts(session: Session, *, patient_id: uuid.UUID) -> list[AlertRead]:
+    rows = session.exec(
+        select(PatientAlert)
+        .where(
+            col(PatientAlert.patient_id) == patient_id,
+            col(PatientAlert.removed_at).is_(None),
+        )
+        .order_by(col(PatientAlert.created_at))
+    ).all()
+    return [AlertRead.model_validate(row) for row in rows]
+
+
+def _active_contacts(
+    session: Session, *, patient_id: uuid.UUID
+) -> list[EmergencyContactRead]:
+    rows = session.exec(
+        select(PatientEmergencyContact)
+        .where(
+            col(PatientEmergencyContact.patient_id) == patient_id,
+            col(PatientEmergencyContact.removed_at).is_(None),
+        )
+        .order_by(col(PatientEmergencyContact.created_at))
+    ).all()
+    return [EmergencyContactRead.model_validate(row) for row in rows]
+
+
+def _readable(
+    session: Session, *, actor: Actor, patient_id: uuid.UUID
+) -> PatientRefusal | None:
+    """`None` when the actor may read this patient; else the refusal, audited as a read."""
+    found = _patient_and_relationship(session, actor=actor, patient_id=patient_id)
+    access = (
+        None
+        if found is None
+        else care.patient_access(
+            actor, _READ, patient_id=patient_id, care_relationship_id=found[1]
+        )
+    )
+    if found is None or access is None or not access.allowed:
+        audit.record(
+            session,
+            audit.AuditEvent(
+                action=PATIENT_READ,
+                result="DENIED",
+                resource_id=patient_id,
+                reason=NOT_FOUND if access is None else access.reason,
+            ),
+        )
+        if access is None:
+            return PatientRefusal(status_code=404)
+        return PatientRefusal(
+            status_code=access.decision.status_code, decision=access.decision
+        )
+    return None
+
+
+def list_alerts(
+    *, actor: Actor, patient_id: uuid.UUID
+) -> list[AlertRead] | PatientRefusal:
+    with tenant_transaction(
+        tenant_id=actor.tenant_id, actor_id=actor.user_id, actor_role=actor.actor_role
+    ) as session:
+        refusal = _readable(session, actor=actor, patient_id=patient_id)
+        return refusal or _active_alerts(session, patient_id=patient_id)
+
+
+def add_alert(
+    *, actor: Actor, patient_id: uuid.UUID, alert_in: AlertCreate
+) -> list[AlertRead] | PatientRefusal:
+    with tenant_transaction(
+        tenant_id=actor.tenant_id, actor_id=actor.user_id, actor_role=actor.actor_role
+    ) as session:
+        patient = _patient_to_change(session, actor=actor, patient_id=patient_id)
+        if isinstance(patient, PatientRefusal):
+            return patient
+        session.add(
+            PatientAlert(
+                tenant_id=actor.tenant_id,
+                patient_id=patient.id,
+                text=alert_in.text,
+                tone=alert_in.tone,
+                created_by=actor.user_id,
+            )
+        )
+        session.flush()
+        audit.record(
+            session,
+            audit.AuditEvent(
+                action=PATIENT_UPDATE,
+                result="SUCCESS",
+                resource_id=patient.id,
+                payload={"changed_fields": ["alerts"]},
+            ),
+        )
+        return _active_alerts(session, patient_id=patient.id)
+
+
+def remove_alert(
+    *, actor: Actor, patient_id: uuid.UUID, alert_id: uuid.UUID
+) -> list[AlertRead] | PatientRefusal:
+    """Hide an alert (`removed_at`); the row and who added and removed it stay."""
+    with tenant_transaction(
+        tenant_id=actor.tenant_id, actor_id=actor.user_id, actor_role=actor.actor_role
+    ) as session:
+        patient = _patient_to_change(session, actor=actor, patient_id=patient_id)
+        if isinstance(patient, PatientRefusal):
+            return patient
+        alert = session.exec(
+            select(PatientAlert).where(
+                col(PatientAlert.id) == alert_id,
+                col(PatientAlert.patient_id) == patient.id,
+                col(PatientAlert.removed_at).is_(None),
+            )
+        ).first()
+        if alert is None:
+            return PatientRefusal(status_code=404)
+        alert.removed_at = datetime.now(UTC)
+        alert.removed_by = actor.user_id
+        session.add(alert)
+        session.flush()
+        audit.record(
+            session,
+            audit.AuditEvent(
+                action=PATIENT_UPDATE,
+                result="SUCCESS",
+                resource_id=patient.id,
+                payload={"changed_fields": ["alerts"]},
+            ),
+        )
+        return _active_alerts(session, patient_id=patient.id)
+
+
+def list_emergency_contacts(
+    *, actor: Actor, patient_id: uuid.UUID
+) -> list[EmergencyContactRead] | PatientRefusal:
+    with tenant_transaction(
+        tenant_id=actor.tenant_id, actor_id=actor.user_id, actor_role=actor.actor_role
+    ) as session:
+        refusal = _readable(session, actor=actor, patient_id=patient_id)
+        return refusal or _active_contacts(session, patient_id=patient_id)
+
+
+def add_emergency_contact(
+    *, actor: Actor, patient_id: uuid.UUID, contact_in: EmergencyContactCreate
+) -> list[EmergencyContactRead] | PatientRefusal:
+    with tenant_transaction(
+        tenant_id=actor.tenant_id, actor_id=actor.user_id, actor_role=actor.actor_role
+    ) as session:
+        patient = _patient_to_change(session, actor=actor, patient_id=patient_id)
+        if isinstance(patient, PatientRefusal):
+            return patient
+        session.add(
+            PatientEmergencyContact(
+                tenant_id=actor.tenant_id,
+                patient_id=patient.id,
+                name=contact_in.name,
+                relationship=contact_in.relationship,
+                phone=contact_in.phone,
+                created_by=actor.user_id,
+            )
+        )
+        session.flush()
+        audit.record(
+            session,
+            audit.AuditEvent(
+                action=PATIENT_UPDATE,
+                result="SUCCESS",
+                resource_id=patient.id,
+                payload={"changed_fields": ["emergency_contacts"]},
+            ),
+        )
+        return _active_contacts(session, patient_id=patient.id)
+
+
+def remove_emergency_contact(
+    *, actor: Actor, patient_id: uuid.UUID, contact_id: uuid.UUID
+) -> list[EmergencyContactRead] | PatientRefusal:
+    with tenant_transaction(
+        tenant_id=actor.tenant_id, actor_id=actor.user_id, actor_role=actor.actor_role
+    ) as session:
+        patient = _patient_to_change(session, actor=actor, patient_id=patient_id)
+        if isinstance(patient, PatientRefusal):
+            return patient
+        contact = session.exec(
+            select(PatientEmergencyContact).where(
+                col(PatientEmergencyContact.id) == contact_id,
+                col(PatientEmergencyContact.patient_id) == patient.id,
+                col(PatientEmergencyContact.removed_at).is_(None),
+            )
+        ).first()
+        if contact is None:
+            return PatientRefusal(status_code=404)
+        contact.removed_at = datetime.now(UTC)
+        contact.removed_by = actor.user_id
+        session.add(contact)
+        session.flush()
+        audit.record(
+            session,
+            audit.AuditEvent(
+                action=PATIENT_UPDATE,
+                result="SUCCESS",
+                resource_id=patient.id,
+                payload={"changed_fields": ["emergency_contacts"]},
+            ),
+        )
+        return _active_contacts(session, patient_id=patient.id)

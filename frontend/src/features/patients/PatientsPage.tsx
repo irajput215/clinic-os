@@ -7,7 +7,13 @@ import { useNavigate } from "@tanstack/react-router"
 import { Plus, Search } from "lucide-react"
 import { useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { patientName, patientPagesQuery, useSearchTerm } from "@/data/patients"
+import {
+  PATIENT_STATUSES,
+  type PatientStatus,
+  patientName,
+  patientPagesQuery,
+  useSearchTerm,
+} from "@/data/patients"
 import { myPermissionsQuery } from "@/data/permissions"
 import {
   Card,
@@ -19,14 +25,18 @@ import {
 } from "@/design/primitives"
 import { age, formatDate, patientRef } from "@/lib/format"
 import { PatientFormDialog } from "./PatientFormDialog"
+import { PatientStatusPill } from "./RecordParts"
 
 export function PatientsPage() {
   const navigate = useNavigate()
   // The search box is local state only: the term is sent in a request body and never put in the URL.
   const [input, setInput] = useState("")
   const q = useSearchTerm(input)
+  // Empty: the active patients (archived, discharged and deceased records leave the list, §3.2).
+  // A search always looks across every status.
+  const [status, setStatus] = useState<PatientStatus | "">("")
   const patients = useInfiniteQuery({
-    ...patientPagesQuery(q),
+    ...patientPagesQuery(q, status ? [status] : []),
     // Keep the previous result on screen while the next search loads, so the table does not flash.
     placeholderData: keepPreviousData,
   })
@@ -79,6 +89,21 @@ export function PatientsPage() {
             className="h-[38px] w-full rounded-full border border-line bg-paper pr-3 pl-[34px] text-[14px] outline-none placeholder:text-stone-faint focus:border-clay max-lg:h-11 max-lg:text-[16px]"
           />
         </div>
+        <select
+          aria-label="Show patients by status"
+          className="h-[38px] rounded-full border border-line bg-paper px-3 text-[13.5px] max-lg:h-11 disabled:opacity-60"
+          value={status}
+          disabled={q !== ""}
+          title={q !== "" ? "A search looks across every status" : undefined}
+          onChange={(e) => setStatus(e.target.value as PatientStatus | "")}
+        >
+          <option value="">Active patients</option>
+          {Object.entries(PATIENT_STATUSES).map(([value, { label }]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
         <span
           id="patients-search-hint"
           className="text-xs text-stone"
@@ -168,9 +193,9 @@ export function PatientsPage() {
                     >
                       <td className="pl-5">
                         <span className="font-semibold">{patientName(p)}</span>
-                        {p.deceased_at ? (
-                          <span className="ml-2 text-xs text-stone">
-                            (deceased)
+                        {p.status !== "CURRENT" ? (
+                          <span className="ml-2 align-middle">
+                            <PatientStatusPill status={p.status} />
                           </span>
                         ) : null}
                       </td>
