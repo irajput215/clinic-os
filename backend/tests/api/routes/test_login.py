@@ -1,10 +1,13 @@
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
 from pwdlib.hashers.bcrypt import BcryptHasher
 from sqlmodel import Session
 
+from app.core import server_timing
 from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.core.security import (
@@ -321,3 +324,32 @@ def test_recovery_without_email_configured_answers_like_an_unknown_email(
         )
     assert known.status_code == unknown.status_code == 200
     assert known.json() == unknown.json()
+
+
+@pytest.mark.parametrize(
+    "password",
+    [settings.FIRST_SUPERUSER_PASSWORD, "not-the-password-1"],
+    ids=["success", "wrong-password"],
+)
+def test_sign_in_costs_one_database_round_trip(
+    client: TestClient, password: str
+) -> None:
+    """One statement, no `BEGIN`/`ROLLBACK`: each round trip is ~210 ms in production.
+
+    The route is anonymous, so it sends no `Server-Timing` header (a count there would tell an
+    attacker whether an address has an account); the count is read from the request's own timings.
+    """
+    seen: list[server_timing.RequestTimings] = []
+    start = server_timing.start_request
+
+    def spy() -> tuple[server_timing.RequestTimings, Any]:
+        timings, token = start()
+        seen.append(timings)
+        return timings, token
+
+    with patch.object(server_timing, "start_request", side_effect=spy):
+        client.post(
+            f"{settings.API_V1_STR}/login/access-token",
+            data={"username": settings.FIRST_SUPERUSER, "password": password},
+        )
+    assert seen[-1].db_round_trips == 1

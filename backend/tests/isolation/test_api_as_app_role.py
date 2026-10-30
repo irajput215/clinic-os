@@ -17,7 +17,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import event
+from sqlalchemy import event, text
 from sqlmodel import Session, select
 
 from app.core.config import settings
@@ -48,6 +48,21 @@ def _reset_role(dbapi_connection: Any, *_: Any) -> None:  # noqa: ANN401
         _run_outside_a_transaction(dbapi_connection, "RESET ROLE")
 
 
+# Child tables first: every reference to a tenant, its accounts and its patients is RESTRICT.
+_CLEANUP_ORDER = (
+    "appointment_notifications",
+    "appointments",
+    "appointment_hours",
+    "appointment_settings",
+    "care_relationships",
+    "patients",
+    "staff_invitations",
+    "user_roles",
+    "role_permissions",
+    "roles",
+)
+
+
 @pytest.fixture(scope="module")
 def as_app_role() -> Iterator[TestClient]:
     event.listen(engine, "checkout", _become_app_role)
@@ -58,6 +73,28 @@ def as_app_role() -> Iterator[TestClient]:
     finally:
         event.remove(engine, "checkout", _become_app_role)
         event.remove(engine, "checkin", _reset_role)
+        # Back as the superuser: remove the clinic this module registered, so later tests that
+        # clear `tenants` find nothing of it.
+        engine.dispose()
+        with engine.begin() as connection:
+            tenant_ids = [
+                row[0]
+                for row in connection.execute(
+                    text("SELECT id FROM tenants WHERE slug LIKE 'app-role-clinic-%'")
+                )
+            ]
+            for tenant_id in tenant_ids:
+                for table in _CLEANUP_ORDER:
+                    connection.execute(
+                        text(f"DELETE FROM {table} WHERE tenant_id = :t"),  # noqa: S608
+                        {"t": tenant_id},
+                    )
+                connection.execute(
+                    text('DELETE FROM "user" WHERE tenant_id = :t'), {"t": tenant_id}
+                )
+                connection.execute(
+                    text("DELETE FROM tenants WHERE id = :t"), {"t": tenant_id}
+                )
 
 
 @pytest.fixture(scope="module")

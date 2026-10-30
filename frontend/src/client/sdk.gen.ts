@@ -43,6 +43,11 @@ export class LoginService {
      * Login Access Token
      *
      * OAuth2 compatible token login, get an access token for future requests
+     *
+     * The account read is one statement on the autocommit engine: no `BEGIN` and no `ROLLBACK`
+     * around it, so sign-in costs one database round trip instead of three (each ~210 ms while the
+     * app and the database are not co-located, `docs/reference/performance.md`). The rare rehash
+     * write commits on its own, exactly as before.
      */
     public static loginAccessToken<ThrowOnError extends boolean = true>(options: Options<loginLoginAccessTokenData, ThrowOnError>) {
         return (options.client ?? client).post<loginLoginAccessTokenResponses, loginLoginAccessTokenErrors, ThrowOnError>({
@@ -253,6 +258,9 @@ export class UsersService {
      * Create User
      *
      * Create new user.
+     *
+     * Never a superuser: that flag is set only by `FIRST_SUPERUSER` at start-up. The application role
+     * cannot change it afterwards (migration `e1a4c7b9d2f3`), so it is not granted from an API either.
      */
     public static createUser<ThrowOnError extends boolean = true>(options: Options<usersCreateUserData, ThrowOnError>) {
         return (options.client ?? client).post<usersCreateUserResponses, usersCreateUserErrors, ThrowOnError>({
