@@ -77,7 +77,16 @@ TENANT_TABLE_GRANTS = {
 
 # `tenants` is global, so column-level grants are its protection: `retention_profile` and
 # `legal_name` are withheld from the application role.
-TENANTS_SELECT_COLUMNS = {"id", "slug", "status", "data_region", "display_name"}
+TENANTS_SELECT_COLUMNS = {
+    "id",
+    "slug",
+    "status",
+    "data_region",
+    "display_name",
+    # `GET /tenants/current` answers both; timestamps only (`e1a4c7b9d2f3`).
+    "created_at",
+    "updated_at",
+}
 # The PUBLIC display name and its timestamp: the only columns the application may change.
 TENANTS_UPDATE_COLUMNS = {"display_name", "updated_at"}
 

@@ -73,9 +73,8 @@ def as_app_role() -> Iterator[TestClient]:
     finally:
         event.remove(engine, "checkout", _become_app_role)
         event.remove(engine, "checkin", _reset_role)
-        # Back as the superuser: remove the clinic this module registered, so later tests that
-        # clear `tenants` find nothing of it.
-        engine.dispose()
+        # Back as the superuser (every connection reset its role at checkin): remove the clinic
+        # this module registered, so later tests that clear `tenants` find nothing of it.
         with engine.begin() as connection:
             tenant_ids = [
                 row[0]
