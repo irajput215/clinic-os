@@ -26,7 +26,11 @@ from app.modules.clinical_records.models import (
 )
 from app.modules.clinics.models import Clinic
 from app.modules.identity_tenancy.models import StepUpGrant, Tenant
-from app.modules.patients.models import Patient
+from app.modules.patients.models import (
+    Patient,
+    PatientAlert,
+    PatientEmergencyContact,
+)
 from app.modules.prescriptions.models import (
     DispatchAttempt,
     Prescription,
@@ -56,6 +60,8 @@ __all__ = [
     "ClinicalRecord",
     "ClinicalRecordVersion",
     "Patient",
+    "PatientAlert",
+    "PatientEmergencyContact",
     "Permission",
     "Prescription",
     "PrescriptionEvent",

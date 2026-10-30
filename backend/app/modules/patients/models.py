@@ -37,6 +37,35 @@ SEX_AT_BIRTH_VOCABULARY: Final[tuple[str, ...]] = (
 )
 
 
+# The patient lifecycle (Platform Manual §3.2): exactly one at a time, colour-coded the same everywhere.
+# `CLAIMANT` marks a WorkCover/insurer-funded patient; `BLOCKED` stops new bookings and scripts;
+# `ARCHIVED` and `DISCHARGED` keep the record but leave the active lists. Nothing is hard-deleted.
+PATIENT_STATUSES: Final[tuple[str, ...]] = (
+    "CURRENT",
+    "REVIEW",
+    "WAITING_LIST",
+    "CLAIMANT",
+    "ARCHIVED",
+    "DISCHARGED",
+    "BLOCKED",
+    "DECEASED",
+)
+# Hidden from the patient list unless asked for; search still finds them.
+INACTIVE_STATUSES: Final[frozenset[str]] = frozenset(
+    {"ARCHIVED", "DISCHARGED", "DECEASED"}
+)
+# A change to one of these needs a reason (the manual: "The reason is recorded").
+STATUSES_NEEDING_A_REASON: Final[frozenset[str]] = frozenset(
+    {"BLOCKED", "ARCHIVED", "DISCHARGED"}
+)
+ALERT_TONES: Final[tuple[str, ...]] = ("INFO", "WARN", "DANGER")
+DEFAULT_TIMEZONE: Final = "Australia/Sydney"
+
+
+def _in(values: tuple[str, ...]) -> str:
+    return ", ".join(f"'{value}'" for value in values)
+
+
 def _utcnow() -> datetime:
     return datetime.now(UTC)
 
@@ -53,6 +82,8 @@ class Patient(SQLModel, table=True):
             "sex_at_birth IN ('FEMALE', 'MALE', 'INTERSEX', 'UNKNOWN')",
             name="sex_at_birth",
         ),
+        sa.CheckConstraint(f"status IN ({_in(PATIENT_STATUSES)})", name="status"),
+        sa.CheckConstraint("medicare_irn BETWEEN 1 AND 9", name="medicare_irn"),
         # Named explicitly rather than relying on the convention: the convention keys the unique
         # constraint on the first column alone, which would collide with the primary key name.
         sa.UniqueConstraint("tenant_id", "id", name="uq_patients_tenant_id_id"),
@@ -113,12 +144,97 @@ class Patient(SQLModel, table=True):
         default=None, foreign_key="patients.id", ondelete="RESTRICT"
     )
     deleted_at: datetime | None = Field(default=None, sa_type=_TIMESTAMPTZ)
+    # Manual §3.2 and §3.4 (docs3 feature 04).
+    status: str = Field(
+        default="CURRENT", sa_column_kwargs={"server_default": "CURRENT"}
+    )
+    status_reason: str | None = Field(default=None, max_length=500)
+    status_changed_at: datetime | None = Field(default=None, sa_type=_TIMESTAMPTZ)
+    medicare_irn: int | None = Field(default=None, sa_type=sa.SmallInteger)
+    # Off only for an explicit opt-out: it silences reminders and campaigns, never transactional mail.
+    receives_communications: bool = Field(
+        default=True, sa_column_kwargs={"server_default": sa.true()}
+    )
+    timezone: str = Field(
+        default=DEFAULT_TIMEZONE,
+        max_length=64,
+        sa_column_kwargs={"server_default": DEFAULT_TIMEZONE},
+    )
     created_at: datetime = Field(default_factory=_utcnow, sa_type=_TIMESTAMPTZ)
     updated_at: datetime = Field(
         default_factory=_utcnow,
         sa_type=_TIMESTAMPTZ,
         sa_column_kwargs={"onupdate": _utcnow},
     )
+
+
+class PatientAlert(SQLModel, table=True):
+    """A short chip on the patient's header ("payment plan", "interpreter needed"), with a tone.
+
+    Removed, never deleted: `removed_at` hides it and keeps who added and removed it.
+    """
+
+    __tablename__ = "patient_alerts"
+    __table_args__ = (
+        sa.CheckConstraint(f"tone IN ({_in(ALERT_TONES)})", name="tone"),
+        sa.ForeignKeyConstraint(
+            ["tenant_id", "patient_id"],
+            ["patients.tenant_id", "patients.id"],
+            name="fk_patient_alerts_tenant_patient",
+            ondelete="RESTRICT",
+        ),
+        sa.Index("ix_patient_alerts_tenant_patient", "tenant_id", "patient_id"),
+    )
+
+    id: uuid.UUID = Field(
+        default_factory=uuid.uuid4,
+        primary_key=True,
+        sa_column_kwargs={"server_default": sa.text("gen_random_uuid()")},
+    )
+    tenant_id: uuid.UUID = Field(
+        foreign_key="tenants.id", ondelete="RESTRICT", nullable=False
+    )
+    patient_id: uuid.UUID = Field(nullable=False)
+    text: str = Field(max_length=120)
+    tone: str = Field(default="INFO")
+    created_by: uuid.UUID = Field(nullable=False)
+    created_at: datetime = Field(default_factory=_utcnow, sa_type=_TIMESTAMPTZ)
+    removed_by: uuid.UUID | None = None
+    removed_at: datetime | None = Field(default=None, sa_type=_TIMESTAMPTZ)
+
+
+class PatientEmergencyContact(SQLModel, table=True):
+    """Someone to call for this patient. Removed, never deleted."""
+
+    __tablename__ = "patient_emergency_contacts"
+    __table_args__ = (
+        sa.ForeignKeyConstraint(
+            ["tenant_id", "patient_id"],
+            ["patients.tenant_id", "patients.id"],
+            name="fk_patient_emergency_contacts_tenant_patient",
+            ondelete="RESTRICT",
+        ),
+        sa.Index(
+            "ix_patient_emergency_contacts_tenant_patient", "tenant_id", "patient_id"
+        ),
+    )
+
+    id: uuid.UUID = Field(
+        default_factory=uuid.uuid4,
+        primary_key=True,
+        sa_column_kwargs={"server_default": sa.text("gen_random_uuid()")},
+    )
+    tenant_id: uuid.UUID = Field(
+        foreign_key="tenants.id", ondelete="RESTRICT", nullable=False
+    )
+    patient_id: uuid.UUID = Field(nullable=False)
+    name: str = Field(max_length=255)
+    relationship: str = Field(max_length=100)
+    phone: str = Field(max_length=64)
+    created_by: uuid.UUID = Field(nullable=False)
+    created_at: datetime = Field(default_factory=_utcnow, sa_type=_TIMESTAMPTZ)
+    removed_by: uuid.UUID | None = None
+    removed_at: datetime | None = Field(default=None, sa_type=_TIMESTAMPTZ)
 
 
 # The patient search indexes (`POST /api/v1/patients/search`). Search is a case-insensitive

@@ -161,3 +161,26 @@ def test_prescribers_are_the_accounts_holding_prescription_sign(
     assert (
         rx.client.get(f"{URL}/prescribers", headers=pharmacy.headers).status_code == 403
     )
+
+
+def test_a_blocked_patient_cannot_have_a_script_staged(
+    rx: RxApi, clinic: Clinic
+) -> None:
+    """Manual §3.2: `BLOCKED` stops new scripts until the block is resolved (docs3 feature 04)."""
+    blocked = rx.client.post(
+        f"{URL.rsplit('/', 1)[0]}/patients/{clinic.patient_id}/status",
+        json={"status": "BLOCKED", "reason": "Safety concern"},
+        headers=clinic.owner.headers,
+    )
+    assert blocked.status_code == 200, blocked.text
+    response = rx.stage_raw(clinic.owner, clinic)
+    assert response.status_code == 422
+    assert code(response) == "PATIENT_BLOCKED"
+
+    lifted = rx.client.post(
+        f"{URL.rsplit('/', 1)[0]}/patients/{clinic.patient_id}/status",
+        json={"status": "CURRENT"},
+        headers=clinic.owner.headers,
+    )
+    assert lifted.status_code == 200
+    assert rx.stage_raw(clinic.owner, clinic).status_code == 201

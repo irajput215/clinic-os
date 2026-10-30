@@ -14,19 +14,21 @@ Two things are deliberately absent, and both are load-bearing:
   authenticated session and from nowhere else (INV-1), so a `tenant_id` in a body is an
   unknown field and is rejected before any query runs.
 - **No response schema carries an identifier.** `medicare_number`, `ihi` and both blind
-  indexes are not declared here, so they cannot be serialised even by accident. This
-  slice exposes no identifier value at all; requirement R9's mask (`•••• ` + last three)
-  becomes relevant only when one is added.
+  indexes are accepted on a write (format-checked, then encrypted with a blind index by the
+  service) but only ever answered masked: `medicare_masked` / `ihi_masked`, requirement R9's
+  `•••• ` + last three (docs3 feature 04).
 
 `deceased_at` is exposed because it is an ordinary clinical attribute of the record, not
 an identifier. The rules that *act* on it (blocking operations) are not in this slice.
 """
 
+import re
 import uuid
 from datetime import date, datetime
-from typing import Annotated, Self
+from typing import Annotated, Literal, Self, get_args
+from zoneinfo import ZoneInfo, available_timezones
 
-from pydantic import AfterValidator, EmailStr, Field, model_validator
+from pydantic import AfterValidator, BeforeValidator, EmailStr, Field, model_validator
 from sqlmodel import SQLModel
 
 # PRIVATE API, deliberately. SQLModel annotates `model_config` as `SQLModelConfig`,
@@ -35,7 +37,11 @@ from sqlmodel import SQLModel
 # in docs/progress.md §4 rather than left as an unexplained import.
 from sqlmodel._compat import SQLModelConfig
 
-from app.modules.patients.models import SEX_AT_BIRTH_VOCABULARY
+from app.modules.patients.models import (
+    ALERT_TONES,
+    PATIENT_STATUSES,
+    SEX_AT_BIRTH_VOCABULARY,
+)
 
 
 def _check_sex_at_birth(value: str) -> str:
@@ -49,10 +55,62 @@ def _check_sex_at_birth(value: str) -> str:
 
 SexAtBirth = Annotated[str, AfterValidator(_check_sex_at_birth)]
 
+
+def _digits_only(value: object) -> object:
+    """Accept an identifier as people type it: spaces and dashes are dropped before the check."""
+    return re.sub(r"[\s-]", "", value) if isinstance(value, str) else value
+
+
+def _check_medicare(value: str) -> str:
+    # Format only (decision D12): ten digits. The check-digit algorithm is unconfirmed.
+    if not re.fullmatch(r"\d{10}", value):
+        raise ValueError("medicare_number must be 10 digits")
+    return value
+
+
+def _check_ihi(value: str) -> str:
+    # An IHI is 16 digits starting 800360 (the HI Service's individual prefix).
+    if not re.fullmatch(r"800360\d{10}", value):
+        raise ValueError("ihi must be 16 digits starting 8003 60")
+    return value
+
+
+def _check_timezone(value: str) -> str:
+    if value not in available_timezones():
+        raise ValueError("timezone must be an IANA time zone, e.g. Australia/Brisbane")
+    ZoneInfo(value)
+    return value
+
+
+MedicareNumber = Annotated[
+    str, BeforeValidator(_digits_only), AfterValidator(_check_medicare)
+]
+Ihi = Annotated[str, BeforeValidator(_digits_only), AfterValidator(_check_ihi)]
+TimeZoneName = Annotated[str, AfterValidator(_check_timezone)]
+PatientStatus = Literal[
+    "CURRENT",
+    "REVIEW",
+    "WAITING_LIST",
+    "CLAIMANT",
+    "ARCHIVED",
+    "DISCHARGED",
+    "BLOCKED",
+    "DECEASED",
+]
+AlertTone = Literal["INFO", "WARN", "DANGER"]
+assert set(get_args(PatientStatus)) == set(PATIENT_STATUSES)
+assert set(get_args(AlertTone)) == set(ALERT_TONES)
+
 # The columns the database declares NOT NULL. A PATCH may not clear one by sending an
 # explicit `null`: the alternative is an IntegrityError surfacing as a `500`, which is a
 # server fault reported for a client error.
-_REQUIRED_ON_WRITE = ("given_name", "family_name", "date_of_birth")
+_REQUIRED_ON_WRITE = (
+    "given_name",
+    "family_name",
+    "date_of_birth",
+    "receives_communications",
+    "timezone",
+)
 
 
 class PatientCreate(SQLModel):
@@ -78,6 +136,11 @@ class PatientCreate(SQLModel):
     phone: str | None = Field(default=None, max_length=64)
     email: EmailStr | None = Field(default=None, max_length=255)
     deceased_at: datetime | None = None
+    medicare_number: MedicareNumber | None = None
+    medicare_irn: int | None = Field(default=None, ge=1, le=9)
+    ihi: Ihi | None = None
+    receives_communications: bool = True
+    timezone: TimeZoneName | None = None
 
 
 class PatientUpdate(SQLModel):
@@ -103,6 +166,11 @@ class PatientUpdate(SQLModel):
     phone: str | None = Field(default=None, max_length=64)
     email: EmailStr | None = Field(default=None, max_length=255)
     deceased_at: datetime | None = None
+    medicare_number: MedicareNumber | None = None
+    medicare_irn: int | None = Field(default=None, ge=1, le=9)
+    ihi: Ihi | None = None
+    receives_communications: bool | None = None
+    timezone: TimeZoneName | None = None
 
     @model_validator(mode="after")
     def _reject_clearing_a_required_column(self) -> Self:
@@ -110,6 +178,18 @@ class PatientUpdate(SQLModel):
             if name in self.model_fields_set and getattr(self, name) is None:
                 raise ValueError(f"{name} may not be cleared")
         return self
+
+
+class EScriptReadiness(SQLModel):
+    """Whether an eScript can be written for this patient (manual §3.4, "The eScript-ready rule").
+
+    `missing` names what is absent, in the words the record uses: `IHI`, `SEX`, `ADDRESS`.
+    """
+
+    model_config = SQLModelConfig(extra="forbid")
+
+    ready: bool
+    missing: list[str]
 
 
 class PatientRead(SQLModel):
@@ -136,8 +216,61 @@ class PatientRead(SQLModel):
     phone: str | None = None
     email: str | None = None
     deceased_at: datetime | None = None
+    status: str
+    status_reason: str | None
+    medicare_masked: str | None
+    medicare_irn: int | None
+    ihi_masked: str | None
+    receives_communications: bool
+    timezone: str
+    escript_ready: EScriptReadiness
     created_at: datetime
     updated_at: datetime
+
+
+class PatientStatusChange(SQLModel):
+    """The body of `POST /api/v1/patients/{patient_id}/status`."""
+
+    model_config = SQLModelConfig(extra="forbid", str_strip_whitespace=True)
+
+    status: PatientStatus
+    reason: str | None = Field(default=None, max_length=500)
+    # Required for `DECEASED`: the date of death, kept on the record as before.
+    deceased_at: datetime | None = None
+
+
+class AlertCreate(SQLModel):
+    model_config = SQLModelConfig(extra="forbid", str_strip_whitespace=True)
+
+    text: str = Field(min_length=1, max_length=120)
+    tone: AlertTone = "INFO"
+
+
+class AlertRead(SQLModel):
+    model_config = SQLModelConfig(extra="forbid", from_attributes=True)
+
+    id: uuid.UUID
+    text: str
+    tone: str
+    created_at: datetime
+
+
+class EmergencyContactCreate(SQLModel):
+    model_config = SQLModelConfig(extra="forbid", str_strip_whitespace=True)
+
+    name: str = Field(min_length=1, max_length=255)
+    relationship: str = Field(min_length=1, max_length=100)
+    phone: str = Field(min_length=1, max_length=64)
+
+
+class EmergencyContactRead(SQLModel):
+    model_config = SQLModelConfig(extra="forbid", from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    relationship: str
+    phone: str
+    created_at: datetime
 
 
 class PatientsPublic(SQLModel):

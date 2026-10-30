@@ -95,6 +95,7 @@ NOT_FOUND_REASON: Final[str] = "AUTHZ_DENIED_CROSS_TENANT"
 # Refusal codes, each with one status (`detail.code` in the RFC 7807 body).
 APPOINTMENT_NOT_FOUND: Final[str] = "APPOINTMENT_NOT_FOUND"
 PATIENT_NOT_FOUND: Final[str] = "PATIENT_NOT_FOUND"
+PATIENT_BLOCKED: Final[str] = "PATIENT_BLOCKED"
 PRACTITIONER_NOT_FOUND: Final[str] = "PRACTITIONER_NOT_FOUND"
 TYPE_NOT_OFFERED: Final[str] = "TYPE_NOT_OFFERED"
 APPOINTMENT_OVERLAP: Final[str] = "APPOINTMENT_OVERLAP"
@@ -690,6 +691,15 @@ def create_appointment(*, actor: Actor, body: AppointmentCreate) -> AppointmentR
             session, tenant_id=tenant_id, patient_ids=[body.patient_id]
         ):
             raise AppointmentRefused(404, PATIENT_NOT_FOUND, "Patient not found")
+        if patients.blocked_patient_ids(
+            session, tenant_id=tenant_id, patient_ids=[body.patient_id]
+        ):
+            # Manual §3.2: a blocked patient takes no new booking until the block is resolved.
+            raise AppointmentRefused(
+                422,
+                PATIENT_BLOCKED,
+                "This patient is blocked. Lift the block on their record before booking.",
+            )
         practitioner = next(
             (
                 p
@@ -980,6 +990,15 @@ def public_book(
             phone=body.phone,
             source_ip=source_ip,
         )
+        if patients.blocked_patient_ids(
+            session, tenant_id=tenant_id, patient_ids=[patient_id]
+        ):
+            # A blocked record takes no online booking either. The wording names no status.
+            raise AppointmentRefused(
+                422,
+                PATIENT_BLOCKED,
+                "We can't book this appointment online. Please call the clinic.",
+            )
         appointment = _insert(
             session,
             tenant_id=tenant_id,

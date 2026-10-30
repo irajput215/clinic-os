@@ -3,10 +3,11 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
 import { Loader2 } from "lucide-react"
 import { useEffect } from "react"
-import { useForm } from "react-hook-form"
+import { Controller, useForm } from "react-hook-form"
 import { toast } from "sonner"
 import type { PatientRead } from "@/client/types.gen"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
@@ -64,6 +65,29 @@ const schema = z.object({
     (v) => v === null || /^\d{4}$/.test(v),
     "Use a 4-digit postcode.",
   ),
+  // Identifiers are write-only: the record shows them masked, and an empty field leaves them as
+  // they are. Spaces are allowed as people read them off the card.
+  medicare_number: z
+    .string()
+    .transform((v) => v.replace(/[\s-]/g, ""))
+    .refine(
+      (v) => v === "" || /^\d{10}$/.test(v),
+      "Use the 10-digit card number.",
+    ),
+  medicare_irn: z
+    .string()
+    .refine(
+      (v) => v === "" || /^[1-9]$/.test(v),
+      "The IRN is one digit, 1 to 9.",
+    ),
+  ihi: z
+    .string()
+    .transform((v) => v.replace(/[\s-]/g, ""))
+    .refine(
+      (v) => v === "" || /^800360\d{10}$/.test(v),
+      "An IHI is 16 digits starting 8003 60.",
+    ),
+  receives_communications: z.boolean(),
 })
 type FormIn = z.input<typeof schema>
 type FormOut = z.output<typeof schema>
@@ -80,6 +104,18 @@ const toForm = (p?: PatientRead): FormIn => ({
   suburb: p?.suburb ?? "",
   state: p?.state ?? "",
   postcode: p?.postcode ?? "",
+  medicare_number: "",
+  medicare_irn: p?.medicare_irn ? String(p.medicare_irn) : "",
+  ihi: "",
+  receives_communications: p?.receives_communications ?? true,
+})
+
+/** The API body: identifiers only when typed (an empty field leaves the stored one alone). */
+const toBody = ({ medicare_number, medicare_irn, ihi, ...rest }: FormOut) => ({
+  ...rest,
+  ...(medicare_number ? { medicare_number } : {}),
+  ...(ihi ? { ihi } : {}),
+  medicare_irn: medicare_irn ? Number(medicare_irn) : null,
 })
 
 export function PatientFormDialog({
@@ -107,7 +143,9 @@ export function PatientFormDialog({
 
   const save = useMutation({
     mutationFn: (values: FormOut) =>
-      patient ? updatePatient(patient.id, values) : createPatient(values),
+      patient
+        ? updatePatient(patient.id, toBody(values))
+        : createPatient(toBody(values)),
     onSuccess: async (saved) => {
       queryClient.setQueryData(["patients", "detail", saved.id], saved)
       await queryClient.invalidateQueries({ queryKey: ["patients", "list"] })
@@ -183,7 +221,11 @@ export function PatientFormDialog({
             >
               {input("date_of_birth", { type: "date", max: clinicToday() })}
             </Field>
-            <Field label="Sex at birth" htmlFor="pt-sex_at_birth">
+            <Field
+              label="Sex at birth"
+              htmlFor="pt-sex_at_birth"
+              hint="Needed for eScripts"
+            >
               <select
                 id="pt-sex_at_birth"
                 className="field-input"
@@ -249,6 +291,76 @@ export function PatientFormDialog({
               </Field>
             </div>
           </div>
+
+          <fieldset className="grid gap-4 rounded-inner border border-line bg-oat/40 px-4 py-3.5 sm:grid-cols-[1fr_88px]">
+            <legend className="px-1 text-2xs font-semibold tracking-[0.08em] text-stone-faint uppercase">
+              Identifiers
+            </legend>
+            <Field
+              label="Medicare number"
+              htmlFor="pt-medicare_number"
+              error={errors.medicare_number?.message}
+              hint={
+                patient?.medicare_masked
+                  ? `On file: ${patient.medicare_masked}. Leave blank to keep it.`
+                  : "10 digits, as on the card"
+              }
+            >
+              {input("medicare_number", {
+                inputMode: "numeric",
+                autoComplete: "off",
+              })}
+            </Field>
+            <Field
+              label="IRN"
+              htmlFor="pt-medicare_irn"
+              error={errors.medicare_irn?.message}
+            >
+              {input("medicare_irn", {
+                inputMode: "numeric",
+                autoComplete: "off",
+              })}
+            </Field>
+            <Field
+              label="IHI"
+              htmlFor="pt-ihi"
+              error={errors.ihi?.message}
+              className="sm:col-span-2"
+              hint={
+                patient?.ihi_masked
+                  ? `On file: ${patient.ihi_masked}. Leave blank to keep it.`
+                  : "16 digits, 8003 60XX XXXX XXXX. Needed for eScripts."
+              }
+            >
+              {input("ihi", { inputMode: "numeric", autoComplete: "off" })}
+            </Field>
+          </fieldset>
+
+          <Controller
+            control={form.control}
+            name="receives_communications"
+            render={({ field }) => (
+              <div className="flex items-start gap-2.5">
+                <Checkbox
+                  id="pt-receives_communications"
+                  checked={field.value}
+                  onCheckedChange={(v) => field.onChange(v === true)}
+                />
+                <label
+                  htmlFor="pt-receives_communications"
+                  className="grid gap-0.5 text-[13.5px]"
+                >
+                  <span className="font-medium text-ink">
+                    Receives communications
+                  </span>
+                  <span className="text-stone-mute">
+                    Untick only for an explicit opt-out. Reminders stop; booking
+                    and script notices still send.
+                  </span>
+                </label>
+              </div>
+            )}
+          />
 
           {save.isError ? (
             <p

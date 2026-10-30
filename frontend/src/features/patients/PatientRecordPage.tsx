@@ -1,6 +1,6 @@
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query"
 import { Link, useNavigate } from "@tanstack/react-router"
-import { ChevronLeft, Pencil, Plus } from "lucide-react"
+import { ChevronLeft, Pencil, Plus, Tag, UserCog } from "lucide-react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import {
@@ -44,6 +44,16 @@ import {
 import { CareTeamCard } from "./CareTeamCard"
 import { NotesTab } from "./NotesTab"
 import { PatientFormDialog } from "./PatientFormDialog"
+import {
+  AddAlertDialog,
+  AlertChips,
+  ChangeStatusDialog,
+  EmergencyContactsCard,
+  EScriptChip,
+  IdentifiersCard,
+  PatientStatusPill,
+  useCanUpdatePatients,
+} from "./RecordParts"
 import { PATIENT_TAB_KEYS, PATIENT_TABS, type PatientTab } from "./tabs"
 
 const SEX_LABEL: Record<string, string> = {
@@ -63,6 +73,9 @@ export function PatientRecordPage({
   const { data: patient } = useSuspenseQuery(patientQuery(patientId))
   const navigate = useNavigate()
   const [editing, setEditing] = useState(false)
+  const [changingStatus, setChangingStatus] = useState(false)
+  const [addingAlert, setAddingAlert] = useState(false)
+  const canUpdate = useCanUpdatePatients()
 
   return (
     <>
@@ -91,16 +104,32 @@ export function PatientRecordPage({
                 </span>
               </>
             ) : null}
-            {patient.deceased_at ? (
-              <span className="rounded-full bg-fill px-2 py-0.5 text-xs">
-                Deceased
-              </span>
-            ) : null}
+            <span>·</span>
+            <PatientStatusPill status={patient.status} />
+            <EScriptChip patient={patient} />
           </p>
+          {patient.status === "BLOCKED" && patient.status_reason ? (
+            <p className="mt-1.5 text-sm text-danger-deep">
+              Blocked: {patient.status_reason}
+            </p>
+          ) : null}
+          <AlertChips patientId={patientId} />
         </div>
-        <Button variant="outline" onClick={() => setEditing(true)}>
-          <Pencil /> Edit details
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {canUpdate ? (
+            <>
+              <Button variant="outline" onClick={() => setAddingAlert(true)}>
+                <Tag /> Add alert
+              </Button>
+              <Button variant="outline" onClick={() => setChangingStatus(true)}>
+                <UserCog /> Change status
+              </Button>
+            </>
+          ) : null}
+          <Button variant="outline" onClick={() => setEditing(true)}>
+            <Pencil /> Edit details
+          </Button>
+        </div>
       </header>
 
       <TabBar
@@ -129,6 +158,16 @@ export function PatientRecordPage({
         onOpenChange={setEditing}
         patient={patient}
       />
+      <ChangeStatusDialog
+        patient={patient}
+        open={changingStatus}
+        onOpenChange={setChangingStatus}
+      />
+      <AddAlertDialog
+        patientId={patientId}
+        open={addingAlert}
+        onOpenChange={setAddingAlert}
+      />
     </>
   )
 }
@@ -155,26 +194,30 @@ function OverviewTab({ patientId }: { patientId: string }) {
   )
   return (
     <div className="grid gap-3.5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-      <Card title="Details">
-        <dl className="grid grid-cols-[130px_minmax(0,1fr)] gap-y-2.5 text-sm">
-          {row("Given name", p.given_name)}
-          {row("Family name", p.family_name)}
-          {row("Preferred name", p.preferred_name)}
-          {row("Date of birth", formatDate(p.date_of_birth))}
-          {row("Mobile", p.phone ? <Mono>{p.phone}</Mono> : null)}
-          {row("Email", p.email)}
-          {row(
-            "Address",
-            [
-              p.address_line,
-              [p.suburb, p.state, p.postcode].filter(Boolean).join(" "),
-            ]
-              .filter(Boolean)
-              .join(", "),
-          )}
-          {row("Record created", formatDayMonthTime(p.created_at))}
-        </dl>
-      </Card>
+      <div className="min-w-0 space-y-3.5">
+        <Card title="Details">
+          <dl className="grid grid-cols-[130px_minmax(0,1fr)] gap-y-2.5 text-sm">
+            {row("Given name", p.given_name)}
+            {row("Family name", p.family_name)}
+            {row("Preferred name", p.preferred_name)}
+            {row("Date of birth", formatDate(p.date_of_birth))}
+            {row("Mobile", p.phone ? <Mono>{p.phone}</Mono> : null)}
+            {row("Email", p.email)}
+            {row(
+              "Address",
+              [
+                p.address_line,
+                [p.suburb, p.state, p.postcode].filter(Boolean).join(" "),
+              ]
+                .filter(Boolean)
+                .join(", "),
+            )}
+            {row("Record created", formatDayMonthTime(p.created_at))}
+          </dl>
+        </Card>
+        <IdentifiersCard patient={p} />
+        <EmergencyContactsCard patientId={patientId} />
+      </div>
       <div className="min-w-0 space-y-3.5">
         <Card title="Active approvals">
           {approvals.isError ? (

@@ -161,3 +161,35 @@ def test_server_decided_fields_are_refused_in_the_body(
     )
     assert naive.status_code == 422
     assert api.count("appointments", clinic.tenant_id) == 0
+
+
+def _set_status(
+    api: AppointmentsApi, clinic: Clinic, status: str, **extra: str
+) -> None:
+    response = api.client.post(
+        f"{API}/patients/{clinic.patient_id}/status",
+        json={"status": status, **extra},
+        headers=clinic.owner.headers,
+    )
+    assert response.status_code == 200, response.text
+
+
+def test_a_blocked_patient_cannot_be_booked(
+    api: AppointmentsApi, clinic: Clinic
+) -> None:
+    """Manual §3.2: `BLOCKED` stops new bookings until the block is resolved (docs3 feature 04)."""
+    _set_status(api, clinic, "BLOCKED", reason="Repeated no-pay")
+    response = api.book(
+        clinic.owner,
+        patient_id=clinic.patient_id,
+        practitioner_id=clinic.doctor.user_id,
+    )
+    assert response.status_code == 422
+    assert code(response) == "PATIENT_BLOCKED"
+    _set_status(api, clinic, "CURRENT")
+    booked = api.book(
+        clinic.owner,
+        patient_id=clinic.patient_id,
+        practitioner_id=clinic.doctor.user_id,
+    )
+    assert booked.status_code == 201, booked.text

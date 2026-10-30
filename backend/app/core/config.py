@@ -125,6 +125,11 @@ class Settings(BaseSettings):
     BOOKING_NOTIFICATIONS_RUN_TOKEN: SecretStr | None = Field(
         default=None, min_length=32
     )
+    # Encrypts patient and practitioner identifiers at rest (Medicare, IHI, AHPRA; `app.core.field_crypto`).
+    # 32 random bytes, base64url. Unset, a key is derived from SECRET_KEY, which is fine for a local
+    # run but ties every stored identifier to SECRET_KEY: set this before real identifiers are stored,
+    # and never change it without re-encrypting.
+    FIELD_ENCRYPTION_KEY: SecretStr | None = None
 
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":

@@ -7,7 +7,7 @@
 | created_at | timestamp with time zone |  | false |  |  |  |
 | data_region | varchar(32) |  | false |  |  |  |
 | display_name | varchar(120) |  | false |  |  |  |
-| id | uuid | gen_random_uuid() | false | [public.appointment_notifications](public.appointment_notifications.md) [public.appointment_settings](public.appointment_settings.md) [public.appointments](public.appointments.md) [public.care_relationships](public.care_relationships.md) [public.clinical_record_versions](public.clinical_record_versions.md) [public.clinical_records](public.clinical_records.md) [public.clinics](public.clinics.md) [public.dispatch_attempts](public.dispatch_attempts.md) [public.patients](public.patients.md) [public.prescription_events](public.prescription_events.md) [public.prescriptions](public.prescriptions.md) [public.role_permissions](public.role_permissions.md) [public.roles](public.roles.md) [public.staff_invitations](public.staff_invitations.md) [public.step_up_grants](public.step_up_grants.md) [public.tga_approval_events](public.tga_approval_events.md) [public.tga_approvals](public.tga_approvals.md) [public.user](public.user.md) [public.user_roles](public.user_roles.md) |  |  |
+| id | uuid | gen_random_uuid() | false | [public.appointment_notifications](public.appointment_notifications.md) [public.appointment_settings](public.appointment_settings.md) [public.appointments](public.appointments.md) [public.care_relationships](public.care_relationships.md) [public.clinical_record_versions](public.clinical_record_versions.md) [public.clinical_records](public.clinical_records.md) [public.clinics](public.clinics.md) [public.dispatch_attempts](public.dispatch_attempts.md) [public.patient_alerts](public.patient_alerts.md) [public.patient_emergency_contacts](public.patient_emergency_contacts.md) [public.patients](public.patients.md) [public.prescription_events](public.prescription_events.md) [public.prescriptions](public.prescriptions.md) [public.role_permissions](public.role_permissions.md) [public.roles](public.roles.md) [public.staff_invitations](public.staff_invitations.md) [public.step_up_grants](public.step_up_grants.md) [public.tga_approval_events](public.tga_approval_events.md) [public.tga_approvals](public.tga_approvals.md) [public.user](public.user.md) [public.user_roles](public.user_roles.md) |  |  |
 | legal_name | varchar(255) |  | false |  |  |  |
 | retention_profile | varchar(64) |  | false |  |  |  |
 | slug | varchar(64) |  | false |  |  |  |
@@ -52,6 +52,8 @@ erDiagram
 "public.clinical_records" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.clinics" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.dispatch_attempts" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.patient_alerts" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.patient_emergency_contacts" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.patients" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.prescription_events" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.prescriptions" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
@@ -176,6 +178,29 @@ erDiagram
   varchar state
   uuid tenant_id FK
 }
+"public.patient_alerts" {
+  timestamp_with_time_zone created_at
+  uuid created_by
+  uuid id
+  uuid patient_id FK
+  timestamp_with_time_zone removed_at
+  uuid removed_by
+  uuid tenant_id FK
+  varchar_120_ text
+  varchar tone
+}
+"public.patient_emergency_contacts" {
+  timestamp_with_time_zone created_at
+  uuid created_by
+  uuid id
+  varchar_255_ name
+  uuid patient_id FK
+  varchar_64_ phone
+  varchar_100_ relationship
+  timestamp_with_time_zone removed_at
+  uuid removed_by
+  uuid tenant_id FK
+}
 "public.patients" {
   varchar address_line
   timestamp_with_time_zone created_at
@@ -190,15 +215,21 @@ erDiagram
   bytea ihi
   bytea ihi_blind_index
   bytea medicare_blind_index
+  smallint medicare_irn
   bytea medicare_number
   uuid merged_into_patient_id FK
   varchar phone
   varchar postcode
   varchar preferred_name
+  boolean receives_communications
   varchar sex_at_birth
   varchar state
+  varchar status
+  timestamp_with_time_zone status_changed_at
+  varchar_500_ status_reason
   varchar suburb
   uuid tenant_id FK
+  varchar_64_ timezone
   timestamp_with_time_zone updated_at
 }
 "public.prescription_events" {

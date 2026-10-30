@@ -213,6 +213,8 @@ class RbacApi:
                 # RESTRICT ordering: patients, then the RBAC rows, then the accounts, then the
                 # organisation. Signup provisions roles and a bootstrap grant for every tenant.
                 for statement in (
+                    "DELETE FROM patient_alerts WHERE tenant_id = :tenant_id",
+                    "DELETE FROM patient_emergency_contacts WHERE tenant_id = :tenant_id",
                     "DELETE FROM patients WHERE tenant_id = :tenant_id",
                     "DELETE FROM user_roles WHERE tenant_id = :tenant_id",
                     "DELETE FROM staff_invitations WHERE tenant_id = :tenant_id",

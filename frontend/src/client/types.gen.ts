@@ -5,6 +5,42 @@ export type ClientOptions = {
 };
 
 /**
+ * AlertCreate
+ */
+export type AlertCreate = {
+    /**
+     * Text
+     */
+    text: string;
+    /**
+     * Tone
+     */
+    tone?: 'INFO' | 'WARN' | 'DANGER';
+};
+
+/**
+ * AlertRead
+ */
+export type AlertRead = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Text
+     */
+    text: string;
+    /**
+     * Tone
+     */
+    tone: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+};
+
+/**
  * AppointmentCreate
  *
  * `POST /appointments`. The server computes `ends_at` from the type (R2).
@@ -714,6 +750,68 @@ export type DispatchRead = {
 };
 
 /**
+ * EScriptReadiness
+ *
+ * Whether an eScript can be written for this patient (manual §3.4, "The eScript-ready rule").
+ *
+ * `missing` names what is absent, in the words the record uses: `IHI`, `SEX`, `ADDRESS`.
+ */
+export type EScriptReadiness = {
+    /**
+     * Ready
+     */
+    ready: boolean;
+    /**
+     * Missing
+     */
+    missing: Array<string>;
+};
+
+/**
+ * EmergencyContactCreate
+ */
+export type EmergencyContactCreate = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Relationship
+     */
+    relationship: string;
+    /**
+     * Phone
+     */
+    phone: string;
+};
+
+/**
+ * EmergencyContactRead
+ */
+export type EmergencyContactRead = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Relationship
+     */
+    relationship: string;
+    /**
+     * Phone
+     */
+    phone: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+};
+
+/**
  * HTTPValidationError
  */
 export type HTTPValidationError = {
@@ -912,6 +1010,26 @@ export type PatientCreate = {
      * Deceased At
      */
     deceased_at?: string | null;
+    /**
+     * Medicare Number
+     */
+    medicare_number?: string | null;
+    /**
+     * Medicare Irn
+     */
+    medicare_irn?: number | null;
+    /**
+     * Ihi
+     */
+    ihi?: string | null;
+    /**
+     * Receives Communications
+     */
+    receives_communications?: boolean;
+    /**
+     * Timezone
+     */
+    timezone?: string | null;
 };
 
 /**
@@ -981,6 +1099,35 @@ export type PatientRead = {
      */
     deceased_at?: string | null;
     /**
+     * Status
+     */
+    status: string;
+    /**
+     * Status Reason
+     */
+    status_reason: string | null;
+    /**
+     * Medicare Masked
+     */
+    medicare_masked: string | null;
+    /**
+     * Medicare Irn
+     */
+    medicare_irn: number | null;
+    /**
+     * Ihi Masked
+     */
+    ihi_masked: string | null;
+    /**
+     * Receives Communications
+     */
+    receives_communications: boolean;
+    /**
+     * Timezone
+     */
+    timezone: string;
+    escript_ready: EScriptReadiness;
+    /**
      * Created At
      */
     created_at: string;
@@ -1012,6 +1159,26 @@ export type PatientSearch = {
      * Limit
      */
     limit?: number;
+};
+
+/**
+ * PatientStatusChange
+ *
+ * The body of `POST /api/v1/patients/{patient_id}/status`.
+ */
+export type PatientStatusChange = {
+    /**
+     * Status
+     */
+    status: 'CURRENT' | 'REVIEW' | 'WAITING_LIST' | 'CLAIMANT' | 'ARCHIVED' | 'DISCHARGED' | 'BLOCKED' | 'DECEASED';
+    /**
+     * Reason
+     */
+    reason?: string | null;
+    /**
+     * Deceased At
+     */
+    deceased_at?: string | null;
 };
 
 /**
@@ -1076,6 +1243,26 @@ export type PatientUpdate = {
      * Deceased At
      */
     deceased_at?: string | null;
+    /**
+     * Medicare Number
+     */
+    medicare_number?: string | null;
+    /**
+     * Medicare Irn
+     */
+    medicare_irn?: number | null;
+    /**
+     * Ihi
+     */
+    ihi?: string | null;
+    /**
+     * Receives Communications
+     */
+    receives_communications?: boolean | null;
+    /**
+     * Timezone
+     */
+    timezone?: string | null;
 };
 
 /**
@@ -3546,6 +3733,10 @@ export type patientsListPatientsData = {
          * Cursor
          */
         cursor?: string | null;
+        /**
+         * Status
+         */
+        status?: Array<'CURRENT' | 'REVIEW' | 'WAITING_LIST' | 'CLAIMANT' | 'ARCHIVED' | 'DISCHARGED' | 'BLOCKED' | 'DECEASED'> | null;
     };
     url: '/api/v1/patients';
 };
@@ -3677,6 +3868,236 @@ export type patientsUpdatePatientResponses = {
 };
 
 export type patientsUpdatePatientResponse = patientsUpdatePatientResponses[keyof patientsUpdatePatientResponses];
+
+export type patientsChangePatientStatusData = {
+    body: PatientStatusChange;
+    path: {
+        /**
+         * Patient Id
+         */
+        patient_id: string;
+    };
+    query?: never;
+    url: '/api/v1/patients/{patient_id}/status';
+};
+
+export type patientsChangePatientStatusErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type patientsChangePatientStatusError = patientsChangePatientStatusErrors[keyof patientsChangePatientStatusErrors];
+
+export type patientsChangePatientStatusResponses = {
+    /**
+     * Successful Response
+     */
+    200: PatientRead;
+};
+
+export type patientsChangePatientStatusResponse = patientsChangePatientStatusResponses[keyof patientsChangePatientStatusResponses];
+
+export type patientsListPatientAlertsData = {
+    body?: never;
+    path: {
+        /**
+         * Patient Id
+         */
+        patient_id: string;
+    };
+    query?: never;
+    url: '/api/v1/patients/{patient_id}/alerts';
+};
+
+export type patientsListPatientAlertsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type patientsListPatientAlertsError = patientsListPatientAlertsErrors[keyof patientsListPatientAlertsErrors];
+
+export type patientsListPatientAlertsResponses = {
+    /**
+     * Response Patients-List Patient Alerts
+     *
+     * Successful Response
+     */
+    200: Array<AlertRead>;
+};
+
+export type patientsListPatientAlertsResponse = patientsListPatientAlertsResponses[keyof patientsListPatientAlertsResponses];
+
+export type patientsAddPatientAlertData = {
+    body: AlertCreate;
+    path: {
+        /**
+         * Patient Id
+         */
+        patient_id: string;
+    };
+    query?: never;
+    url: '/api/v1/patients/{patient_id}/alerts';
+};
+
+export type patientsAddPatientAlertErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type patientsAddPatientAlertError = patientsAddPatientAlertErrors[keyof patientsAddPatientAlertErrors];
+
+export type patientsAddPatientAlertResponses = {
+    /**
+     * Response Patients-Add Patient Alert
+     *
+     * Successful Response
+     */
+    201: Array<AlertRead>;
+};
+
+export type patientsAddPatientAlertResponse = patientsAddPatientAlertResponses[keyof patientsAddPatientAlertResponses];
+
+export type patientsRemovePatientAlertData = {
+    body?: never;
+    path: {
+        /**
+         * Patient Id
+         */
+        patient_id: string;
+        /**
+         * Alert Id
+         */
+        alert_id: string;
+    };
+    query?: never;
+    url: '/api/v1/patients/{patient_id}/alerts/{alert_id}/remove';
+};
+
+export type patientsRemovePatientAlertErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type patientsRemovePatientAlertError = patientsRemovePatientAlertErrors[keyof patientsRemovePatientAlertErrors];
+
+export type patientsRemovePatientAlertResponses = {
+    /**
+     * Response Patients-Remove Patient Alert
+     *
+     * Successful Response
+     */
+    200: Array<AlertRead>;
+};
+
+export type patientsRemovePatientAlertResponse = patientsRemovePatientAlertResponses[keyof patientsRemovePatientAlertResponses];
+
+export type patientsListPatientEmergencyContactsData = {
+    body?: never;
+    path: {
+        /**
+         * Patient Id
+         */
+        patient_id: string;
+    };
+    query?: never;
+    url: '/api/v1/patients/{patient_id}/emergency-contacts';
+};
+
+export type patientsListPatientEmergencyContactsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type patientsListPatientEmergencyContactsError = patientsListPatientEmergencyContactsErrors[keyof patientsListPatientEmergencyContactsErrors];
+
+export type patientsListPatientEmergencyContactsResponses = {
+    /**
+     * Response Patients-List Patient Emergency Contacts
+     *
+     * Successful Response
+     */
+    200: Array<EmergencyContactRead>;
+};
+
+export type patientsListPatientEmergencyContactsResponse = patientsListPatientEmergencyContactsResponses[keyof patientsListPatientEmergencyContactsResponses];
+
+export type patientsAddPatientEmergencyContactData = {
+    body: EmergencyContactCreate;
+    path: {
+        /**
+         * Patient Id
+         */
+        patient_id: string;
+    };
+    query?: never;
+    url: '/api/v1/patients/{patient_id}/emergency-contacts';
+};
+
+export type patientsAddPatientEmergencyContactErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type patientsAddPatientEmergencyContactError = patientsAddPatientEmergencyContactErrors[keyof patientsAddPatientEmergencyContactErrors];
+
+export type patientsAddPatientEmergencyContactResponses = {
+    /**
+     * Response Patients-Add Patient Emergency Contact
+     *
+     * Successful Response
+     */
+    201: Array<EmergencyContactRead>;
+};
+
+export type patientsAddPatientEmergencyContactResponse = patientsAddPatientEmergencyContactResponses[keyof patientsAddPatientEmergencyContactResponses];
+
+export type patientsRemovePatientEmergencyContactData = {
+    body?: never;
+    path: {
+        /**
+         * Patient Id
+         */
+        patient_id: string;
+        /**
+         * Contact Id
+         */
+        contact_id: string;
+    };
+    query?: never;
+    url: '/api/v1/patients/{patient_id}/emergency-contacts/{contact_id}/remove';
+};
+
+export type patientsRemovePatientEmergencyContactErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type patientsRemovePatientEmergencyContactError = patientsRemovePatientEmergencyContactErrors[keyof patientsRemovePatientEmergencyContactErrors];
+
+export type patientsRemovePatientEmergencyContactResponses = {
+    /**
+     * Response Patients-Remove Patient Emergency Contact
+     *
+     * Successful Response
+     */
+    200: Array<EmergencyContactRead>;
+};
+
+export type patientsRemovePatientEmergencyContactResponse = patientsRemovePatientEmergencyContactResponses[keyof patientsRemovePatientEmergencyContactResponses];
 
 export type rolesListRolesData = {
     body?: never;

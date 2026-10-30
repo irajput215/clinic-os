@@ -193,6 +193,11 @@ def _claim(
             tenant_id=tenant_id,
             patient_ids=[booking.patient_id for booking in bookings.values()],
         )
+        opted_out = patients.opted_out_ids(
+            session,
+            tenant_id=tenant_id,
+            patient_ids=[booking.patient_id for booking in bookings.values()],
+        )
         clinic = (
             identity_tenancy.tenant_display_name(session, tenant_id=tenant_id)
             or "your clinic"
@@ -207,6 +212,8 @@ def _claim(
                 outcome = "STARTED"
             elif booking.patient_id not in addresses:
                 outcome = "NO_EMAIL"
+            elif notification_kind == "REMINDER" and booking.patient_id in opted_out:
+                outcome = "OPTED_OUT"
             if outcome is not None:
                 connection.execute(
                     _SKIP_SQL,

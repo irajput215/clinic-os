@@ -456,3 +456,25 @@ def test_a_background_failure_is_logged_by_class_only(
         )
     assert "booking confirmation not sent" in caplog.text
     assert PATIENT_EMAIL not in caplog.text
+
+
+def test_a_patient_who_opted_out_gets_the_confirmation_but_no_reminder(
+    api: AppointmentsApi, clinic: Clinic, mail_sink: MailSink
+) -> None:
+    """Manual §3.4: opting out silences reminders; transactional messages still send."""
+    address = "quiet.patient@example.com"
+    patient = _patient_with_email(api, clinic, address)
+    opted_out = api.client.patch(
+        f"{API}/patients/{patient}",
+        json={"receives_communications": False},
+        headers=clinic.owner.headers,
+    )
+    assert opted_out.status_code == 200, opted_out.text
+    _staff_booking(api, clinic, patient)
+    _make_due(clinic.tenant_id)
+    notifications.send_due(tenant_id=clinic.tenant_id)
+
+    reminder = next(r for r in _rows(clinic.tenant_id) if r["kind"] == "REMINDER")
+    assert (reminder["status"], reminder["outcome"]) == ("SKIPPED", "OPTED_OUT")
+    subjects = [m["subject"] for m in mail_sink.to(address)]
+    assert subjects == [f"Your appointment with {_clinic_name(clinic)} is booked"]

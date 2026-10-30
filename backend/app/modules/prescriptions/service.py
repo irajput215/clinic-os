@@ -93,6 +93,7 @@ DISPATCH_BLOCKED: Final[str] = "prescription.dispatch_blocked"
 NOT_FOUND: Final[str] = "PRESCRIPTION_NOT_FOUND"
 CROSS_TENANT: Final[str] = "CROSS_TENANT"
 PATIENT_NOT_FOUND: Final[str] = "PATIENT_NOT_FOUND"
+PATIENT_BLOCKED: Final[str] = "PATIENT_BLOCKED"
 PRESCRIBER_NOT_AUTHORIZED: Final[str] = "PRESCRIBER_NOT_AUTHORIZED"
 NOT_PRESCRIBER_OF_RECORD: Final[str] = "NOT_PRESCRIBER_OF_RECORD"
 INVALID_STATE_TRANSITION: Final[str] = "INVALID_STATE_TRANSITION"
@@ -675,6 +676,21 @@ def stage(
                 payload={"patient_id": str(body.patient_id)},
             )
             return Refusal(decision.code.value, decision.status_code, decision.message)
+        if patient.status == "BLOCKED":
+            # Manual §3.2: a blocked patient takes no new script until the block is resolved.
+            _record(
+                session,
+                action=CREATE,
+                result="DENIED",
+                resource_id=None,
+                reason=PATIENT_BLOCKED,
+                payload={"patient_id": str(body.patient_id)},
+            )
+            return Refusal(
+                PATIENT_BLOCKED,
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "This patient is blocked. Lift the block on their record before staging a script.",
+            )
         if body.prescriber_id not in prescribers:
             _record(
                 session,

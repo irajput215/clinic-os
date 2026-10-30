@@ -195,15 +195,21 @@ erDiagram
   bytea ihi
   bytea ihi_blind_index
   bytea medicare_blind_index
+  smallint medicare_irn
   bytea medicare_number
   uuid merged_into_patient_id FK
   varchar phone
   varchar postcode
   varchar preferred_name
+  boolean receives_communications
   varchar sex_at_birth
   varchar state
+  varchar status
+  timestamp_with_time_zone status_changed_at
+  varchar_500_ status_reason
   varchar suburb
   uuid tenant_id FK
+  varchar_64_ timezone
   timestamp_with_time_zone updated_at
 }
 "public.tenants" {

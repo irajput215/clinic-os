@@ -22,6 +22,9 @@ FORBIDDEN_BODY_FIELDS: dict[str, object] = {
     "id": str(uuid.uuid4()),
     "created_at": "2020-01-01T00:00:00Z",
     "updated_at": "2020-01-01T00:00:00Z",
+    # The lifecycle status changes only through `POST /patients/{id}/status`, with its reason.
+    "status": "BLOCKED",
+    "medicare_blind_index": "AAAA",
 }
 
 
@@ -88,15 +91,18 @@ def test_create_rejects_a_body_field_the_design_does_not_expose(
     assert api.patient_count(tenant.tenant_id) == before
 
 
-@pytest.mark.parametrize("field", ["medicare_number", "ihi"])
-def test_create_rejects_an_identifier_the_slice_cannot_encrypt(
-    api: PatientsApi, field: str
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("medicare_number", "21234"), ("ihi", "8003 6112 3456 7890")],
+)
+def test_create_rejects_a_malformed_identifier(
+    api: PatientsApi, field: str, value: str
 ) -> None:
-    """No identifier is mass-assignable while key custody is open (design open item 5)."""
+    """A Medicare number is 10 digits and an IHI 16 starting 800360 (docs3 feature 04)."""
     tenant = api.register(clinic_name="Riverside Family Clinic")
     before = api.patient_count(tenant.tenant_id)
 
-    response = api.create_raw(tenant, **{field: "2123456789"})
+    response = api.create_raw(tenant, **{field: value})
 
     assert response.status_code == 422, response.text
     assert api.patient_count(tenant.tenant_id) == before
