@@ -4,12 +4,13 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlmodel import select
+from sqlmodel import Session, select
 
 from app import crud
 from app.api.deps import ActiveTenantUser, SessionDep
 from app.core import security
 from app.core.config import settings
+from app.core.db import autocommit_engine
 from app.core.rate_limit import login_rate_limit, password_recovery_rate_limit
 from app.models import Message, NewPassword, Token, User, UserPublic, UserUpdate
 from app.utils import (
@@ -30,14 +31,20 @@ router = APIRouter(tags=["login"])
     dependencies=[Depends(login_rate_limit)],
 )
 def login_access_token(
-    session: SessionDep, form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
 ) -> Token:
     """
     OAuth2 compatible token login, get an access token for future requests
+
+    The account read is one statement on the autocommit engine: no `BEGIN` and no `ROLLBACK`
+    around it, so sign-in costs one database round trip instead of three (each ~210 ms while the
+    app and the database are not co-located, `docs/reference/performance.md`). The rare rehash
+    write commits on its own, exactly as before.
     """
-    user = crud.authenticate(
-        session=session, email=form_data.username, password=form_data.password
-    )
+    with Session(autocommit_engine) as session:
+        user = crud.authenticate(
+            session=session, email=form_data.username, password=form_data.password
+        )
     if not user:
         raise HTTPException(status_code=400, detail="Incorrect email or password")
     elif not user.is_active:

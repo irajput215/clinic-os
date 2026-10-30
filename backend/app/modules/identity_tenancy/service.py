@@ -76,8 +76,23 @@ def is_active_status(status: str | None) -> bool:
     return status == ACTIVE_STATUS
 
 
-def get_tenant_by_slug(session: Session, slug: str) -> Tenant | None:
-    return session.exec(select(Tenant).where(Tenant.slug == slug)).first()
+def _tenant_id_and_status(
+    session: Session, *, slug: str | None = None, tenant_id: uuid.UUID | None = None
+) -> tuple[uuid.UUID, str] | None:
+    """One tenant's `id` and `status`, by slug or by id, selecting only those two columns.
+
+    Column-limited on purpose, like `router._current_tenant`: `clinos_app` holds `SELECT` on named
+    columns of `tenants` only (`legal_name` and `retention_profile` are withheld), so an ORM entity
+    read asks for every column and fails with `permission denied` once the app connects as that role.
+    """
+    table = Tenant.metadata.tables[Tenant.__tablename__]
+    statement = sa_select(table.c.id, table.c.status)
+    if slug is not None:
+        statement = statement.where(table.c.slug == slug)
+    else:
+        statement = statement.where(table.c.id == tenant_id)
+    row = session.connection().execute(statement).one_or_none()
+    return None if row is None else (row[0], row[1])
 
 
 def active_tenant_id_for_slug(session: Session, slug: str) -> uuid.UUID | None:
@@ -89,10 +104,10 @@ def active_tenant_id_for_slug(session: Session, slug: str) -> uuid.UUID | None:
     returned; an unknown slug and a suspended, closing or closed organisation all answer `None`, so the
     caller's `404` is uniform and discloses neither existence nor status.
     """
-    tenant = get_tenant_by_slug(session, slug)
-    if tenant is None or not is_active_status(tenant.status):
+    tenant = _tenant_id_and_status(session, slug=slug)
+    if tenant is None or not is_active_status(tenant[1]):
         return None
-    return tenant.id
+    return tenant[0]
 
 
 def active_tenant_ids(session: Session) -> list[uuid.UUID]:
@@ -120,8 +135,8 @@ def tenant_is_active(session: Session, *, tenant_id: uuid.UUID) -> bool:
     refused exactly as a non-`ACTIVE` one is: the boundary answers one code for both, so the
     response cannot disclose whether the organisation exists.
     """
-    tenant = session.get(Tenant, tenant_id)
-    return tenant is not None and is_active_status(tenant.status)
+    tenant = _tenant_id_and_status(session, tenant_id=tenant_id)
+    return tenant is not None and is_active_status(tenant[1])
 
 
 _ACCOUNT_COLUMNS: Final = tuple(sa_inspect(User).local_table.columns)
@@ -300,8 +315,14 @@ def create_tenant_for_signup(
 
 
 def seed_demo_tenant(session: Session) -> Tenant:
-    """Create the demo tenant if it is absent. Idempotent: startup calls it every run."""
-    existing = get_tenant_by_slug(session, DEMO_TENANT_SLUG)
+    """Create the demo tenant if it is absent. Idempotent: startup calls it every run.
+
+    Opt-in seed data (`SEED_DEMO_TENANT`), so it reads the whole entity: it needs `legal_name`, which
+    the application role cannot read. Run it with the migration role.
+    """
+    existing = session.exec(
+        select(Tenant).where(Tenant.slug == DEMO_TENANT_SLUG)
+    ).first()
     if existing is not None:
         return existing
 

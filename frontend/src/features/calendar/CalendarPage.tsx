@@ -77,6 +77,13 @@ const weekdayShort = new Intl.DateTimeFormat("en-AU", {
 })
 const dayNum = (iso: string) => Number(iso.slice(8, 10))
 
+/** Static class names, so Tailwind sees each one: a week shows five to seven days. */
+const WEEK_COLUMNS: Record<number, string> = {
+  5: "md:grid-cols-5",
+  6: "md:grid-cols-6",
+  7: "md:grid-cols-7",
+}
+
 /** Monday of the week containing `iso`. */
 const weekStart = (iso: string) => {
   const dow = new Date(`${iso}T12:00:00Z`).getUTCDay()
@@ -104,7 +111,7 @@ export function CalendarPage({
     () =>
       view === "day"
         ? [date]
-        : Array.from({ length: 5 }, (_, i) => addDays(weekStart(date), i)),
+        : Array.from({ length: 7 }, (_, i) => addDays(weekStart(date), i)),
     [date, view],
   )
   const { data: practitioners } = useSuspenseQuery(practitionersQuery)
@@ -112,6 +119,15 @@ export function CalendarPage({
   // Opening hours shape the day view; until they arrive (or if they fail) the default frame shows.
   const hours = useQuery(clinicHoursQuery)
   const appointments = schedule.data ?? []
+  // The week shows Monday to Friday, plus a weekend day the clinic opens or has a booking on: a
+  // clinic can open on Saturday (Settings > Clinic), and a booking must never be hidden.
+  const shownDates = dates.filter(
+    (d, i) =>
+      view === "day" ||
+      i < 5 ||
+      Boolean(hours.data?.hours[isoWeekday(d) - 1]?.opens_at) ||
+      appointments.some((a) => clinicDateOf(a.starts_at) === d),
+  )
   const [prefill, setPrefill] = useState<SlotPrefill | null>(null)
   const [selected, setSelected] = useState<Appointment | null>(null)
   const today = clinicToday()
@@ -174,7 +190,7 @@ export function CalendarPage({
         <div className="font-serif text-lg font-medium max-sm:order-last max-sm:w-full">
           {view === "day"
             ? formatDate(date)
-            : `${formatDate(dates[0])} – ${formatDate(dates[4])}`}
+            : `${formatDate(shownDates[0])} – ${formatDate(shownDates[shownDates.length - 1])}`}
         </div>
         <div
           className="ml-auto flex rounded-full border border-line bg-paper p-0.5"
@@ -238,8 +254,8 @@ export function CalendarPage({
           </div>
         </>
       ) : (
-        <div className="grid gap-3 md:grid-cols-5">
-          {dates.map((d) => {
+        <div className={cn("grid gap-3", WEEK_COLUMNS[shownDates.length])}>
+          {shownDates.map((d) => {
             const items = appointments.filter(
               (a) => clinicDateOf(a.starts_at) === d,
             )
