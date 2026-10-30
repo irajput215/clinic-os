@@ -18,13 +18,11 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import event, text
-from sqlmodel import Session, select
 
 from app.core.config import settings
 from app.core.db import engine
 from app.main import app
-from app.modules.users_roles.models import SignupRequest
-from app.modules.users_roles.signup import issue_link_token
+from tests.utils.signup import sign_up
 
 API = settings.API_V1_STR
 PASSWORD = "app-role-check-9f2c"
@@ -98,30 +96,21 @@ def as_app_role() -> Iterator[TestClient]:
 
 @pytest.fixture(scope="module")
 def owner(as_app_role: TestClient) -> dict[str, str]:
-    """A clinic registered through the public signup and verify routes, all as `clinos_app`."""
-    email = f"app-role-{uuid.uuid4().hex[:8]}@example.com"
-    signup = as_app_role.post(
-        f"{API}/users/signup",
-        json={
-            "email": email,
+    """A clinic registered through the public signup and verify routes, all as `clinos_app`.
+
+    `sign_up` captures the verification email instead of sending it (no SMTP socket is opened) and
+    follows its link, exactly as a person would.
+    """
+    signed_up = sign_up(
+        as_app_role,
+        {
+            "email": f"app-role-{uuid.uuid4().hex[:8]}@example.com",
             "password": PASSWORD,
             "full_name": "App Role Owner",
             "clinic_name": f"App Role Clinic {uuid.uuid4().hex[:6]}",
         },
     )
-    assert signup.status_code == 202, signup.text
-    with Session(engine) as session:
-        request = session.exec(
-            select(SignupRequest).where(SignupRequest.email == email)
-        ).one()
-        token = issue_link_token(request=request)
-    verified = as_app_role.post(f"{API}/users/signup/verify", json={"token": token})
-    assert verified.status_code == 200, verified.text
-    login = as_app_role.post(
-        f"{API}/login/access-token", data={"username": email, "password": PASSWORD}
-    )
-    assert login.status_code == 200, login.text
-    return {"Authorization": f"Bearer {login.json()['access_token']}"}
+    return signed_up.headers
 
 
 def _week() -> str:
