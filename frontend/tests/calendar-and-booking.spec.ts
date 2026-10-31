@@ -86,23 +86,57 @@ test("a public booking reaches the clinic's calendar", async ({
   await page.getByRole("button", { name: /Initial doctor consult/ }).click()
   await page.getByRole("button", { name: "Continue" }).click()
 
-  await page.getByRole("button", { name: "Choose a time" }).click()
+  // Step 1 · about you. An empty submit names what is missing.
+  await page.getByRole("button", { name: "Continue" }).click()
   await expect(
     page.getByText("Enter an Australian mobile number."),
   ).toBeVisible()
-
-  await page
-    .getByLabel("What would you like help with?")
-    .fill("Chronic knee pain")
-  await page.getByText("yes", { exact: true }).click()
   await page.getByLabel("Given name").fill("Nora")
   await page.getByLabel("Family name").fill("Quinn")
   await page.getByLabel("Date of birth").fill("1990-03-21")
+  await page.getByLabel("Sex").selectOption("FEMALE")
   await page.getByLabel("Mobile").fill("0412 555 019")
   await page
     .getByLabel("Email")
     .fill(`nora-${randomBytes(4).toString("hex")}@example.com`)
-  await page.getByRole("checkbox").check()
+  await page.getByLabel("Street address").fill("14 Vulture St")
+  await page.getByLabel("Suburb").fill("West End")
+  await page.getByLabel("State").selectOption("QLD")
+  await page.getByLabel("Postcode").fill("4101")
+  await page.getByRole("button", { name: "Continue" }).click()
+
+  // Step 2 · health screen: every safety question answered.
+  await page
+    .getByLabel("What would you like help with?")
+    .selectOption("CHRONIC_PAIN")
+  for (const group of await page.getByRole("group").all())
+    await group.getByText("No", { exact: true }).click()
+  await page.getByRole("button", { name: "Continue" }).click()
+
+  // Step 3 · history.
+  await page.getByText("No", { exact: true }).click()
+  await page.getByRole("button", { name: "Continue" }).click()
+
+  // Step 4 · consents, each at the version shown.
+  for (const box of await page.getByRole("checkbox").all()) await box.check()
+  await page.getByRole("button", { name: "Continue" }).click()
+
+  // Step 5 · pharmacy: the patient's own, in full.
+  await page.getByLabel("My own pharmacy").check()
+  await page.getByLabel("Pharmacy name").fill("Corner Pharmacy")
+  await page.getByLabel("Suburb").fill("West End")
+  await page.getByLabel("Address").fill("1 Boundary St")
+  await page.getByLabel("Email").fill("orders@corner.example.com")
+  await page.getByLabel("Phone").fill("07 3000 0000")
+  await page.getByRole("button", { name: "Continue" }).click()
+
+  // Step 6 · the declaration must be the applicant's own name.
+  await page.getByLabel("Type your full name to sign").fill("Someone Else")
+  await page.getByRole("button", { name: "Choose a time" }).click()
+  await expect(
+    page.getByText("Type your full name exactly as you entered it."),
+  ).toBeVisible()
+  await page.getByLabel("Type your full name to sign").fill("Nora Quinn")
   await page.getByRole("button", { name: "Choose a time" }).click()
 
   await expect(

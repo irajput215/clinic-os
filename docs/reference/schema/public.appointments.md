@@ -8,13 +8,13 @@
 | created_by | uuid |  | true |  |  |  |
 | during | tstzrange |  | false |  |  |  |
 | ends_at | timestamp with time zone |  | false |  |  |  |
-| id | uuid | gen_random_uuid() | false | [public.appointment_notifications](public.appointment_notifications.md) |  |  |
+| id | uuid | gen_random_uuid() | false | [public.appointment_notifications](public.appointment_notifications.md) [public.intake_applications](public.intake_applications.md) |  |  |
 | patient_id | uuid |  | false |  | [public.patients](public.patients.md) |  |
 | practitioner_id | uuid |  | false |  |  |  |
 | source | varchar |  | false |  |  |  |
 | starts_at | timestamp with time zone |  | false |  |  |  |
 | status | varchar |  | false |  |  |  |
-| tenant_id | uuid |  | false | [public.appointment_notifications](public.appointment_notifications.md) | [public.tenants](public.tenants.md) [public.patients](public.patients.md) |  |
+| tenant_id | uuid |  | false | [public.appointment_notifications](public.appointment_notifications.md) [public.intake_applications](public.intake_applications.md) | [public.tenants](public.tenants.md) [public.patients](public.patients.md) |  |
 | type | varchar |  | false |  |  |  |
 | updated_at | timestamp with time zone |  | false |  |  |  |
 
@@ -68,6 +68,7 @@
 erDiagram
 
 "public.appointment_notifications" }o--|| "public.appointments" : "FOREIGN KEY (tenant_id, appointment_id) REFERENCES appointments(tenant_id, id) ON DELETE RESTRICT"
+"public.intake_applications" }o--|| "public.appointments" : "FOREIGN KEY (tenant_id, appointment_id) REFERENCES appointments(tenant_id, id) ON DELETE RESTRICT"
 "public.appointments" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
 "public.appointments" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 
@@ -100,6 +101,26 @@ erDiagram
   uuid tenant_id FK
   timestamp_with_time_zone updated_at
 }
+"public.intake_applications" {
+  jsonb answers
+  uuid appointment_id FK
+  jsonb consents
+  timestamp_with_time_zone created_at
+  boolean created_patient
+  timestamp_with_time_zone decided_at
+  uuid decided_by
+  varchar_500_ decision_note
+  varchar decision_reason_code
+  varchar_255_ declaration_name
+  timestamp_with_time_zone declared_at
+  text__ flags
+  uuid id
+  jsonb own_pharmacy
+  uuid patient_id FK
+  uuid pharmacy_id FK
+  varchar status
+  uuid tenant_id FK
+}
 "public.patients" {
   varchar address_line
   timestamp_with_time_zone created_at
@@ -120,6 +141,7 @@ erDiagram
   varchar phone
   varchar postcode
   varchar preferred_name
+  uuid preferred_pharmacy_id FK
   boolean receives_communications
   varchar sex_at_birth
   varchar state

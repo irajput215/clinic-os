@@ -25,6 +25,11 @@ from app.modules.clinical_records.router import router as clinical_records_route
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.identity_tenancy.router import auth_router
 from app.modules.identity_tenancy.router import router as tenants_router
+from app.modules.intake.router import (
+    patient_router as intake_patient_router,  # noqa: E402
+)
+from app.modules.intake.router import pharmacies_router  # noqa: E402
+from app.modules.intake.router import router as intake_router  # noqa: E402
 from app.modules.patients.router import router as patients_router
 from app.modules.prescriptions.router import router as prescriptions_router
 from app.modules.tga_approvals.router import (
@@ -82,3 +87,6 @@ api_router.include_router(prescriptions_router)
 api_router.include_router(dashboard_router)
 # T1-34 / D-007: a patient's care team, the interim upkeep of the treating-relationship rule.
 api_router.include_router(care_relationships_router)
+api_router.include_router(intake_router)
+api_router.include_router(intake_patient_router)
+api_router.include_router(pharmacies_router)

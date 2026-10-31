@@ -28,6 +28,8 @@ from pydantic import (
     model_validator,
 )
 
+from app.modules.intake.schemas import IntakeApplicationIn
+
 AppointmentType = Literal["NURSE_TRIAGE", "INITIAL_CONSULT", "FOLLOW_UP"]
 AppointmentStatus = Literal[
     "BOOKED", "CONFIRMED", "ARRIVED", "COMPLETED", "CANCELLED", "NO_SHOW"
@@ -147,6 +149,9 @@ class PublicBookingRequest(_IgnoresClientTenantId):
     phone: str = Field(pattern=AU_MOBILE_PATTERN, max_length=16)
     # R5: consent to the APP 5 collection notice. `true` is the only value that books.
     consent: Literal[True]
+    # docs3 feature 03: the six-step application. With it, the booking is held for the clinic to
+    # review (Patients > Online applications); without it, a plain booking as before.
+    application: IntakeApplicationIn | None = None
 
 
 class PublicBookingCreated(BaseModel):

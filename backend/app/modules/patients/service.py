@@ -233,6 +233,7 @@ def to_read(patient: Patient) -> PatientRead:
         ),
         receives_communications=patient.receives_communications,
         timezone=patient.timezone,
+        preferred_pharmacy_id=patient.preferred_pharmacy_id,
         escript_ready=escript_readiness(patient),
         created_at=patient.created_at,
         updated_at=patient.updated_at,
@@ -1006,6 +1007,32 @@ def match_or_create_for_booking(
     phone: str,
     source_ip: str | None = None,
 ) -> uuid.UUID:
+    """`match_or_create_patient` for a plain booking: the patient's id only."""
+    patient_id, _created = match_or_create_patient(
+        session,
+        tenant_id=tenant_id,
+        given_name=given_name,
+        family_name=family_name,
+        date_of_birth=date_of_birth,
+        email=email,
+        phone=phone,
+        source_ip=source_ip,
+    )
+    return patient_id
+
+
+def match_or_create_patient(
+    session: Session,
+    *,
+    tenant_id: uuid.UUID,
+    given_name: str,
+    family_name: str,
+    date_of_birth: date,
+    email: str,
+    phone: str,
+    source_ip: str | None = None,
+    new_status: str = "CURRENT",
+) -> tuple[uuid.UUID, bool]:
     """The patient a public booking is for: an exact existing match, or a new record.
 
     Runs on the caller's tenant transaction, so the patient, the booking and both audit events commit
@@ -1029,7 +1056,7 @@ def match_or_create_for_booking(
         )
     ).first()
     if existing is not None:
-        return existing
+        return existing, False
     patient = Patient(
         tenant_id=tenant_id,
         given_name=given_name,
@@ -1037,6 +1064,7 @@ def match_or_create_for_booking(
         date_of_birth=date_of_birth,
         email=email,
         phone=phone,
+        status=new_status,
     )
     session.add(patient)
     session.flush()
@@ -1058,7 +1086,7 @@ def match_or_create_for_booking(
             },
         ),
     )
-    return patient.id
+    return patient.id, True
 
 
 # ---------------------------------------------------------------------------------------------
@@ -1335,3 +1363,130 @@ def remove_emergency_contact(
             ),
         )
         return _active_contacts(session, patient_id=patient.id)
+
+
+# ---------------------------------------------------------------------------------------------
+# For patient intake (docs3 feature 03): on the caller's transaction, through this facade
+# ---------------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class PatientSummary:
+    """Who an application is for, as the queue shows it."""
+
+    name: str
+    date_of_birth: date
+    status: str
+
+
+def summaries(
+    session: Session, *, tenant_id: uuid.UUID, patient_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, PatientSummary]:
+    if not patient_ids:
+        return {}
+    rows = session.exec(
+        select(Patient).where(
+            col(Patient.tenant_id) == tenant_id,
+            col(Patient.id).in_(sorted(set(patient_ids))),
+        )
+    ).all()
+    return {
+        p.id: PatientSummary(
+            name=f"{p.preferred_name or p.given_name} {p.family_name}",
+            date_of_birth=p.date_of_birth,
+            status=p.status,
+        )
+        for p in rows
+    }
+
+
+def accept_applicant(
+    session: Session,
+    *,
+    tenant_id: uuid.UUID,
+    patient_id: uuid.UUID,
+    created_by_application: bool,
+    details: dict[str, str],
+    pharmacy_id: uuid.UUID | None,
+) -> None:
+    """File an accepted application onto its patient (manual §5.4), on the caller's transaction.
+
+    A record the application created gets the submitted sex and address and becomes `CURRENT`. A
+    matched record keeps its own details: a public form is never a source of truth for them. Either
+    way the chosen pharmacy becomes the default for future scripts. Audited `patient.update` with the
+    field names only.
+    """
+    patient = _live_patient(session, tenant_id=tenant_id, patient_id=patient_id)
+    if patient is None:
+        return
+    changed = ["preferred_pharmacy_id"]
+    patient.preferred_pharmacy_id = pharmacy_id
+    if created_by_application:
+        patient.sqlmodel_update(details)
+        changed.extend(sorted(details))
+        if patient.status == "REVIEW":
+            patient.status = "CURRENT"
+            patient.status_changed_at = datetime.now(UTC)
+            changed.append("status")
+    session.add(patient)
+    session.flush()
+    audit.record(
+        session,
+        audit.AuditEvent(
+            action=PATIENT_UPDATE,
+            result="SUCCESS",
+            resource_id=patient.id,
+            reason="INTAKE_ACCEPTED",
+            payload={"changed_fields": changed},
+        ),
+    )
+
+
+def archive_rejected_applicant(
+    session: Session, *, tenant_id: uuid.UUID, patient_id: uuid.UUID
+) -> None:
+    """A record a rejected application created leaves the active lists (`ARCHIVED`), never deleted."""
+    patient = _live_patient(session, tenant_id=tenant_id, patient_id=patient_id)
+    if patient is None or patient.status != "REVIEW":
+        return
+    patient.status = "ARCHIVED"
+    patient.status_reason = "Online application not accepted"
+    patient.status_changed_at = datetime.now(UTC)
+    session.add(patient)
+    session.flush()
+    audit.record(
+        session,
+        audit.AuditEvent(
+            action=PATIENT_UPDATE,
+            result="SUCCESS",
+            resource_id=patient.id,
+            reason="STATUS_ARCHIVED",
+            payload={"changed_fields": ["status", "status_reason"]},
+        ),
+    )
+
+
+def set_preferred_pharmacy(
+    *, actor: Actor, patient_id: uuid.UUID, pharmacy_id: uuid.UUID | None
+) -> PatientRead | PatientRefusal:
+    """Change the patient's pharmacy (manual §3.5). The FK keeps it inside the tenant's directory."""
+    with tenant_transaction(
+        tenant_id=actor.tenant_id, actor_id=actor.user_id, actor_role=actor.actor_role
+    ) as session:
+        patient = _patient_to_change(session, actor=actor, patient_id=patient_id)
+        if isinstance(patient, PatientRefusal):
+            return patient
+        patient.preferred_pharmacy_id = pharmacy_id
+        session.add(patient)
+        session.flush()
+        audit.record(
+            session,
+            audit.AuditEvent(
+                action=PATIENT_UPDATE,
+                result="SUCCESS",
+                resource_id=patient.id,
+                payload={"changed_fields": ["preferred_pharmacy_id"]},
+            ),
+        )
+        session.refresh(patient)
+        return to_read(patient)

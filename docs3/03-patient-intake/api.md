@@ -1,6 +1,6 @@
 # Patient intake: API
 
-Status: **Proposed.** Public routes resolve the tenant from the clinic slug; staff routes from the
+Status: **Built** (2026-10-31), with the differences recorded under "As built" below. Public routes resolve the tenant from the clinic slug; staff routes from the
 session. A `tenant_id` anywhere in a body is ignored and audited as a cross-tenant attempt (INV-1).
 
 ## Public (no sign-in)
@@ -39,3 +39,21 @@ names the reason.
 `intake.application_submitted`, `intake.application_read`, `intake.application_accepted`,
 `intake.application_rejected`, `intake.briefing_read`, `consent.version_published`, `consent.recorded`,
 `pharmacy.created`, `patient.pharmacy_changed`. Payloads carry ids, codes and versions — never answers.
+
+
+## As built (2026-10-31)
+
+- **The application rides on the booking.** `POST /api/v1/public/{clinic_slug}/bookings` takes an
+  optional `application` (`IntakeApplicationIn`); with it the patient (new records start `REVIEW`), the
+  held booking and the application commit in one transaction, and a refusal
+  (`DECLARATION_MISMATCH`, `CONSENT_VERSION_STALE`, `PHARMACY_NOT_FOUND`) stores nothing. Without it the
+  route books exactly as before. There is no separate `/applications` route.
+- **Form:** `GET /api/v1/public/{clinic_slug}/intake-form` (not `application-form`).
+- **Consents** are platform defaults versioned in `backend/app/modules/intake/consents.py`; a patient's
+  record keeps the version and the SHA-256 of the text. Clinic-published wording
+  (`/consent-documents`) is a later step, so the queue never closes for want of a consent (R20 deferred).
+- **Briefing:** `GET /api/v1/patients/{id}/intake-briefing` answers `null` for a patient who never applied.
+- **Pharmacy change:** `POST /api/v1/patients/{id}/pharmacy` (POST, like the record's other changes).
+- **Reject** does not email the patient yet.
+- **Audit:** `intake.application_submit`, `intake.application_read`, `intake.application_decide`,
+  `pharmacy.create` (registered in the PATIENT group), ids and statuses only.

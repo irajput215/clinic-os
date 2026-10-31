@@ -14,10 +14,13 @@
 | [public.clinical_records](public.clinical_records.md) | 9 |  | BASE TABLE |
 | [public.clinics](public.clinics.md) | 7 |  | BASE TABLE |
 | [public.dispatch_attempts](public.dispatch_attempts.md) | 18 |  | BASE TABLE |
+| [public.intake_applications](public.intake_applications.md) | 18 |  | BASE TABLE |
 | [public.patient_alerts](public.patient_alerts.md) | 9 |  | BASE TABLE |
+| [public.patient_consents](public.patient_consents.md) | 11 |  | BASE TABLE |
 | [public.patient_emergency_contacts](public.patient_emergency_contacts.md) | 10 |  | BASE TABLE |
-| [public.patients](public.patients.md) | 29 |  | BASE TABLE |
+| [public.patients](public.patients.md) | 30 |  | BASE TABLE |
 | [public.permissions](public.permissions.md) | 3 |  | BASE TABLE |
+| [public.pharmacies](public.pharmacies.md) | 11 |  | BASE TABLE |
 | [public.prescription_events](public.prescription_events.md) | 8 |  | BASE TABLE |
 | [public.prescriptions](public.prescriptions.md) | 24 |  | BASE TABLE |
 | [public.role_permissions](public.role_permissions.md) | 3 |  | BASE TABLE |
@@ -290,12 +293,21 @@ erDiagram
 "public.dispatch_attempts" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.dispatch_attempts" }o--|| "public.tga_approvals" : "FOREIGN KEY (tenant_id, approval_id) REFERENCES tga_approvals(tenant_id, id) ON DELETE RESTRICT"
 "public.dispatch_attempts" }o--|| "public.prescriptions" : "FOREIGN KEY (tenant_id, prescription_id) REFERENCES prescriptions(tenant_id, id) ON DELETE RESTRICT"
+"public.intake_applications" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.intake_applications" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
+"public.intake_applications" }o--|| "public.appointments" : "FOREIGN KEY (tenant_id, appointment_id) REFERENCES appointments(tenant_id, id) ON DELETE RESTRICT"
+"public.intake_applications" }o--|| "public.pharmacies" : "FOREIGN KEY (tenant_id, pharmacy_id) REFERENCES pharmacies(tenant_id, id) ON DELETE RESTRICT"
 "public.patient_alerts" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.patient_alerts" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
+"public.patient_consents" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.patient_consents" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
+"public.patient_consents" }o--o| "public.intake_applications" : "FOREIGN KEY (application_id) REFERENCES intake_applications(id) ON DELETE RESTRICT"
 "public.patient_emergency_contacts" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.patient_emergency_contacts" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
 "public.patients" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.patients" }o--o| "public.patients" : "FOREIGN KEY (merged_into_patient_id) REFERENCES patients(id) ON DELETE RESTRICT"
+"public.patients" }o--|| "public.pharmacies" : "FOREIGN KEY (tenant_id, preferred_pharmacy_id) REFERENCES pharmacies(tenant_id, id) ON DELETE RESTRICT"
+"public.pharmacies" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.prescription_events" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.prescription_events" }o--|| "public.prescriptions" : "FOREIGN KEY (tenant_id, prescription_id) REFERENCES prescriptions(tenant_id, id) ON DELETE RESTRICT"
 "public.prescriptions" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
@@ -447,6 +459,26 @@ erDiagram
   varchar state
   uuid tenant_id FK
 }
+"public.intake_applications" {
+  jsonb answers
+  uuid appointment_id FK
+  jsonb consents
+  timestamp_with_time_zone created_at
+  boolean created_patient
+  timestamp_with_time_zone decided_at
+  uuid decided_by
+  varchar_500_ decision_note
+  varchar decision_reason_code
+  varchar_255_ declaration_name
+  timestamp_with_time_zone declared_at
+  text__ flags
+  uuid id
+  jsonb own_pharmacy
+  uuid patient_id FK
+  uuid pharmacy_id FK
+  varchar status
+  uuid tenant_id FK
+}
 "public.patient_alerts" {
   timestamp_with_time_zone created_at
   uuid created_by
@@ -457,6 +489,19 @@ erDiagram
   uuid tenant_id FK
   varchar_120_ text
   varchar tone
+}
+"public.patient_consents" {
+  uuid application_id FK
+  timestamp_with_time_zone created_at
+  uuid id
+  varchar kind
+  varchar method
+  uuid patient_id FK
+  uuid recorded_by
+  timestamp_with_time_zone signed_at
+  uuid tenant_id FK
+  varchar_64_ text_sha256
+  varchar_32_ version
 }
 "public.patient_emergency_contacts" {
   timestamp_with_time_zone created_at
@@ -490,6 +535,7 @@ erDiagram
   varchar phone
   varchar postcode
   varchar preferred_name
+  uuid preferred_pharmacy_id FK
   boolean receives_communications
   varchar sex_at_birth
   varchar state
@@ -505,6 +551,19 @@ erDiagram
   varchar code
   varchar description
   uuid id
+}
+"public.pharmacies" {
+  varchar_255_ address
+  timestamp_with_time_zone created_at
+  varchar created_from
+  varchar_255_ email
+  uuid id
+  boolean is_partner
+  varchar_255_ name
+  varchar_64_ phone
+  varchar_32_ provider_number
+  varchar_255_ suburb
+  uuid tenant_id FK
 }
 "public.prescription_events" {
   uuid actor_id

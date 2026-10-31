@@ -62,6 +62,7 @@ from app.modules.appointments.schemas import (
 )
 from app.modules.audit import service as audit
 from app.modules.care_relationships import service as care
+from app.modules.intake import service as intake
 from app.modules.patients import service as patients
 from app.modules.users_roles import service as users_roles
 from app.modules.users_roles.catalog import (
@@ -980,7 +981,19 @@ def public_book(
                 SLOT_NOT_OFFERED,
                 "That time isn't available. Please choose another.",
             )
-        patient_id = patients.match_or_create_for_booking(
+        if body.application is not None:
+            # Refused before anything is written, so a bad application leaves nothing behind.
+            try:
+                intake.check_application(
+                    body.application,
+                    given_name=body.given_name,
+                    family_name=body.family_name,
+                )
+            except intake.IntakeRefused as refused:
+                raise AppointmentRefused(
+                    refused.status_code, refused.code, refused.message
+                ) from refused
+        patient_id, created = patients.match_or_create_patient(
             session,
             tenant_id=tenant_id,
             given_name=body.given_name,
@@ -989,6 +1002,8 @@ def public_book(
             email=str(body.email),
             phone=body.phone,
             source_ip=source_ip,
+            # An applicant waits in REVIEW until the clinic accepts the application.
+            new_status="REVIEW" if body.application is not None else "CURRENT",
         )
         if patients.blocked_patient_ids(
             session, tenant_id=tenant_id, patient_ids=[patient_id]
@@ -1011,6 +1026,21 @@ def public_book(
             overlap_code=SLOT_TAKEN,
             source_ip=source_ip,
         )
+        if body.application is not None:
+            try:
+                intake.record_application(
+                    session,
+                    tenant_id=tenant_id,
+                    patient_id=patient_id,
+                    created_patient=created,
+                    appointment_id=appointment.id,
+                    application=body.application,
+                    source_ip=source_ip,
+                )
+            except intake.IntakeRefused as refused:
+                raise AppointmentRefused(
+                    refused.status_code, refused.code, refused.message
+                ) from refused
         return appointment.id
 
 
@@ -1176,3 +1206,49 @@ def update_settings(
         return AppointmentSettingsSaved(
             **wanted.as_read().model_dump(), bookings_outside_hours=int(outside)
         )
+
+
+def cancel_held_booking(
+    session: Session, *, tenant_id: uuid.UUID, appointment_id: uuid.UUID
+) -> None:
+    """Cancel a booking an application held, when the clinic rejects it (docs3 feature 03).
+
+    On the caller's transaction. A booking that is no longer live (already cancelled, completed or a
+    no-show) is left as it is.
+    """
+    appointment = session.exec(
+        select(Appointment)
+        .where(Appointment.tenant_id == tenant_id, Appointment.id == appointment_id)
+        .with_for_update()
+    ).first()
+    if appointment is None or "CANCELLED" not in LEGAL_TRANSITIONS[appointment.status]:
+        return
+    current = appointment.status
+    appointment.status = "CANCELLED"
+    session.add(appointment)
+    session.flush()
+    audit.record(
+        session,
+        audit.AuditEvent(
+            action=APPOINTMENT_STATE_CHANGE,
+            result="SUCCESS",
+            resource_id=appointment.id,
+            reason="INTAKE_REJECTED",
+            payload={"from_state": current, "to_state": "CANCELLED"},
+        ),
+    )
+
+
+def start_times(
+    session: Session, *, tenant_id: uuid.UUID, appointment_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, datetime]:
+    """`{id: starts_at}` for the bookings among `appointment_ids`, on the caller's transaction."""
+    if not appointment_ids:
+        return {}
+    rows = session.exec(
+        select(Appointment.id, Appointment.starts_at).where(
+            Appointment.tenant_id == tenant_id,
+            col(Appointment.id).in_(appointment_ids),
+        )
+    ).all()
+    return dict(rows)

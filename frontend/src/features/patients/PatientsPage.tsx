@@ -7,6 +7,7 @@ import { useNavigate } from "@tanstack/react-router"
 import { Plus, Search } from "lucide-react"
 import { useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
+import { applicationsQuery } from "@/data/intake"
 import {
   PATIENT_STATUSES,
   type PatientStatus,
@@ -24,6 +25,7 @@ import {
   SkeletonRows,
 } from "@/design/primitives"
 import { age, formatDate, patientRef } from "@/lib/format"
+import { ApplicationsQueue } from "./ApplicationsQueue"
 import { PatientFormDialog } from "./PatientFormDialog"
 import { PatientStatusPill } from "./RecordParts"
 
@@ -41,6 +43,10 @@ export function PatientsPage() {
     placeholderData: keepPreviousData,
   })
   const [adding, setAdding] = useState(false)
+  // Patients > Online applications (manual §5.4): the queue sits beside the list, not in the URL.
+  const [view, setView] = useState<"list" | "applications">("list")
+  const queue = useQuery(applicationsQuery("SUBMITTED"))
+  const waiting = queue.data?.length ?? 0
   // A doctor's or nurse's list holds only the patients whose care team they are on (T1-34): say so,
   // rather than let an empty list read as an empty practice.
   const { data: permissions } = useQuery(myPermissionsQuery)
@@ -73,189 +79,232 @@ export function PatientsPage() {
         }
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
-        <div className="relative w-full sm:w-[340px]">
-          <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-stone-faint" />
-          <input
-            id="patients-search"
-            name="patients-search"
-            type="search"
-            aria-label="Search patients"
-            aria-describedby="patients-search-hint"
-            placeholder="Name, date of birth or PT- reference"
-            autoComplete="off"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            className="h-[38px] w-full rounded-full border border-line bg-paper pr-3 pl-[34px] text-[14px] outline-none placeholder:text-stone-faint focus:border-clay max-lg:h-11 max-lg:text-[16px]"
-          />
-        </div>
-        <select
-          aria-label="Show patients by status"
-          className="h-[38px] rounded-full border border-line bg-paper px-3 text-[13.5px] max-lg:h-11 disabled:opacity-60"
-          value={status}
-          disabled={q !== ""}
-          title={q !== "" ? "A search looks across every status" : undefined}
-          onChange={(e) => setStatus(e.target.value as PatientStatus | "")}
-        >
-          <option value="">Active patients</option>
-          {Object.entries(PATIENT_STATUSES).map(([value, { label }]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-        <span
-          id="patients-search-hint"
-          className="text-xs text-stone"
-          aria-live="polite"
-        >
-          {patients.isSuccess
-            ? searching
-              ? `${total} ${total === 1 ? "match" : "matches"}`
-              : `${total} ${total === 1 ? "patient" : "patients"}`
-            : null}
-          {pending && patients.isSuccess ? " · searching…" : null}
-        </span>
+      <div
+        role="tablist"
+        aria-label="Patients views"
+        className="mb-4 flex gap-1 border-b border-line"
+      >
+        {(
+          [
+            ["list", "All patients"],
+            [
+              "applications",
+              `Online applications${waiting ? ` (${waiting})` : ""}`,
+            ],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={view === key}
+            onClick={() => setView(key)}
+            className={
+              view === key
+                ? "-mb-px min-h-11 border-b-2 border-clay px-3 py-2.5 text-sm font-semibold text-ink"
+                : "-mb-px min-h-11 border-b-2 border-transparent px-3 py-2.5 text-sm text-stone hover:text-ink"
+            }
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
-      <Card bodyClassName="-mx-5 -my-[18px]">
-        {patients.isPending ? (
-          <div className="p-5">
-            <SkeletonRows rows={6} />
-          </div>
-        ) : patients.isError && rows.length === 0 ? (
-          <div className="p-5">
-            <ErrorState
-              error={patients.error}
-              onRetry={() => patients.refetch()}
-            />
-          </div>
-        ) : rows.length === 0 ? (
-          <EmptyState
-            title={
-              searching
-                ? "No patients match that search."
-                : careBound
-                  ? "You are not on any patient's care team yet."
-                  : "No patients yet."
-            }
-            body={
-              searching
-                ? "Search by the start of a name, a date of birth (14/03/1980) or a PT- reference."
-                : careBound
-                  ? "Ask your practice manager to add you to a patient's care team."
-                  : "Add your first patient to start booking and prescribing."
-            }
-            action={
-              searching || careBound ? null : (
-                <Button size="sm" onClick={() => setAdding(true)}>
-                  <Plus /> Add patient
-                </Button>
-              )
-            }
-          />
-        ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th className="rounded-tl-card pl-5">Patient</th>
-                    <th className="max-sm:hidden">Reference</th>
-                    <th className="max-md:rounded-tr-card max-md:pr-5">
-                      Date of birth
-                    </th>
-                    <th className="max-md:hidden">Mobile</th>
-                    <th className="rounded-tr-card pr-5 max-md:hidden">
-                      Suburb
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((p) => (
-                    <tr
-                      key={p.id}
-                      data-href
-                      tabIndex={0}
-                      onClick={() =>
-                        navigate({
-                          to: "/patients/$patientId",
-                          params: { patientId: p.id },
-                        })
-                      }
-                      onKeyDown={(e) =>
-                        e.key === "Enter" &&
-                        navigate({
-                          to: "/patients/$patientId",
-                          params: { patientId: p.id },
-                        })
-                      }
-                    >
-                      <td className="pl-5">
-                        <span className="font-semibold">{patientName(p)}</span>
-                        {p.status !== "CURRENT" ? (
-                          <span className="ml-2 align-middle">
-                            <PatientStatusPill status={p.status} />
-                          </span>
-                        ) : null}
-                      </td>
-                      <td className="max-sm:hidden">
-                        <Mono className="text-stone">{patientRef(p.id)}</Mono>
-                      </td>
-                      <td className="max-md:pr-5">
-                        {formatDate(p.date_of_birth)}{" "}
-                        <span className="text-stone">
-                          · {age(p.date_of_birth)}
-                        </span>
-                      </td>
-                      <td className="max-md:hidden">
-                        {p.phone ? (
-                          <Mono>{p.phone}</Mono>
-                        ) : (
-                          <span className="text-stone-faint">-</span>
-                        )}
-                      </td>
-                      <td className="pr-5 max-md:hidden">
-                        {p.suburb ? (
-                          `${p.suburb}${p.state ? ` ${p.state}` : ""}`
-                        ) : (
-                          <span className="text-stone-faint">-</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+      {view === "applications" ? <ApplicationsQueue /> : null}
+      {view === "list" ? (
+        <>
+          <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+            <div className="relative w-full sm:w-[340px]">
+              <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-stone-faint" />
+              <input
+                id="patients-search"
+                name="patients-search"
+                type="search"
+                aria-label="Search patients"
+                aria-describedby="patients-search-hint"
+                placeholder="Name, date of birth or PT- reference"
+                autoComplete="off"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                className="h-[38px] w-full rounded-full border border-line bg-paper pr-3 pl-[34px] text-[14px] outline-none placeholder:text-stone-faint focus:border-clay max-lg:h-11 max-lg:text-[16px]"
+              />
             </div>
-            {/* Paging controls only when there is more than one page to speak of. */}
-            {patients.hasNextPage || (patients.data?.pages.length ?? 0) > 1 ? (
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-3">
-                <span className="text-xs text-stone">
-                  Showing {rows.length} of {total}
-                </span>
-                {patients.hasNextPage ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={patients.isFetchingNextPage}
-                    onClick={() => patients.fetchNextPage()}
-                  >
-                    {patients.isFetchingNextPage ? "Loading…" : "Load more"}
-                  </Button>
-                ) : null}
+            <select
+              aria-label="Show patients by status"
+              className="h-[38px] rounded-full border border-line bg-paper px-3 text-[13.5px] max-lg:h-11 disabled:opacity-60"
+              value={status}
+              disabled={q !== ""}
+              title={
+                q !== "" ? "A search looks across every status" : undefined
+              }
+              onChange={(e) => setStatus(e.target.value as PatientStatus | "")}
+            >
+              <option value="">Active patients</option>
+              {Object.entries(PATIENT_STATUSES).map(([value, { label }]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <span
+              id="patients-search-hint"
+              className="text-xs text-stone"
+              aria-live="polite"
+            >
+              {patients.isSuccess
+                ? searching
+                  ? `${total} ${total === 1 ? "match" : "matches"}`
+                  : `${total} ${total === 1 ? "patient" : "patients"}`
+                : null}
+              {pending && patients.isSuccess ? " · searching…" : null}
+            </span>
+          </div>
+
+          <Card bodyClassName="-mx-5 -my-[18px]">
+            {patients.isPending ? (
+              <div className="p-5">
+                <SkeletonRows rows={6} />
               </div>
-            ) : null}
-            {patients.isFetchNextPageError ? (
-              <div className="px-5 pb-4">
+            ) : patients.isError && rows.length === 0 ? (
+              <div className="p-5">
                 <ErrorState
                   error={patients.error}
-                  onRetry={() => patients.fetchNextPage()}
+                  onRetry={() => patients.refetch()}
                 />
               </div>
-            ) : null}
-          </>
-        )}
-      </Card>
+            ) : rows.length === 0 ? (
+              <EmptyState
+                title={
+                  searching
+                    ? "No patients match that search."
+                    : careBound
+                      ? "You are not on any patient's care team yet."
+                      : "No patients yet."
+                }
+                body={
+                  searching
+                    ? "Search by the start of a name, a date of birth (14/03/1980) or a PT- reference."
+                    : careBound
+                      ? "Ask your practice manager to add you to a patient's care team."
+                      : "Add your first patient to start booking and prescribing."
+                }
+                action={
+                  searching || careBound ? null : (
+                    <Button size="sm" onClick={() => setAdding(true)}>
+                      <Plus /> Add patient
+                    </Button>
+                  )
+                }
+              />
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th className="rounded-tl-card pl-5">Patient</th>
+                        <th className="max-sm:hidden">Reference</th>
+                        <th className="max-md:rounded-tr-card max-md:pr-5">
+                          Date of birth
+                        </th>
+                        <th className="max-md:hidden">Mobile</th>
+                        <th className="rounded-tr-card pr-5 max-md:hidden">
+                          Suburb
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((p) => (
+                        <tr
+                          key={p.id}
+                          data-href
+                          tabIndex={0}
+                          onClick={() =>
+                            navigate({
+                              to: "/patients/$patientId",
+                              params: { patientId: p.id },
+                            })
+                          }
+                          onKeyDown={(e) =>
+                            e.key === "Enter" &&
+                            navigate({
+                              to: "/patients/$patientId",
+                              params: { patientId: p.id },
+                            })
+                          }
+                        >
+                          <td className="pl-5">
+                            <span className="font-semibold">
+                              {patientName(p)}
+                            </span>
+                            {p.status !== "CURRENT" ? (
+                              <span className="ml-2 align-middle">
+                                <PatientStatusPill status={p.status} />
+                              </span>
+                            ) : null}
+                          </td>
+                          <td className="max-sm:hidden">
+                            <Mono className="text-stone">
+                              {patientRef(p.id)}
+                            </Mono>
+                          </td>
+                          <td className="max-md:pr-5">
+                            {formatDate(p.date_of_birth)}{" "}
+                            <span className="text-stone">
+                              · {age(p.date_of_birth)}
+                            </span>
+                          </td>
+                          <td className="max-md:hidden">
+                            {p.phone ? (
+                              <Mono>{p.phone}</Mono>
+                            ) : (
+                              <span className="text-stone-faint">-</span>
+                            )}
+                          </td>
+                          <td className="pr-5 max-md:hidden">
+                            {p.suburb ? (
+                              `${p.suburb}${p.state ? ` ${p.state}` : ""}`
+                            ) : (
+                              <span className="text-stone-faint">-</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {/* Paging controls only when there is more than one page to speak of. */}
+                {patients.hasNextPage ||
+                (patients.data?.pages.length ?? 0) > 1 ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-3">
+                    <span className="text-xs text-stone">
+                      Showing {rows.length} of {total}
+                    </span>
+                    {patients.hasNextPage ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={patients.isFetchingNextPage}
+                        onClick={() => patients.fetchNextPage()}
+                      >
+                        {patients.isFetchingNextPage ? "Loading…" : "Load more"}
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : null}
+                {patients.isFetchNextPageError ? (
+                  <div className="px-5 pb-4">
+                    <ErrorState
+                      error={patients.error}
+                      onRetry={() => patients.fetchNextPage()}
+                    />
+                  </div>
+                ) : null}
+              </>
+            )}
+          </Card>
+        </>
+      ) : null}
 
       <PatientFormDialog open={adding} onOpenChange={setAdding} />
     </>

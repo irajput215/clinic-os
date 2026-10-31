@@ -2,7 +2,7 @@
 
 import { type Client, type Options as Options2, type TDataShape, urlSearchParamsBodySerializer } from './client';
 import { client } from './client.gen';
-import type { appointmentsChangeAppointmentStatusData, appointmentsChangeAppointmentStatusErrors, appointmentsChangeAppointmentStatusResponses, appointmentsCreateAppointmentData, appointmentsCreateAppointmentErrors, appointmentsCreateAppointmentResponses, appointmentsListAppointmentsData, appointmentsListAppointmentsErrors, appointmentsListAppointmentsResponses, appointmentsListPatientAppointmentsData, appointmentsListPatientAppointmentsErrors, appointmentsListPatientAppointmentsResponses, appointmentsListPractitionersData, appointmentsListPractitionersResponses, appointmentsReadAppointmentSettingsData, appointmentsReadAppointmentSettingsResponses, appointmentsUpdateAppointmentSettingsData, appointmentsUpdateAppointmentSettingsErrors, appointmentsUpdateAppointmentSettingsResponses, auditListAuditEventsData, auditListAuditEventsErrors, auditListAuditEventsResponses, auditReadAuditEventData, auditReadAuditEventErrors, auditReadAuditEventResponses, authStepUpData, authStepUpErrors, authStepUpResponses, careRelationshipsEndCareRelationshipData, careRelationshipsEndCareRelationshipErrors, careRelationshipsEndCareRelationshipResponses, careRelationshipsListCareTeamData, careRelationshipsListCareTeamErrors, careRelationshipsListCareTeamResponses, careRelationshipsRecordCareRelationshipData, careRelationshipsRecordCareRelationshipErrors, careRelationshipsRecordCareRelationshipResponses, clinicalRecordsAmendClinicalRecordData, clinicalRecordsAmendClinicalRecordErrors, clinicalRecordsAmendClinicalRecordResponses, clinicalRecordsAppendClinicalRecordVersionData, clinicalRecordsAppendClinicalRecordVersionErrors, clinicalRecordsAppendClinicalRecordVersionResponses, clinicalRecordsCreateClinicalRecordData, clinicalRecordsCreateClinicalRecordErrors, clinicalRecordsCreateClinicalRecordResponses, clinicalRecordsListPatientClinicalRecordsData, clinicalRecordsListPatientClinicalRecordsErrors, clinicalRecordsListPatientClinicalRecordsResponses, clinicalRecordsReadClinicalRecordData, clinicalRecordsReadClinicalRecordErrors, clinicalRecordsReadClinicalRecordResponses, clinicalRecordsReadClinicalRecordVersionData, clinicalRecordsReadClinicalRecordVersionErrors, clinicalRecordsReadClinicalRecordVersionResponses, clinicalRecordsSignClinicalRecordData, clinicalRecordsSignClinicalRecordErrors, clinicalRecordsSignClinicalRecordResponses, dashboardReadTodayData, dashboardReadTodayResponses, healthReadinessData, healthReadinessErrors, healthReadinessResponses, internalRunBookingNotificationsData, internalRunBookingNotificationsErrors, internalRunBookingNotificationsResponses, loginLoginAccessTokenData, loginLoginAccessTokenErrors, loginLoginAccessTokenResponses, loginRecoverPasswordData, loginRecoverPasswordErrors, loginRecoverPasswordResponses, loginResetPasswordData, loginResetPasswordErrors, loginResetPasswordResponses, loginTestTokenData, loginTestTokenResponses, patientsAddPatientAlertData, patientsAddPatientAlertErrors, patientsAddPatientAlertResponses, patientsAddPatientEmergencyContactData, patientsAddPatientEmergencyContactErrors, patientsAddPatientEmergencyContactResponses, patientsChangePatientStatusData, patientsChangePatientStatusErrors, patientsChangePatientStatusResponses, patientsCreatePatientData, patientsCreatePatientErrors, patientsCreatePatientResponses, patientsListPatientAlertsData, patientsListPatientAlertsErrors, patientsListPatientAlertsResponses, patientsListPatientEmergencyContactsData, patientsListPatientEmergencyContactsErrors, patientsListPatientEmergencyContactsResponses, patientsListPatientsData, patientsListPatientsErrors, patientsListPatientsResponses, patientsReadPatientData, patientsReadPatientErrors, patientsReadPatientResponses, patientsRemovePatientAlertData, patientsRemovePatientAlertErrors, patientsRemovePatientAlertResponses, patientsRemovePatientEmergencyContactData, patientsRemovePatientEmergencyContactErrors, patientsRemovePatientEmergencyContactResponses, patientsSearchPatientsData, patientsSearchPatientsErrors, patientsSearchPatientsResponses, patientsUpdatePatientData, patientsUpdatePatientErrors, patientsUpdatePatientResponses, permissionsListPermissionsData, permissionsListPermissionsResponses, prescriptionsAmendPrescriptionData, prescriptionsAmendPrescriptionErrors, prescriptionsAmendPrescriptionResponses, prescriptionsCancelPrescriptionData, prescriptionsCancelPrescriptionErrors, prescriptionsCancelPrescriptionResponses, prescriptionsDispatchPrescriptionData, prescriptionsDispatchPrescriptionErrors, prescriptionsDispatchPrescriptionResponses, prescriptionsListPrescribersData, prescriptionsListPrescribersResponses, prescriptionsListPrescriptionsData, prescriptionsListPrescriptionsErrors, prescriptionsListPrescriptionsResponses, prescriptionsReadPrescriptionData, prescriptionsReadPrescriptionErrors, prescriptionsReadPrescriptionHistoryData, prescriptionsReadPrescriptionHistoryErrors, prescriptionsReadPrescriptionHistoryResponses, prescriptionsReadPrescriptionResponses, prescriptionsSignPrescriptionData, prescriptionsSignPrescriptionErrors, prescriptionsSignPrescriptionResponses, prescriptionsStagePrescriptionData, prescriptionsStagePrescriptionErrors, prescriptionsStagePrescriptionResponses, prescriptionsUpdatePrescriptionData, prescriptionsUpdatePrescriptionErrors, prescriptionsUpdatePrescriptionResponses, publicBookingCreatePublicBookingData, publicBookingCreatePublicBookingErrors, publicBookingCreatePublicBookingResponses, publicBookingListPublicSlotsData, publicBookingListPublicSlotsErrors, publicBookingListPublicSlotsResponses, publicBookingReadPublicClinicData, publicBookingReadPublicClinicErrors, publicBookingReadPublicClinicResponses, rolesListRolesData, rolesListRolesResponses, tenantsReadCurrentTenantData, tenantsReadCurrentTenantProfileData, tenantsReadCurrentTenantProfileResponses, tenantsReadCurrentTenantResponses, tenantsUpdateCurrentTenantData, tenantsUpdateCurrentTenantErrors, tenantsUpdateCurrentTenantProfileData, tenantsUpdateCurrentTenantProfileErrors, tenantsUpdateCurrentTenantProfileResponses, tenantsUpdateCurrentTenantResponses, tgaApprovalsCreateTgaApprovalData, tgaApprovalsCreateTgaApprovalErrors, tgaApprovalsCreateTgaApprovalResponses, tgaApprovalsListPatientTgaApprovalsData, tgaApprovalsListPatientTgaApprovalsErrors, tgaApprovalsListPatientTgaApprovalsResponses, tgaApprovalsListTgaApprovalsData, tgaApprovalsListTgaApprovalsErrors, tgaApprovalsListTgaApprovalsResponses, tgaApprovalsMatchTgaApprovalData, tgaApprovalsMatchTgaApprovalErrors, tgaApprovalsMatchTgaApprovalResponses, tgaApprovalsReadTgaApprovalData, tgaApprovalsReadTgaApprovalErrors, tgaApprovalsReadTgaApprovalResponses, tgaApprovalsRevokeTgaApprovalData, tgaApprovalsRevokeTgaApprovalErrors, tgaApprovalsRevokeTgaApprovalResponses, tgaApprovalsSupersedeTgaApprovalData, tgaApprovalsSupersedeTgaApprovalErrors, tgaApprovalsSupersedeTgaApprovalResponses, tgaApprovalsVerifyTgaApprovalData, tgaApprovalsVerifyTgaApprovalErrors, tgaApprovalsVerifyTgaApprovalResponses, usersAcceptInvitationData, usersAcceptInvitationErrors, usersAcceptInvitationResponses, usersAssignRoleData, usersAssignRoleErrors, usersAssignRoleResponses, usersCreateUserData, usersCreateUserErrors, usersCreateUserResponses, usersDeleteUserData, usersDeleteUserErrors, usersDeleteUserMeData, usersDeleteUserMeResponses, usersDeleteUserResponses, usersInviteStaffData, usersInviteStaffErrors, usersInviteStaffResponses, usersListStaffData, usersListStaffErrors, usersListStaffResponses, usersReadOwnPermissionsData, usersReadOwnPermissionsResponses, usersReadUserByIdData, usersReadUserByIdErrors, usersReadUserByIdResponses, usersReadUserMeData, usersReadUserMeResponses, usersReadUserPermissionsData, usersReadUserPermissionsErrors, usersReadUserPermissionsResponses, usersReadUserRolesData, usersReadUserRolesErrors, usersReadUserRolesResponses, usersReadUsersData, usersReadUsersErrors, usersReadUsersResponses, usersRegisterUserData, usersRegisterUserErrors, usersRegisterUserResponses, usersResendInvitationData, usersResendInvitationErrors, usersResendInvitationResponses, usersResendSignupEmailData, usersResendSignupEmailErrors, usersResendSignupEmailResponses, usersRevokeRoleData, usersRevokeRoleErrors, usersRevokeRoleResponses, usersUpdatePasswordMeData, usersUpdatePasswordMeErrors, usersUpdatePasswordMeResponses, usersUpdateUserData, usersUpdateUserErrors, usersUpdateUserMeData, usersUpdateUserMeErrors, usersUpdateUserMeResponses, usersUpdateUserResponses, usersVerifySignupData, usersVerifySignupErrors, usersVerifySignupResponses, utilsHealthCheckData, utilsHealthCheckResponses, utilsTestEmailData, utilsTestEmailErrors, utilsTestEmailResponses } from './types.gen';
+import type { appointmentsChangeAppointmentStatusData, appointmentsChangeAppointmentStatusErrors, appointmentsChangeAppointmentStatusResponses, appointmentsCreateAppointmentData, appointmentsCreateAppointmentErrors, appointmentsCreateAppointmentResponses, appointmentsListAppointmentsData, appointmentsListAppointmentsErrors, appointmentsListAppointmentsResponses, appointmentsListPatientAppointmentsData, appointmentsListPatientAppointmentsErrors, appointmentsListPatientAppointmentsResponses, appointmentsListPractitionersData, appointmentsListPractitionersResponses, appointmentsReadAppointmentSettingsData, appointmentsReadAppointmentSettingsResponses, appointmentsUpdateAppointmentSettingsData, appointmentsUpdateAppointmentSettingsErrors, appointmentsUpdateAppointmentSettingsResponses, auditListAuditEventsData, auditListAuditEventsErrors, auditListAuditEventsResponses, auditReadAuditEventData, auditReadAuditEventErrors, auditReadAuditEventResponses, authStepUpData, authStepUpErrors, authStepUpResponses, careRelationshipsEndCareRelationshipData, careRelationshipsEndCareRelationshipErrors, careRelationshipsEndCareRelationshipResponses, careRelationshipsListCareTeamData, careRelationshipsListCareTeamErrors, careRelationshipsListCareTeamResponses, careRelationshipsRecordCareRelationshipData, careRelationshipsRecordCareRelationshipErrors, careRelationshipsRecordCareRelationshipResponses, clinicalRecordsAmendClinicalRecordData, clinicalRecordsAmendClinicalRecordErrors, clinicalRecordsAmendClinicalRecordResponses, clinicalRecordsAppendClinicalRecordVersionData, clinicalRecordsAppendClinicalRecordVersionErrors, clinicalRecordsAppendClinicalRecordVersionResponses, clinicalRecordsCreateClinicalRecordData, clinicalRecordsCreateClinicalRecordErrors, clinicalRecordsCreateClinicalRecordResponses, clinicalRecordsListPatientClinicalRecordsData, clinicalRecordsListPatientClinicalRecordsErrors, clinicalRecordsListPatientClinicalRecordsResponses, clinicalRecordsReadClinicalRecordData, clinicalRecordsReadClinicalRecordErrors, clinicalRecordsReadClinicalRecordResponses, clinicalRecordsReadClinicalRecordVersionData, clinicalRecordsReadClinicalRecordVersionErrors, clinicalRecordsReadClinicalRecordVersionResponses, clinicalRecordsSignClinicalRecordData, clinicalRecordsSignClinicalRecordErrors, clinicalRecordsSignClinicalRecordResponses, dashboardReadTodayData, dashboardReadTodayResponses, healthReadinessData, healthReadinessErrors, healthReadinessResponses, intakeAcceptApplicationData, intakeAcceptApplicationErrors, intakeAcceptApplicationResponses, intakeCreatePharmacyData, intakeCreatePharmacyErrors, intakeCreatePharmacyResponses, intakeListApplicationsData, intakeListApplicationsErrors, intakeListApplicationsResponses, intakeListPatientConsentsData, intakeListPatientConsentsErrors, intakeListPatientConsentsResponses, intakeListPharmaciesData, intakeListPharmaciesResponses, intakeReadApplicationData, intakeReadApplicationErrors, intakeReadApplicationResponses, intakeReadIntakeBriefingData, intakeReadIntakeBriefingErrors, intakeReadIntakeBriefingResponses, intakeRejectApplicationData, intakeRejectApplicationErrors, intakeRejectApplicationResponses, intakeSetPatientPharmacyData, intakeSetPatientPharmacyErrors, intakeSetPatientPharmacyResponses, internalRunBookingNotificationsData, internalRunBookingNotificationsErrors, internalRunBookingNotificationsResponses, loginLoginAccessTokenData, loginLoginAccessTokenErrors, loginLoginAccessTokenResponses, loginRecoverPasswordData, loginRecoverPasswordErrors, loginRecoverPasswordResponses, loginResetPasswordData, loginResetPasswordErrors, loginResetPasswordResponses, loginTestTokenData, loginTestTokenResponses, patientsAddPatientAlertData, patientsAddPatientAlertErrors, patientsAddPatientAlertResponses, patientsAddPatientEmergencyContactData, patientsAddPatientEmergencyContactErrors, patientsAddPatientEmergencyContactResponses, patientsChangePatientStatusData, patientsChangePatientStatusErrors, patientsChangePatientStatusResponses, patientsCreatePatientData, patientsCreatePatientErrors, patientsCreatePatientResponses, patientsListPatientAlertsData, patientsListPatientAlertsErrors, patientsListPatientAlertsResponses, patientsListPatientEmergencyContactsData, patientsListPatientEmergencyContactsErrors, patientsListPatientEmergencyContactsResponses, patientsListPatientsData, patientsListPatientsErrors, patientsListPatientsResponses, patientsReadPatientData, patientsReadPatientErrors, patientsReadPatientResponses, patientsRemovePatientAlertData, patientsRemovePatientAlertErrors, patientsRemovePatientAlertResponses, patientsRemovePatientEmergencyContactData, patientsRemovePatientEmergencyContactErrors, patientsRemovePatientEmergencyContactResponses, patientsSearchPatientsData, patientsSearchPatientsErrors, patientsSearchPatientsResponses, patientsUpdatePatientData, patientsUpdatePatientErrors, patientsUpdatePatientResponses, permissionsListPermissionsData, permissionsListPermissionsResponses, prescriptionsAmendPrescriptionData, prescriptionsAmendPrescriptionErrors, prescriptionsAmendPrescriptionResponses, prescriptionsCancelPrescriptionData, prescriptionsCancelPrescriptionErrors, prescriptionsCancelPrescriptionResponses, prescriptionsDispatchPrescriptionData, prescriptionsDispatchPrescriptionErrors, prescriptionsDispatchPrescriptionResponses, prescriptionsListPrescribersData, prescriptionsListPrescribersResponses, prescriptionsListPrescriptionsData, prescriptionsListPrescriptionsErrors, prescriptionsListPrescriptionsResponses, prescriptionsReadPrescriptionData, prescriptionsReadPrescriptionErrors, prescriptionsReadPrescriptionHistoryData, prescriptionsReadPrescriptionHistoryErrors, prescriptionsReadPrescriptionHistoryResponses, prescriptionsReadPrescriptionResponses, prescriptionsSignPrescriptionData, prescriptionsSignPrescriptionErrors, prescriptionsSignPrescriptionResponses, prescriptionsStagePrescriptionData, prescriptionsStagePrescriptionErrors, prescriptionsStagePrescriptionResponses, prescriptionsUpdatePrescriptionData, prescriptionsUpdatePrescriptionErrors, prescriptionsUpdatePrescriptionResponses, publicBookingCreatePublicBookingData, publicBookingCreatePublicBookingErrors, publicBookingCreatePublicBookingResponses, publicBookingListPublicSlotsData, publicBookingListPublicSlotsErrors, publicBookingListPublicSlotsResponses, publicBookingReadIntakeFormData, publicBookingReadIntakeFormErrors, publicBookingReadIntakeFormResponses, publicBookingReadPublicClinicData, publicBookingReadPublicClinicErrors, publicBookingReadPublicClinicResponses, rolesListRolesData, rolesListRolesResponses, tenantsReadCurrentTenantData, tenantsReadCurrentTenantProfileData, tenantsReadCurrentTenantProfileResponses, tenantsReadCurrentTenantResponses, tenantsUpdateCurrentTenantData, tenantsUpdateCurrentTenantErrors, tenantsUpdateCurrentTenantProfileData, tenantsUpdateCurrentTenantProfileErrors, tenantsUpdateCurrentTenantProfileResponses, tenantsUpdateCurrentTenantResponses, tgaApprovalsCreateTgaApprovalData, tgaApprovalsCreateTgaApprovalErrors, tgaApprovalsCreateTgaApprovalResponses, tgaApprovalsListPatientTgaApprovalsData, tgaApprovalsListPatientTgaApprovalsErrors, tgaApprovalsListPatientTgaApprovalsResponses, tgaApprovalsListTgaApprovalsData, tgaApprovalsListTgaApprovalsErrors, tgaApprovalsListTgaApprovalsResponses, tgaApprovalsMatchTgaApprovalData, tgaApprovalsMatchTgaApprovalErrors, tgaApprovalsMatchTgaApprovalResponses, tgaApprovalsReadTgaApprovalData, tgaApprovalsReadTgaApprovalErrors, tgaApprovalsReadTgaApprovalResponses, tgaApprovalsRevokeTgaApprovalData, tgaApprovalsRevokeTgaApprovalErrors, tgaApprovalsRevokeTgaApprovalResponses, tgaApprovalsSupersedeTgaApprovalData, tgaApprovalsSupersedeTgaApprovalErrors, tgaApprovalsSupersedeTgaApprovalResponses, tgaApprovalsVerifyTgaApprovalData, tgaApprovalsVerifyTgaApprovalErrors, tgaApprovalsVerifyTgaApprovalResponses, usersAcceptInvitationData, usersAcceptInvitationErrors, usersAcceptInvitationResponses, usersAssignRoleData, usersAssignRoleErrors, usersAssignRoleResponses, usersCreateUserData, usersCreateUserErrors, usersCreateUserResponses, usersDeleteUserData, usersDeleteUserErrors, usersDeleteUserMeData, usersDeleteUserMeResponses, usersDeleteUserResponses, usersInviteStaffData, usersInviteStaffErrors, usersInviteStaffResponses, usersListStaffData, usersListStaffErrors, usersListStaffResponses, usersReadOwnPermissionsData, usersReadOwnPermissionsResponses, usersReadUserByIdData, usersReadUserByIdErrors, usersReadUserByIdResponses, usersReadUserMeData, usersReadUserMeResponses, usersReadUserPermissionsData, usersReadUserPermissionsErrors, usersReadUserPermissionsResponses, usersReadUserRolesData, usersReadUserRolesErrors, usersReadUserRolesResponses, usersReadUsersData, usersReadUsersErrors, usersReadUsersResponses, usersRegisterUserData, usersRegisterUserErrors, usersRegisterUserResponses, usersResendInvitationData, usersResendInvitationErrors, usersResendInvitationResponses, usersResendSignupEmailData, usersResendSignupEmailErrors, usersResendSignupEmailResponses, usersRevokeRoleData, usersRevokeRoleErrors, usersRevokeRoleResponses, usersUpdatePasswordMeData, usersUpdatePasswordMeErrors, usersUpdatePasswordMeResponses, usersUpdateUserData, usersUpdateUserErrors, usersUpdateUserMeData, usersUpdateUserMeErrors, usersUpdateUserMeResponses, usersUpdateUserResponses, usersVerifySignupData, usersVerifySignupErrors, usersVerifySignupResponses, utilsHealthCheckData, utilsHealthCheckResponses, utilsTestEmailData, utilsTestEmailErrors, utilsTestEmailResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -1226,6 +1226,21 @@ export class PublicBookingService {
     }
     
     /**
+     * Read Intake Form
+     *
+     * The application's consents (current versions) and partner pharmacies. Unauthenticated.
+     *
+     * No product or brand name, no patient data: only what the public page shows (docs3 feature 03).
+     */
+    public static bookingReadIntakeForm<ThrowOnError extends boolean = true>(options: Options<publicBookingReadIntakeFormData, ThrowOnError>) {
+        return (options.client ?? client).get<publicBookingReadIntakeFormResponses, publicBookingReadIntakeFormErrors, ThrowOnError>({
+            responseType: 'json',
+            url: '/api/v1/public/{clinic_slug}/intake-form',
+            ...options
+        });
+    }
+    
+    /**
      * List Public Slots
      *
      * Free slots for one visit type over the next 14 days. Unauthenticated.
@@ -1527,6 +1542,147 @@ export class CareRelationshipsService {
             security: [{ scheme: 'bearer', type: 'http' }],
             url: '/api/v1/patients/{patient_id}/care-relationships/{care_relationship_id}/end',
             ...options
+        });
+    }
+}
+
+export class IntakeService {
+    /**
+     * List Applications
+     *
+     * Patients > Online applications: the queue, oldest first (manual §5.4).
+     */
+    public static listApplications<ThrowOnError extends boolean = true>(options?: Options<intakeListApplicationsData, ThrowOnError>) {
+        return (options?.client ?? client).get<intakeListApplicationsResponses, intakeListApplicationsErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/intake-applications',
+            ...options
+        });
+    }
+    
+    /**
+     * Read Application
+     *
+     * One application in full: the answers, consents, pharmacy and declaration. Audited.
+     */
+    public static readApplication<ThrowOnError extends boolean = true>(options: Options<intakeReadApplicationData, ThrowOnError>) {
+        return (options.client ?? client).get<intakeReadApplicationResponses, intakeReadApplicationErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/intake-applications/{application_id}',
+            ...options
+        });
+    }
+    
+    /**
+     * Accept Application
+     *
+     * Accept: consents filed, pharmacy set, a new record made `CURRENT`. `409` if already decided.
+     */
+    public static acceptApplication<ThrowOnError extends boolean = true>(options: Options<intakeAcceptApplicationData, ThrowOnError>) {
+        return (options.client ?? client).post<intakeAcceptApplicationResponses, intakeAcceptApplicationErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/intake-applications/{application_id}/accept',
+            ...options
+        });
+    }
+    
+    /**
+     * Reject Application
+     *
+     * Reject with a reason: the held booking is cancelled, a record it created is archived.
+     */
+    public static rejectApplication<ThrowOnError extends boolean = true>(options: Options<intakeRejectApplicationData, ThrowOnError>) {
+        return (options.client ?? client).post<intakeRejectApplicationResponses, intakeRejectApplicationErrors, ThrowOnError>({
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/intake-applications/{application_id}/reject',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * Read Intake Briefing
+     *
+     * The doctor's briefing from the patient's own answers; `null` when they never applied online.
+     *
+     * `clinical_record:read` under the treating-relationship rule (D-007). Never shown to the patient.
+     */
+    public static readIntakeBriefing<ThrowOnError extends boolean = true>(options: Options<intakeReadIntakeBriefingData, ThrowOnError>) {
+        return (options.client ?? client).get<intakeReadIntakeBriefingResponses, intakeReadIntakeBriefingErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/patients/{patient_id}/intake-briefing',
+            ...options
+        });
+    }
+    
+    /**
+     * List Patient Consents
+     *
+     * Which version of each consent the patient agreed to, when, and whether it is current.
+     */
+    public static listPatientConsents<ThrowOnError extends boolean = true>(options: Options<intakeListPatientConsentsData, ThrowOnError>) {
+        return (options.client ?? client).get<intakeListPatientConsentsResponses, intakeListPatientConsentsErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/patients/{patient_id}/consents',
+            ...options
+        });
+    }
+    
+    /**
+     * Set Patient Pharmacy
+     *
+     * Change the patient's pharmacy (manual §3.5). Future scripts default to it. Audited.
+     */
+    public static setPatientPharmacy<ThrowOnError extends boolean = true>(options: Options<intakeSetPatientPharmacyData, ThrowOnError>) {
+        return (options.client ?? client).post<intakeSetPatientPharmacyResponses, intakeSetPatientPharmacyErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/patients/{patient_id}/pharmacy',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * List Pharmacies
+     *
+     * The clinic's pharmacy directory (manual §8.1).
+     */
+    public static listPharmacies<ThrowOnError extends boolean = true>(options?: Options<intakeListPharmaciesData, ThrowOnError>) {
+        return (options?.client ?? client).get<intakeListPharmaciesResponses, unknown, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/pharmacies',
+            ...options
+        });
+    }
+    
+    /**
+     * Create Pharmacy
+     *
+     * Add a pharmacy. A partner is offered on the public application. Audited.
+     */
+    public static createPharmacy<ThrowOnError extends boolean = true>(options: Options<intakeCreatePharmacyData, ThrowOnError>) {
+        return (options.client ?? client).post<intakeCreatePharmacyResponses, intakeCreatePharmacyErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/pharmacies',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
         });
     }
 }

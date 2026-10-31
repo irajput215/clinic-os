@@ -201,6 +201,7 @@ erDiagram
   varchar phone
   varchar postcode
   varchar preferred_name
+  uuid preferred_pharmacy_id FK
   boolean receives_communications
   varchar sex_at_birth
   varchar state

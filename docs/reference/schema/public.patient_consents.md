@@ -1,0 +1,135 @@
+# public.patient_consents
+
+## Columns
+
+| Name | Type | Default | Nullable | Children | Parents | Comment |
+| ---- | ---- | ------- | -------- | -------- | ------- | ------- |
+| application_id | uuid |  | true |  | [public.intake_applications](public.intake_applications.md) |  |
+| created_at | timestamp with time zone |  | false |  |  |  |
+| id | uuid | gen_random_uuid() | false |  |  |  |
+| kind | varchar |  | false |  |  |  |
+| method | varchar |  | false |  |  |  |
+| patient_id | uuid |  | false |  | [public.patients](public.patients.md) |  |
+| recorded_by | uuid |  | true |  |  |  |
+| signed_at | timestamp with time zone |  | false |  |  |  |
+| tenant_id | uuid |  | false |  | [public.tenants](public.tenants.md) [public.patients](public.patients.md) |  |
+| text_sha256 | varchar(64) |  | false |  |  |  |
+| version | varchar(32) |  | false |  |  |  |
+
+## Constraints
+
+| Name | Type | Definition |
+| ---- | ---- | ---------- |
+| ck_patient_consents_kind | CHECK | CHECK (((kind)::text = ANY ((ARRAY['PRIVACY'::character varying, 'TELEHEALTH'::character varying, 'TREATMENT'::character varying])::text[]))) |
+| ck_patient_consents_method | CHECK | CHECK (((method)::text = ANY ((ARRAY['ONLINE_APPLICATION'::character varying, 'IN_CLINIC'::character varying])::text[]))) |
+| fk_patient_consents_application_id_intake_applications | FOREIGN KEY | FOREIGN KEY (application_id) REFERENCES intake_applications(id) ON DELETE RESTRICT |
+| fk_patient_consents_tenant_id_tenants | FOREIGN KEY | FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT |
+| fk_patient_consents_tenant_patient | FOREIGN KEY | FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT |
+| patient_consents_created_at_not_null | n | NOT NULL created_at |
+| patient_consents_id_not_null | n | NOT NULL id |
+| patient_consents_kind_not_null | n | NOT NULL kind |
+| patient_consents_method_not_null | n | NOT NULL method |
+| patient_consents_patient_id_not_null | n | NOT NULL patient_id |
+| patient_consents_signed_at_not_null | n | NOT NULL signed_at |
+| patient_consents_tenant_id_not_null | n | NOT NULL tenant_id |
+| patient_consents_text_sha256_not_null | n | NOT NULL text_sha256 |
+| patient_consents_version_not_null | n | NOT NULL version |
+| pk_patient_consents | PRIMARY KEY | PRIMARY KEY (id) |
+
+## Indexes
+
+| Name | Definition |
+| ---- | ---------- |
+| ix_patient_consents_tenant_patient | CREATE INDEX ix_patient_consents_tenant_patient ON public.patient_consents USING btree (tenant_id, patient_id) |
+| pk_patient_consents | CREATE UNIQUE INDEX pk_patient_consents ON public.patient_consents USING btree (id) |
+
+## Relations
+
+```mermaid
+erDiagram
+
+"public.patient_consents" }o--o| "public.intake_applications" : "FOREIGN KEY (application_id) REFERENCES intake_applications(id) ON DELETE RESTRICT"
+"public.patient_consents" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
+"public.patient_consents" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+
+"public.patient_consents" {
+  uuid application_id FK
+  timestamp_with_time_zone created_at
+  uuid id
+  varchar kind
+  varchar method
+  uuid patient_id FK
+  uuid recorded_by
+  timestamp_with_time_zone signed_at
+  uuid tenant_id FK
+  varchar_64_ text_sha256
+  varchar_32_ version
+}
+"public.intake_applications" {
+  jsonb answers
+  uuid appointment_id FK
+  jsonb consents
+  timestamp_with_time_zone created_at
+  boolean created_patient
+  timestamp_with_time_zone decided_at
+  uuid decided_by
+  varchar_500_ decision_note
+  varchar decision_reason_code
+  varchar_255_ declaration_name
+  timestamp_with_time_zone declared_at
+  text__ flags
+  uuid id
+  jsonb own_pharmacy
+  uuid patient_id FK
+  uuid pharmacy_id FK
+  varchar status
+  uuid tenant_id FK
+}
+"public.patients" {
+  varchar address_line
+  timestamp_with_time_zone created_at
+  date date_of_birth
+  timestamp_with_time_zone deceased_at
+  timestamp_with_time_zone deleted_at
+  varchar email
+  varchar family_name
+  varchar gender_identity
+  varchar given_name
+  uuid id
+  bytea ihi
+  bytea ihi_blind_index
+  bytea medicare_blind_index
+  smallint medicare_irn
+  bytea medicare_number
+  uuid merged_into_patient_id FK
+  varchar phone
+  varchar postcode
+  varchar preferred_name
+  uuid preferred_pharmacy_id FK
+  boolean receives_communications
+  varchar sex_at_birth
+  varchar state
+  varchar status
+  timestamp_with_time_zone status_changed_at
+  varchar_500_ status_reason
+  varchar suburb
+  uuid tenant_id FK
+  varchar_64_ timezone
+  timestamp_with_time_zone updated_at
+}
+"public.tenants" {
+  timestamp_with_time_zone created_at
+  varchar_32_ data_region
+  varchar_120_ display_name
+  uuid id
+  varchar_255_ legal_name
+  varchar_64_ retention_profile
+  varchar_64_ slug
+  varchar_16_ status
+  timestamp_with_time_zone updated_at
+}
+```
+
+---
+
+> Generated by [tbls](https://github.com/k1LoW/tbls)

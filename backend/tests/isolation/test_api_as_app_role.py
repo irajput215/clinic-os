@@ -49,6 +49,8 @@ def _reset_role(dbapi_connection: Any, *_: Any) -> None:  # noqa: ANN401
 # Child tables first: every reference to a tenant, its accounts and its patients is RESTRICT.
 _CLEANUP_ORDER = (
     "appointment_notifications",
+    "patient_consents",
+    "intake_applications",
     "appointments",
     "appointment_hours",
     "appointment_settings",
@@ -56,6 +58,7 @@ _CLEANUP_ORDER = (
     "patient_alerts",
     "patient_emergency_contacts",
     "patients",
+    "pharmacies",
     "staff_invitations",
     "user_roles",
     "role_permissions",
