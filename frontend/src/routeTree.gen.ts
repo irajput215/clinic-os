@@ -22,6 +22,7 @@ import { Route as AppApprovalsRouteImport } from './routes/_app/approvals'
 import { Route as AppCalendarRouteImport } from './routes/_app/calendar'
 import { Route as AppScriptsRouteImport } from './routes/_app/scripts'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
+import { Route as AppSopsRouteImport } from './routes/_app/sops'
 import { Route as BookClinicSlugRouteImport } from './routes/book.$clinicSlug'
 import { Route as AppPatientsIndexRouteImport } from './routes/_app/patients.index'
 import { Route as AppPatientsPatientIdRouteImport } from './routes/_app/patients.$patientId'
@@ -90,6 +91,11 @@ const AppSettingsRoute = AppSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AppRoute,
 } as any)
+const AppSopsRoute = AppSopsRouteImport.update({
+  id: '/sops',
+  path: '/sops',
+  getParentRoute: () => AppRoute,
+} as any)
 const BookClinicSlugRoute = BookClinicSlugRouteImport.update({
   id: '/book/$clinicSlug',
   path: '/book/$clinicSlug',
@@ -119,6 +125,7 @@ export interface FileRoutesByFullPath {
   '/calendar': typeof AppCalendarRoute
   '/scripts': typeof AppScriptsRoute
   '/settings': typeof AppSettingsRoute
+  '/sops': typeof AppSopsRoute
   '/book/$clinicSlug': typeof BookClinicSlugRoute
   '/patients/$patientId': typeof AppPatientsPatientIdRoute
   '/patients/': typeof AppPatientsIndexRoute
@@ -135,6 +142,7 @@ export interface FileRoutesByTo {
   '/calendar': typeof AppCalendarRoute
   '/scripts': typeof AppScriptsRoute
   '/settings': typeof AppSettingsRoute
+  '/sops': typeof AppSopsRoute
   '/book/$clinicSlug': typeof BookClinicSlugRoute
   '/': typeof AppIndexRoute
   '/patients/$patientId': typeof AppPatientsPatientIdRoute
@@ -154,6 +162,7 @@ export interface FileRoutesById {
   '/_app/calendar': typeof AppCalendarRoute
   '/_app/scripts': typeof AppScriptsRoute
   '/_app/settings': typeof AppSettingsRoute
+  '/_app/sops': typeof AppSopsRoute
   '/book/$clinicSlug': typeof BookClinicSlugRoute
   '/_app/': typeof AppIndexRoute
   '/_app/patients/$patientId': typeof AppPatientsPatientIdRoute
@@ -174,6 +183,7 @@ export interface FileRouteTypes {
     | '/calendar'
     | '/scripts'
     | '/settings'
+    | '/sops'
     | '/book/$clinicSlug'
     | '/patients/$patientId'
     | '/patients/'
@@ -190,6 +200,7 @@ export interface FileRouteTypes {
     | '/calendar'
     | '/scripts'
     | '/settings'
+    | '/sops'
     | '/book/$clinicSlug'
     | '/'
     | '/patients/$patientId'
@@ -208,6 +219,7 @@ export interface FileRouteTypes {
     | '/_app/calendar'
     | '/_app/scripts'
     | '/_app/settings'
+    | '/_app/sops'
     | '/book/$clinicSlug'
     | '/_app/'
     | '/_app/patients/$patientId'
@@ -318,6 +330,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/sops': {
+      id: '/_app/sops'
+      path: '/sops'
+      fullPath: '/sops'
+      preLoaderRoute: typeof AppSopsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/book/$clinicSlug': {
       id: '/book/$clinicSlug'
       path: '/book/$clinicSlug'
@@ -348,6 +367,7 @@ interface AppRouteChildren {
   AppCalendarRoute: typeof AppCalendarRoute
   AppScriptsRoute: typeof AppScriptsRoute
   AppSettingsRoute: typeof AppSettingsRoute
+  AppSopsRoute: typeof AppSopsRoute
   AppIndexRoute: typeof AppIndexRoute
   AppPatientsPatientIdRoute: typeof AppPatientsPatientIdRoute
   AppPatientsIndexRoute: typeof AppPatientsIndexRoute
@@ -359,6 +379,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppCalendarRoute: AppCalendarRoute,
   AppScriptsRoute: AppScriptsRoute,
   AppSettingsRoute: AppSettingsRoute,
+  AppSopsRoute: AppSopsRoute,
   AppIndexRoute: AppIndexRoute,
   AppPatientsPatientIdRoute: AppPatientsPatientIdRoute,
   AppPatientsIndexRoute: AppPatientsIndexRoute,

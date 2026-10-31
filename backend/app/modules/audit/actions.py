@@ -125,11 +125,34 @@ ACTION_CATALOGUE: Final[tuple[tuple[str, tuple[str, ...]], ...]] = (
         ),
     ),
     ("TGA_DOCUMENT", ("tga_document.ingest", "tga_document.extract")),
-    ("USER", ("user.permission_change", "user.create", "user.deactivate")),
+    (
+        "USER",
+        (
+            "user.permission_change",
+            "user.create",
+            "user.deactivate",
+            # Registered with staff onboarding (docs3 feature 02, 2026-10-31): a change to a
+            # prescriber's credential vault, an attested agreement, and a read of the pack. The
+            # resource is the practitioner; payloads carry kinds and statuses, never a value.
+            "practitioner.identifier_update",
+            "practitioner.agreement_record",
+            "practitioner.onboarding_read",
+        ),
+    ),
     # `tenant.config_changed` registered 2026-10-08 with the clinic display name
     # (`docs/features/04-audit-log/05-data-and-audit.md`): feature 01 names it
     # (`01-tenancy-and-clinics/05-data-and-audit.md`) for a tenant configuration change.
-    ("TENANT", ("tenant.security_config_change", "tenant.config_changed")),
+    (
+        "TENANT",
+        (
+            "tenant.security_config_change",
+            "tenant.config_changed",
+            # Registered with staff onboarding (docs3 feature 02): an SOP version published, and a
+            # person's acknowledgement of one. The resource is the SOP.
+            "sop.publish",
+            "sop.acknowledge",
+        ),
+    ),
     ("INTEGRATION", ("integration.request",)),
     ("AUDIT", ("audit.read",)),
     # Registered with the appointments module (2026-10-07, owner-approved, recorded in
@@ -182,6 +205,8 @@ PAYLOAD_KEYS: Final[frozenset[str]] = frozenset(
         # The server-computed SHA-256 dispatch key (INTERNAL, `10/05` field table), never the
         # client's raw `Idempotency-Key` header.
         "idempotency_key",
+        # docs3 feature 02: which identifier of a prescriber's vault changed (a closed code).
+        "kind",
         "latency_ms",
         # Feature 02's `STEP_UP_SUCCEEDED` fields: the factor class, never the factor.
         "mfa_method",
@@ -238,6 +263,14 @@ PAYLOAD_ALLOW_LIST: Final[MappingProxyType[str, frozenset[str]]] = MappingProxyT
         "intake.application_submit": frozenset({"patient_id"}),
         "intake.application_read": frozenset({"patient_id"}),
         "intake.application_decide": frozenset({"patient_id", "to_state"}),
+        # docs3 feature 02: kinds, statuses and versions - never an identifier value or SOP text.
+        "practitioner.identifier_update": frozenset(
+            {"target_user_id", "kind", "to_state", "step_up"}
+        ),
+        "practitioner.agreement_record": frozenset({"target_user_id", "version"}),
+        "practitioner.onboarding_read": frozenset({"target_user_id"}),
+        "sop.publish": frozenset({"version"}),
+        "sop.acknowledge": frozenset({"version"}),
         # `04-audit-log/05-data-and-audit.md`: `audit.read` carries `query_filters` and `result_count`.
         "audit.read": frozenset({"query_filters", "result_count"}),
         # `06-clinical-records/05-data-and-audit.md` maps its four story labels onto the two

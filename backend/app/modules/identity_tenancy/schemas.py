@@ -153,7 +153,9 @@ class StepUpRequest(SQLModel):
     model_config = SQLModelConfig(extra="forbid")
 
     password: str = Field(min_length=1, max_length=128)
-    operation: Literal["prescription.sign", "prescription.dispatch"]
+    operation: Literal[
+        "prescription.sign", "prescription.dispatch", "practitioner.identifier_update"
+    ]
     resource_id: uuid.UUID
 
 

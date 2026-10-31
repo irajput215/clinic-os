@@ -188,9 +188,11 @@ BUDGETS = [
     Budget(
         "staff",
         "/users/staff",
-        seeded=3,
+        seeded=4,
         empty=3,
-        why="prelude, BEGIN+ the page, its total and every account's roles in one statement, COMMIT",
+        why="prelude, BEGIN+ the page, its total and every account's roles in one statement, the"
+        " prescribers' onboarding packs in one more (docs3 feature 02; none when no prescriber),"
+        " COMMIT",
         seeded_rows=_data,
     ),
     Budget(

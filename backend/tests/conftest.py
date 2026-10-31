@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 from sqlmodel import Session, delete
 
 from app.core.config import settings
@@ -99,6 +100,15 @@ def db() -> Generator[Session]:
         # A care relationship names its practitioner (`ON DELETE RESTRICT`); module fixtures remove
         # their own, and this catches any a failed test left behind before the accounts go.
         session.execute(delete(CareRelationship))
+        # docs3 feature 02: onboarding rows name their practitioner and attester (RESTRICT).
+        for table in (
+            "sop_acknowledgements",
+            "sop_versions",
+            "sops",
+            "practitioner_identifiers",
+            "practitioner_agreements",
+        ):
+            session.execute(text(f"DELETE FROM {table}"))  # noqa: S608
         session.execute(delete(User))
         session.commit()
 

@@ -138,7 +138,8 @@ def test_rls_scopes_every_table_and_an_unset_tenant_sees_nothing(
     rx: RxApi, clinic: Clinic
 ) -> None:
     _signed(rx, clinic)
-    other = rx.clinic("Other Clinic")
+    # Not made ready: completing a pack spends step-up grants of its own.
+    other = rx.clinic("Other Clinic", ready=False)
     for table in ("prescriptions", "prescription_events", "step_up_grants"):
         assert _as_app(f"SELECT 1 FROM {table}", str(clinic.owner.tenant_id)) >= 1  # type: ignore[operator]
         assert _as_app(f"SELECT 1 FROM {table}", str(other.owner.tenant_id)) == 0

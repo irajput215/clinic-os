@@ -69,6 +69,7 @@ from app.modules.prescriptions.schemas import (
 )
 from app.modules.prescriptions.transport import configured_transport
 from app.modules.tga_approvals.schemas import TgaMatchResponse
+from app.modules.users_roles import onboarding
 from app.modules.users_roles import service as users_roles
 from app.modules.users_roles.catalog import PRESCRIPTION_PERMISSIONS
 from app.modules.users_roles.policy import Actor, Decision
@@ -142,6 +143,8 @@ class Refusal:
     code: str
     status_code: int
     message: str
+    #: `PRESCRIBER_NOT_READY` only: what the signer's onboarding pack lacks (docs3 feature 02, R15).
+    missing: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -804,6 +807,27 @@ def sign(
                 INVALID_STATE_TRANSITION,
                 status.HTTP_409_CONFLICT,
                 f"A {row.state} prescription cannot be signed",
+            )
+
+        # docs3 feature 02 (R15, D8): the signer's onboarding pack, on this transaction, before the
+        # safety gate. Fails closed: a person with no pack at all is missing everything.
+        not_ready = onboarding.signing_readiness(
+            session, tenant_id=tenant_id, user_id=actor_id
+        )
+        if not_ready is not None:
+            _record(
+                session,
+                action=SIGN,
+                result="DENIED",
+                resource_id=row.id,
+                reason=onboarding.PRESCRIBER_NOT_READY,
+                payload={"patient_id": str(row.patient_id)},
+            )
+            return Refusal(
+                onboarding.PRESCRIBER_NOT_READY,
+                status.HTTP_403_FORBIDDEN,
+                "Your onboarding pack isn't complete yet, so you can't sign scripts.",
+                missing=tuple(not_ready.missing),
             )
 
         decision = gate.decide(session, row)

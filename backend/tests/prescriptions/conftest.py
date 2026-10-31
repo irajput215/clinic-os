@@ -22,6 +22,7 @@ from app.core.config import settings
 from app.core.db import engine
 from tests.tga.conftest import TgaApi
 from tests.utils.care import relate
+from tests.utils.onboarding import make_ready
 from tests.utils.rbac import ActorSession
 
 API = settings.API_V1_STR
@@ -56,12 +57,24 @@ class RxApi:
 
     # -- setup ---------------------------------------------------------------------------------
 
-    def clinic(self, name: str = "Rx Clinic") -> Clinic:
+    def clinic(self, name: str = "Rx Clinic", *, ready: bool = True) -> Clinic:
         owner = self.tga.register(clinic_name=name)
         assert owner.tenant_id is not None
         self._tenants.append(owner.tenant_id)
         verifier = self.tga.second_clinician(owner=owner, role_code="DOCTOR")
+        # The owner signs most scripts here: their onboarding pack is complete (docs3 feature 02).
+        if ready:
+            self.make_ready(owner, owner)
         return Clinic(owner, verifier, self.tga.create_patient(owner))
+
+    def make_ready(self, configurer: ActorSession, prescriber: ActorSession) -> None:
+        """Complete `prescriber`'s onboarding pack, as `configurer` would in the product."""
+        make_ready(
+            self.client,
+            configurer_headers=configurer.headers,
+            configurer_password=configurer.password,
+            user_id=prescriber.user_id,
+        )
 
     def member(self, clinic: Clinic, role_code: str | None) -> ActorSession:
         assert clinic.owner.tenant_id is not None

@@ -5,6 +5,60 @@ export type ClientOptions = {
 };
 
 /**
+ * AcknowledgementMatrix
+ *
+ * Staff x SOP x acknowledged version (R8).
+ */
+export type AcknowledgementMatrix = {
+    /**
+     * Sops
+     */
+    sops: Array<MatrixSop>;
+    /**
+     * Staff
+     */
+    staff: Array<MatrixRow>;
+};
+
+/**
+ * AgreementCreate
+ *
+ * `POST /users/{id}/agreements`: the agreement version the practitioner signed, and when (R13).
+ */
+export type AgreementCreate = {
+    /**
+     * Agreement Version
+     */
+    agreement_version: string;
+    /**
+     * Signed On
+     */
+    signed_on: string;
+};
+
+/**
+ * AgreementRead
+ */
+export type AgreementRead = {
+    /**
+     * Agreement Version
+     */
+    agreement_version: string;
+    /**
+     * Signed On
+     */
+    signed_on: string;
+    /**
+     * Attested By Name
+     */
+    attested_by_name: string | null;
+    /**
+     * Attested At
+     */
+    attested_at: string;
+};
+
+/**
  * AlertCreate
  */
 export type AlertCreate = {
@@ -990,6 +1044,82 @@ export type HTTPValidationError = {
 };
 
 /**
+ * IdentifierRead
+ *
+ * One vault entry, masked. The value itself never leaves the server.
+ */
+export type IdentifierRead = {
+    /**
+     * Kind
+     */
+    kind: 'AHPRA' | 'HPI_I' | 'PRESCRIBER_NUMBER' | 'PROVIDER_NUMBER';
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Required
+     */
+    required: boolean;
+    /**
+     * State
+     */
+    state: 'MISSING' | 'PENDING' | 'ACTIVE' | 'EXPIRING' | 'EXPIRED';
+    /**
+     * Masked
+     */
+    masked: string | null;
+    /**
+     * Expires On
+     */
+    expires_on: string | null;
+    /**
+     * Verified By Name
+     */
+    verified_by_name: string | null;
+    /**
+     * Verified At
+     */
+    verified_at: string | null;
+    /**
+     * Verification Method
+     */
+    verification_method: string | null;
+};
+
+/**
+ * IdentifierUpdate
+ *
+ * `PUT /users/{id}/identifiers/{kind}`: record or re-verify one identifier (R11, R12).
+ *
+ * `value` may be left out to re-attest the stored one. `ACTIVE` needs `verification_method` (how it
+ * was checked, e.g. "AHPRA public register"); who and when come from the session. The step-up token
+ * must be bound to `practitioner.identifier_update` and this practitioner.
+ */
+export type IdentifierUpdate = {
+    /**
+     * Value
+     */
+    value?: string | null;
+    /**
+     * Status
+     */
+    status: 'PENDING' | 'ACTIVE';
+    /**
+     * Expires On
+     */
+    expires_on?: string | null;
+    /**
+     * Verification Method
+     */
+    verification_method?: string | null;
+    /**
+     * Step Up Token
+     */
+    step_up_token: string;
+};
+
+/**
  * IntakeApplicationIn
  *
  * Steps 1-6 of the public application, beyond the name, birth date and contact details the
@@ -1196,6 +1326,56 @@ export type InvitationAccepted = {
 };
 
 /**
+ * MatrixRow
+ */
+export type MatrixRow = {
+    /**
+     * User Id
+     */
+    user_id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Role Codes
+     */
+    role_codes: Array<string>;
+    /**
+     * Acknowledged
+     */
+    acknowledged: {
+        [key: string]: number;
+    };
+    /**
+     * Applicable
+     */
+    applicable: Array<string>;
+};
+
+/**
+ * MatrixSop
+ */
+export type MatrixSop = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Current Version
+     */
+    current_version: number;
+    /**
+     * Applies To Roles
+     */
+    applies_to_roles: Array<string>;
+};
+
+/**
  * Message
  */
 export type Message = {
@@ -1241,6 +1421,47 @@ export type NotificationRunReport = {
      * Retried
      */
     retried?: number;
+};
+
+/**
+ * OnboardingPackRead
+ *
+ * A person's onboarding pack (R14): three ticks, and exactly what is missing.
+ */
+export type OnboardingPackRead = {
+    /**
+     * User Id
+     */
+    user_id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Role Codes
+     */
+    role_codes: Array<string>;
+    /**
+     * Is Prescriber
+     */
+    is_prescriber: boolean;
+    /**
+     * Pack Complete
+     */
+    pack_complete: boolean;
+    /**
+     * Missing
+     */
+    missing: Array<string>;
+    agreement: AgreementRead | null;
+    /**
+     * Identifiers
+     */
+    identifiers: Array<IdentifierRead>;
+    /**
+     * Sops
+     */
+    sops: Array<PackSopRead>;
 };
 
 /**
@@ -1290,6 +1511,10 @@ export type OwnPermissionsRead = {
      * Relationship Bound
      */
     relationship_bound?: Array<string>;
+    /**
+     * Role Codes
+     */
+    role_codes?: Array<string>;
 };
 
 /**
@@ -1322,6 +1547,28 @@ export type OwnPharmacy = {
      * Provider Number
      */
     provider_number?: string | null;
+};
+
+/**
+ * PackSopRead
+ */
+export type PackSopRead = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Current Version
+     */
+    current_version: number;
+    /**
+     * Acknowledged Version
+     */
+    acknowledged_version: number | null;
 };
 
 /**
@@ -2532,6 +2779,136 @@ export type SoapNote = {
 };
 
 /**
+ * SopCard
+ *
+ * One SOP in the list, with where the caller stands on it.
+ */
+export type SopCard = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Applies To Roles
+     */
+    applies_to_roles: Array<string>;
+    /**
+     * Required For Onboarding
+     */
+    required_for_onboarding: boolean;
+    /**
+     * Current Version
+     */
+    current_version: number;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+    /**
+     * Applies To Me
+     */
+    applies_to_me: boolean;
+    /**
+     * My Acknowledged Version
+     */
+    my_acknowledged_version: number | null;
+};
+
+/**
+ * SopDetail
+ *
+ * The current text and the version history (R6).
+ */
+export type SopDetail = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Applies To Roles
+     */
+    applies_to_roles: Array<string>;
+    /**
+     * Required For Onboarding
+     */
+    required_for_onboarding: boolean;
+    /**
+     * Current Version
+     */
+    current_version: number;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+    /**
+     * Applies To Me
+     */
+    applies_to_me: boolean;
+    /**
+     * My Acknowledged Version
+     */
+    my_acknowledged_version: number | null;
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * Versions
+     */
+    versions: Array<SopVersionRead>;
+};
+
+/**
+ * SopVersionRead
+ */
+export type SopVersionRead = {
+    /**
+     * Version
+     */
+    version: number;
+    /**
+     * Published At
+     */
+    published_at: string;
+    /**
+     * Published By Name
+     */
+    published_by_name: string | null;
+};
+
+/**
+ * SopWrite
+ *
+ * A new SOP, or the next version of one. An empty `applies_to_roles` means everyone.
+ */
+export type SopWrite = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * Applies To Roles
+     */
+    applies_to_roles?: Array<string>;
+    /**
+     * Required For Onboarding
+     */
+    required_for_onboarding?: boolean;
+};
+
+/**
  * StaffInvitationRead
  *
  * An outstanding invitation: when the current link was sent and when it stops working.
@@ -2619,6 +2996,10 @@ export type StaffMemberRead = {
      * Roles
      */
     roles: Array<StaffRoleRead>;
+    /**
+     * Onboarding Status
+     */
+    onboarding_status?: 'INVITED' | 'INACTIVE' | 'ACTIVE' | 'PACK_INCOMPLETE' | 'READY';
 };
 
 /**
@@ -2698,7 +3079,7 @@ export type StepUpRequest = {
     /**
      * Operation
      */
-    operation: 'prescription.sign' | 'prescription.dispatch';
+    operation: 'prescription.sign' | 'prescription.dispatch' | 'practitioner.identifier_update';
     /**
      * Resource Id
      */
@@ -6607,3 +6988,250 @@ export type intakeCreatePharmacyResponses = {
 };
 
 export type intakeCreatePharmacyResponse = intakeCreatePharmacyResponses[keyof intakeCreatePharmacyResponses];
+
+export type usersReadOnboardingPackData = {
+    body?: never;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/v1/users/{user_id}/onboarding';
+};
+
+export type usersReadOnboardingPackErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type usersReadOnboardingPackError = usersReadOnboardingPackErrors[keyof usersReadOnboardingPackErrors];
+
+export type usersReadOnboardingPackResponses = {
+    /**
+     * Successful Response
+     */
+    200: OnboardingPackRead;
+};
+
+export type usersReadOnboardingPackResponse = usersReadOnboardingPackResponses[keyof usersReadOnboardingPackResponses];
+
+export type usersUpdateIdentifierData = {
+    body: IdentifierUpdate;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+        /**
+         * Kind
+         */
+        kind: 'AHPRA' | 'HPI_I' | 'PRESCRIBER_NUMBER' | 'PROVIDER_NUMBER';
+    };
+    query?: never;
+    url: '/api/v1/users/{user_id}/identifiers/{kind}';
+};
+
+export type usersUpdateIdentifierErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type usersUpdateIdentifierError = usersUpdateIdentifierErrors[keyof usersUpdateIdentifierErrors];
+
+export type usersUpdateIdentifierResponses = {
+    /**
+     * Successful Response
+     */
+    200: OnboardingPackRead;
+};
+
+export type usersUpdateIdentifierResponse = usersUpdateIdentifierResponses[keyof usersUpdateIdentifierResponses];
+
+export type usersRecordAgreementData = {
+    body: AgreementCreate;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/v1/users/{user_id}/agreements';
+};
+
+export type usersRecordAgreementErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type usersRecordAgreementError = usersRecordAgreementErrors[keyof usersRecordAgreementErrors];
+
+export type usersRecordAgreementResponses = {
+    /**
+     * Successful Response
+     */
+    201: OnboardingPackRead;
+};
+
+export type usersRecordAgreementResponse = usersRecordAgreementResponses[keyof usersRecordAgreementResponses];
+
+export type sopsListSopsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/sops';
+};
+
+export type sopsListSopsResponses = {
+    /**
+     * Response Sops-List Sops
+     *
+     * Successful Response
+     */
+    200: Array<SopCard>;
+};
+
+export type sopsListSopsResponse = sopsListSopsResponses[keyof sopsListSopsResponses];
+
+export type sopsCreateSopData = {
+    body: SopWrite;
+    path?: never;
+    query?: never;
+    url: '/api/v1/sops';
+};
+
+export type sopsCreateSopErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type sopsCreateSopError = sopsCreateSopErrors[keyof sopsCreateSopErrors];
+
+export type sopsCreateSopResponses = {
+    /**
+     * Successful Response
+     */
+    201: SopDetail;
+};
+
+export type sopsCreateSopResponse = sopsCreateSopResponses[keyof sopsCreateSopResponses];
+
+export type sopsAcknowledgementMatrixData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/sops/matrix';
+};
+
+export type sopsAcknowledgementMatrixResponses = {
+    /**
+     * Successful Response
+     */
+    200: AcknowledgementMatrix;
+};
+
+export type sopsAcknowledgementMatrixResponse = sopsAcknowledgementMatrixResponses[keyof sopsAcknowledgementMatrixResponses];
+
+export type sopsReadSopData = {
+    body?: never;
+    path: {
+        /**
+         * Sop Id
+         */
+        sop_id: string;
+    };
+    query?: never;
+    url: '/api/v1/sops/{sop_id}';
+};
+
+export type sopsReadSopErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type sopsReadSopError = sopsReadSopErrors[keyof sopsReadSopErrors];
+
+export type sopsReadSopResponses = {
+    /**
+     * Successful Response
+     */
+    200: SopDetail;
+};
+
+export type sopsReadSopResponse = sopsReadSopResponses[keyof sopsReadSopResponses];
+
+export type sopsPublishVersionData = {
+    body: SopWrite;
+    path: {
+        /**
+         * Sop Id
+         */
+        sop_id: string;
+    };
+    query?: never;
+    url: '/api/v1/sops/{sop_id}/versions';
+};
+
+export type sopsPublishVersionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type sopsPublishVersionError = sopsPublishVersionErrors[keyof sopsPublishVersionErrors];
+
+export type sopsPublishVersionResponses = {
+    /**
+     * Successful Response
+     */
+    201: SopDetail;
+};
+
+export type sopsPublishVersionResponse = sopsPublishVersionResponses[keyof sopsPublishVersionResponses];
+
+export type sopsAcknowledgeData = {
+    body?: never;
+    path: {
+        /**
+         * Sop Id
+         */
+        sop_id: string;
+        /**
+         * Version
+         */
+        version: number;
+    };
+    query?: never;
+    url: '/api/v1/sops/{sop_id}/versions/{version}/acknowledge';
+};
+
+export type sopsAcknowledgeErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type sopsAcknowledgeError = sopsAcknowledgeErrors[keyof sopsAcknowledgeErrors];
+
+export type sopsAcknowledgeResponses = {
+    /**
+     * Successful Response
+     */
+    200: SopCard;
+};
+
+export type sopsAcknowledgeResponse = sopsAcknowledgeResponses[keyof sopsAcknowledgeResponses];

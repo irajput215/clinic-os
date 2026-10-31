@@ -21,6 +21,7 @@ import {
   formLabel,
   TGA_CATEGORIES,
 } from "@/data/approvals"
+import { describeMissing, missingFromRefusal } from "@/data/onboarding"
 import {
   formatQuantity,
   type Prescription,
@@ -595,6 +596,16 @@ export function ReviewSignDialog({
                 {describeError(submit.error)}
                 {errorCode && errorCode in MATCH_REASONS ? (
                   <Mono className="ml-1 text-[11.5px]">{errorCode}</Mono>
+                ) : null}
+                {errorCode === "PRESCRIBER_NOT_READY" ? (
+                  <span className="mt-1.5 block">
+                    Still needed:{" "}
+                    {missingFromRefusal(submit.error)
+                      .map((m) => describeMissing(m))
+                      .join("; ")}
+                    . Your practice owner completes the pack in Administration →
+                    Staff; SOPs are under SOPs &amp; policies.
+                  </span>
                 ) : null}
               </p>
             ) : null}

@@ -98,7 +98,13 @@ class Tenant(SQLModel, table=True):
 # `docs/features/02-authentication/03-design.md` "Step-up for the five named high-risk operations"
 # binds a token to one operation, and only the two prescription operations have a route that consumes
 # one today. A third operation is added here, in the check constraint and in the route that spends it.
-STEP_UP_OPERATIONS: tuple[str, ...] = ("prescription.sign", "prescription.dispatch")
+# `practitioner.identifier_update` (docs3 feature 02, R11): a change to a prescriber's credential
+# vault, bound to the practitioner whose identifier changes.
+STEP_UP_OPERATIONS: tuple[str, ...] = (
+    "prescription.sign",
+    "prescription.dispatch",
+    "practitioner.identifier_update",
+)
 _STEP_UP_OPERATION_SQL = ", ".join(f"'{operation}'" for operation in STEP_UP_OPERATIONS)
 
 # The longest a grant may live, enforced by the database as well as by the service. Two minutes is

@@ -21,11 +21,16 @@
 | [public.patients](public.patients.md) | 30 |  | BASE TABLE |
 | [public.permissions](public.permissions.md) | 3 |  | BASE TABLE |
 | [public.pharmacies](public.pharmacies.md) | 11 |  | BASE TABLE |
+| [public.practitioner_agreements](public.practitioner_agreements.md) | 7 |  | BASE TABLE |
+| [public.practitioner_identifiers](public.practitioner_identifiers.md) | 12 |  | BASE TABLE |
 | [public.prescription_events](public.prescription_events.md) | 8 |  | BASE TABLE |
 | [public.prescriptions](public.prescriptions.md) | 24 |  | BASE TABLE |
 | [public.role_permissions](public.role_permissions.md) | 3 |  | BASE TABLE |
 | [public.roles](public.roles.md) | 7 |  | BASE TABLE |
 | [public.signup_requests](public.signup_requests.md) | 11 |  | BASE TABLE |
+| [public.sop_acknowledgements](public.sop_acknowledgements.md) | 6 |  | BASE TABLE |
+| [public.sop_versions](public.sop_versions.md) | 8 |  | BASE TABLE |
+| [public.sops](public.sops.md) | 9 |  | BASE TABLE |
 | [public.staff_invitations](public.staff_invitations.md) | 8 |  | BASE TABLE |
 | [public.step_up_grants](public.step_up_grants.md) | 9 |  | BASE TABLE |
 | [public.tenants](public.tenants.md) | 9 |  | BASE TABLE |
@@ -308,6 +313,13 @@ erDiagram
 "public.patients" }o--o| "public.patients" : "FOREIGN KEY (merged_into_patient_id) REFERENCES patients(id) ON DELETE RESTRICT"
 "public.patients" }o--|| "public.pharmacies" : "FOREIGN KEY (tenant_id, preferred_pharmacy_id) REFERENCES pharmacies(tenant_id, id) ON DELETE RESTRICT"
 "public.pharmacies" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.practitioner_agreements" }o--|| "public.user" : "FOREIGN KEY (attested_by) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
+"public.practitioner_agreements" }o--|| "public.user" : "FOREIGN KEY (user_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
+"public.practitioner_agreements" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.practitioner_identifiers" }o--|| "public.user" : "FOREIGN KEY (updated_by) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
+"public.practitioner_identifiers" }o--|| "public.user" : "FOREIGN KEY (user_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
+"public.practitioner_identifiers" }o--o| "public.user" : "FOREIGN KEY (verified_by) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
+"public.practitioner_identifiers" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.prescription_events" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.prescription_events" }o--|| "public.prescriptions" : "FOREIGN KEY (tenant_id, prescription_id) REFERENCES prescriptions(tenant_id, id) ON DELETE RESTRICT"
 "public.prescriptions" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
@@ -318,6 +330,14 @@ erDiagram
 "public.role_permissions" }o--|| "public.permissions" : "FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE RESTRICT"
 "public.role_permissions" }o--|| "public.roles" : "FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE RESTRICT"
 "public.roles" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.sop_acknowledgements" }o--|| "public.user" : "FOREIGN KEY (user_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
+"public.sop_acknowledgements" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.sop_acknowledgements" }o--|| "public.sop_versions" : "FOREIGN KEY (tenant_id, sop_id, version) REFERENCES sop_versions(tenant_id, sop_id, version) ON DELETE RESTRICT"
+"public.sop_versions" }o--|| "public.user" : "FOREIGN KEY (published_by) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
+"public.sop_versions" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+"public.sop_versions" }o--|| "public.sops" : "FOREIGN KEY (tenant_id, sop_id) REFERENCES sops(tenant_id, id) ON DELETE RESTRICT"
+"public.sops" }o--|| "public.user" : "FOREIGN KEY (created_by) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
+"public.sops" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.staff_invitations" }o--|| "public.user" : "FOREIGN KEY (invited_by) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
 "public.staff_invitations" |o--|| "public.user" : "FOREIGN KEY (user_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
 "public.staff_invitations" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
@@ -565,6 +585,29 @@ erDiagram
   varchar_255_ suburb
   uuid tenant_id FK
 }
+"public.practitioner_agreements" {
+  varchar_32_ agreement_version
+  timestamp_with_time_zone attested_at
+  uuid attested_by FK
+  uuid id
+  date signed_on
+  uuid tenant_id FK
+  uuid user_id FK
+}
+"public.practitioner_identifiers" {
+  date expires_on
+  uuid id
+  varchar kind
+  varchar status
+  uuid tenant_id FK
+  timestamp_with_time_zone updated_at
+  uuid updated_by FK
+  uuid user_id FK
+  bytea value_ciphertext
+  varchar_120_ verification_method
+  timestamp_with_time_zone verified_at
+  uuid verified_by FK
+}
 "public.prescription_events" {
   uuid actor_id
   varchar from_state
@@ -627,6 +670,35 @@ erDiagram
   uuid link_id
   integer send_count
   timestamp_with_time_zone sent_at
+}
+"public.sop_acknowledgements" {
+  timestamp_with_time_zone acknowledged_at
+  uuid id
+  uuid sop_id FK
+  uuid tenant_id FK
+  uuid user_id FK
+  integer version FK
+}
+"public.sop_versions" {
+  text body
+  uuid id
+  timestamp_with_time_zone published_at
+  uuid published_by FK
+  uuid sop_id FK
+  uuid tenant_id FK
+  varchar_200_ title
+  integer version
+}
+"public.sops" {
+  text__ applies_to_roles
+  timestamp_with_time_zone created_at
+  uuid created_by FK
+  integer current_version
+  uuid id
+  boolean required_for_onboarding
+  uuid tenant_id FK
+  varchar_200_ title
+  timestamp_with_time_zone updated_at
 }
 "public.staff_invitations" {
   timestamp_with_time_zone accepted_at

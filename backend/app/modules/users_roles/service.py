@@ -56,7 +56,7 @@ from app.models import User
 # `users_roles` — so there is no cycle.
 from app.modules.audit import service as audit
 from app.modules.identity_tenancy import service as identity_tenancy
-from app.modules.users_roles import invitations
+from app.modules.users_roles import invitations, onboarding
 from app.modules.users_roles.catalog import (
     ADMINISTRATION_PERMISSION,
     BOOTSTRAP_ROLE_CODE,
@@ -637,6 +637,7 @@ def own_permissions(actor: Actor) -> OwnPermissionsRead:
     return OwnPermissionsRead(
         permissions=sorted(actor.permissions),
         relationship_bound=sorted(actor.permissions - actor.unscoped_permissions),
+        role_codes=sorted(actor.role_codes),
     )
 
 
@@ -997,13 +998,28 @@ def list_staff(*, tenant_id: uuid.UUID, skip: int, limit: int) -> StaffPublic:
         for roles in held.values():
             roles.sort(key=lambda entry: (entry.name, entry.code))
         now = datetime.now(UTC)
-        return StaffPublic(
-            data=[
-                _staff_member(user, held[user.id], invited[user.id], now=now)
-                for user in users.values()
-            ],
-            count=count,
+        members = [
+            _staff_member(user, held[user.id], invited[user.id], now=now)
+            for user in users.values()
+        ]
+        # docs3 feature 02 (R2): an active prescriber's pack, in one statement for the page.
+        prescribers = [
+            entry.id
+            for entry in members
+            if entry.status == "ACTIVE"
+            and onboarding.PRESCRIBER_ROLES & {role.code for role in entry.roles}
+        ]
+        missing = onboarding.missing_for_many(
+            session, tenant_id=tenant_id, user_ids=prescribers
         )
+        for staff_member in members:
+            if staff_member.status != "ACTIVE":
+                staff_member.onboarding_status = staff_member.status
+            elif staff_member.id in missing:
+                staff_member.onboarding_status = (
+                    "PACK_INCOMPLETE" if missing[staff_member.id] else "READY"
+                )
+        return StaffPublic(data=members, count=count)
 
 
 @dataclass(frozen=True)
@@ -1597,3 +1613,18 @@ def queue_display_names(
             user_id: full_name or email for user_id, full_name, email in found
         }
     )
+
+
+def display_names(
+    session: Session, *, tenant_id: uuid.UUID, user_ids: Iterable[uuid.UUID]
+) -> dict[uuid.UUID, str]:
+    """Display names for accounts of **this** organisation, read on the caller's transaction."""
+    wanted = sorted(set(user_ids))
+    if not wanted:
+        return {}
+    rows = session.exec(
+        select(col(User.id), col(User.full_name), col(User.email)).where(
+            col(User.tenant_id) == tenant_id, col(User.id).in_(wanted)
+        )
+    ).all()
+    return {user_id: full_name or email for user_id, full_name, email in rows}

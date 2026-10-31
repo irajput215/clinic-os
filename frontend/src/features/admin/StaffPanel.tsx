@@ -4,7 +4,13 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query"
-import { KeyRound, Loader2, MailPlus, UserPlus } from "lucide-react"
+import {
+  ClipboardCheck,
+  KeyRound,
+  Loader2,
+  MailPlus,
+  UserPlus,
+} from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
 import type { StaffMemberRead, UserPublic } from "@/client/types.gen"
@@ -28,6 +34,7 @@ import { formatDayMonthTime } from "@/lib/format"
 import { describeError, refusalCode } from "@/lib/http"
 import { displayName } from "@/lib/session"
 import { InviteStaffDialog } from "./InviteStaffDialog"
+import { OnboardingPackDialog } from "./OnboardingPackDialog"
 
 /**
  * The organisation's staff (`GET /users/staff`): every account of the signed-in person's own
@@ -46,6 +53,7 @@ export function StaffPanel({
 }) {
   const [page, setPage] = useState(0)
   const [inviting, setInviting] = useState(false)
+  const [packFor, setPackFor] = useState<string | null>(null)
   const staff = useQuery({
     ...staffQuery(page),
     placeholderData: keepPreviousData,
@@ -150,6 +158,7 @@ export function StaffPanel({
                           {member.status === "ACTIVE" ? null : (
                             <StatusPill member={member} />
                           )}
+                          <OnboardingPill member={member} />
                         </div>
                       </td>
                       <td className="w-[45%] max-w-0 truncate max-xl:hidden">
@@ -161,7 +170,10 @@ export function StaffPanel({
                         </div>
                       </td>
                       <td className="max-sm:hidden">
-                        <StatusPill member={member} />
+                        <div className="flex flex-wrap gap-1">
+                          <StatusPill member={member} />
+                          <OnboardingPill member={member} />
+                        </div>
                       </td>
                       <td className="pr-5">
                         <div className="flex items-center justify-end gap-2">
@@ -181,6 +193,18 @@ export function StaffPanel({
                                 <MailPlus />
                               )}
                               <span className="max-xl:hidden">Resend</span>
+                            </Button>
+                          ) : null}
+                          {isPrescriberRow(member) ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              aria-label={`Onboarding pack for ${name}`}
+                              title="Onboarding pack"
+                              onClick={() => setPackFor(member.id)}
+                            >
+                              <ClipboardCheck />
+                              <span className="max-xl:hidden">Pack</span>
                             </Button>
                           ) : null}
                           <Button
@@ -234,6 +258,13 @@ export function StaffPanel({
       ) : null}
 
       <InviteStaffDialog me={me} open={inviting} onOpenChange={setInviting} />
+      {packFor ? (
+        <OnboardingPackDialog
+          userId={packFor}
+          open
+          onOpenChange={(open) => (open ? null : setPackFor(null))}
+        />
+      ) : null}
     </div>
   )
 }
@@ -264,6 +295,19 @@ function StatusPill({ member }: { member: StaffMemberRead }) {
       </span>
     </span>
   )
+}
+
+const isPrescriberRow = (member: StaffMemberRead) =>
+  member.onboarding_status === "PACK_INCOMPLETE" ||
+  member.onboarding_status === "READY"
+
+/** Where a prescriber's onboarding pack stands (docs3 feature 02); nothing for anyone else. */
+function OnboardingPill({ member }: { member: StaffMemberRead }) {
+  if (member.onboarding_status === "READY")
+    return <Pill tone="ok">Pack complete</Pill>
+  if (member.onboarding_status === "PACK_INCOMPLETE")
+    return <Pill tone="warn">Pack incomplete</Pill>
+  return null
 }
 
 function RolePills({

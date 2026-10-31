@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto"
 import { mkdirSync, writeFileSync } from "node:fs"
-import { expect, test as setup } from "@playwright/test"
+import { type APIRequestContext, expect, test as setup } from "@playwright/test"
 import { signInWithApi, signUp, verifySignupByEmail } from "./accounts"
 import { CLINIC_FILE, type Clinic } from "./fixtures"
 import { emailedPath, waitForEmailHtml } from "./mail"
@@ -19,6 +19,49 @@ const PATIENTS = [
   ["Willem", "Barker", "1957-11-08", "MALE"],
   ["Grace", "Liu", "1994-02-17", "FEMALE"],
 ] as const
+
+async function completePack(
+  request: APIRequestContext,
+  auth: { authorization: string },
+  password: string,
+  userId: string,
+) {
+  const agreement = await request.post(`/api/v1/users/${userId}/agreements`, {
+    headers: auth,
+    data: { agreement_version: "2026-1", signed_on: "2026-01-05" },
+  })
+  expect(agreement.status(), await agreement.text()).toBe(201)
+  const digits = (n: number) =>
+    Array.from({ length: n }, () => Math.floor(Math.random() * 10)).join("")
+  for (const [kind, value] of [
+    ["AHPRA", `MED${digits(10)}`],
+    ["PRESCRIBER_NUMBER", digits(7)],
+  ]) {
+    const grant = await request.post("/api/v1/auth/step-up", {
+      headers: auth,
+      data: {
+        password,
+        operation: "practitioner.identifier_update",
+        resource_id: userId,
+      },
+    })
+    expect(grant.status(), await grant.text()).toBe(201)
+    const saved = await request.put(
+      `/api/v1/users/${userId}/identifiers/${kind}`,
+      {
+        headers: auth,
+        data: {
+          value,
+          status: "ACTIVE",
+          verification_method: "AHPRA public register",
+          step_up_token: ((await grant.json()) as { step_up_token: string })
+            .step_up_token,
+        },
+      },
+    )
+    expect(saved.ok(), await saved.text()).toBeTruthy()
+  }
+}
 
 setup("sign up a clinic and add patients", async ({ request, baseURL }) => {
   // A run straight after another against the same backend waits out the window that one left,
@@ -129,6 +172,18 @@ setup("sign up a clinic and add patients", async ({ request, baseURL }) => {
   })
   expect(accepted.ok(), await accepted.text()).toBeTruthy()
   const verifierToken = await signInWithApi(request, verifier)
+  const verifierId = (
+    (await (
+      await request.get("/api/v1/users/me", {
+        headers: { authorization: `Bearer ${verifierToken}` },
+      })
+    ).json()) as { id: string }
+  ).id
+
+  // Both doctors may sign scripts only with a complete onboarding pack (docs3 feature 02): the owner
+  // records each one's agreement and verifies their AHPRA and prescriber numbers, with a step-up each.
+  for (const userId of [ownerId, verifierId])
+    await completePack(request, auth, clinic.password, userId)
 
   mkdirSync("playwright/.auth", { recursive: true })
   writeFileSync(
