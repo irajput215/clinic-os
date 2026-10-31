@@ -65,6 +65,7 @@ _DELETE_ORDER = (
     "DELETE FROM patient_emergency_contacts WHERE tenant_id = ANY(:tenant_ids)",
     "DELETE FROM patients WHERE tenant_id = ANY(:tenant_ids)",
     "DELETE FROM pharmacies WHERE tenant_id = ANY(:tenant_ids)",
+    "DELETE FROM tenant_settings WHERE tenant_id = ANY(:tenant_ids)",
     "DELETE FROM sop_acknowledgements WHERE tenant_id = ANY(:tenant_ids)",
     "DELETE FROM sop_versions WHERE tenant_id = ANY(:tenant_ids)",
     "DELETE FROM sops WHERE tenant_id = ANY(:tenant_ids)",

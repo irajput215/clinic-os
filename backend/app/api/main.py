@@ -31,6 +31,7 @@ from app.modules.intake.router import (
 from app.modules.intake.router import pharmacies_router  # noqa: E402
 from app.modules.intake.router import router as intake_router  # noqa: E402
 from app.modules.patients.router import router as patients_router
+from app.modules.practice.router import router as practice_router  # noqa: E402
 from app.modules.prescriptions.router import router as prescriptions_router
 from app.modules.sops.router import router as sops_router  # noqa: E402
 from app.modules.tga_approvals.router import (
@@ -94,3 +95,4 @@ api_router.include_router(intake_patient_router)
 api_router.include_router(pharmacies_router)
 api_router.include_router(onboarding_router)
 api_router.include_router(sops_router)
+api_router.include_router(practice_router)

@@ -7,7 +7,7 @@
 | created_at | timestamp with time zone |  | false |  |  |  |
 | data_region | varchar(32) |  | false |  |  |  |
 | display_name | varchar(120) |  | false |  |  |  |
-| id | uuid | gen_random_uuid() | false | [public.appointment_notifications](public.appointment_notifications.md) [public.appointment_settings](public.appointment_settings.md) [public.appointments](public.appointments.md) [public.care_relationships](public.care_relationships.md) [public.clinical_record_versions](public.clinical_record_versions.md) [public.clinical_records](public.clinical_records.md) [public.clinics](public.clinics.md) [public.dispatch_attempts](public.dispatch_attempts.md) [public.intake_applications](public.intake_applications.md) [public.patient_alerts](public.patient_alerts.md) [public.patient_consents](public.patient_consents.md) [public.patient_emergency_contacts](public.patient_emergency_contacts.md) [public.patients](public.patients.md) [public.pharmacies](public.pharmacies.md) [public.practitioner_agreements](public.practitioner_agreements.md) [public.practitioner_identifiers](public.practitioner_identifiers.md) [public.prescription_events](public.prescription_events.md) [public.prescriptions](public.prescriptions.md) [public.role_permissions](public.role_permissions.md) [public.roles](public.roles.md) [public.sop_acknowledgements](public.sop_acknowledgements.md) [public.sop_versions](public.sop_versions.md) [public.sops](public.sops.md) [public.staff_invitations](public.staff_invitations.md) [public.step_up_grants](public.step_up_grants.md) [public.tga_approval_events](public.tga_approval_events.md) [public.tga_approvals](public.tga_approvals.md) [public.user](public.user.md) [public.user_roles](public.user_roles.md) |  |  |
+| id | uuid | gen_random_uuid() | false | [public.appointment_notifications](public.appointment_notifications.md) [public.appointment_settings](public.appointment_settings.md) [public.appointments](public.appointments.md) [public.care_relationships](public.care_relationships.md) [public.clinical_record_versions](public.clinical_record_versions.md) [public.clinical_records](public.clinical_records.md) [public.clinics](public.clinics.md) [public.dispatch_attempts](public.dispatch_attempts.md) [public.intake_applications](public.intake_applications.md) [public.patient_alerts](public.patient_alerts.md) [public.patient_consents](public.patient_consents.md) [public.patient_emergency_contacts](public.patient_emergency_contacts.md) [public.patients](public.patients.md) [public.pharmacies](public.pharmacies.md) [public.practitioner_agreements](public.practitioner_agreements.md) [public.practitioner_identifiers](public.practitioner_identifiers.md) [public.prescription_events](public.prescription_events.md) [public.prescriptions](public.prescriptions.md) [public.role_permissions](public.role_permissions.md) [public.roles](public.roles.md) [public.sop_acknowledgements](public.sop_acknowledgements.md) [public.sop_versions](public.sop_versions.md) [public.sops](public.sops.md) [public.staff_invitations](public.staff_invitations.md) [public.step_up_grants](public.step_up_grants.md) [public.tenant_settings](public.tenant_settings.md) [public.tga_approval_events](public.tga_approval_events.md) [public.tga_approvals](public.tga_approvals.md) [public.user](public.user.md) [public.user_roles](public.user_roles.md) |  |  |
 | legal_name | varchar(255) |  | false |  |  |  |
 | retention_profile | varchar(64) |  | false |  |  |  |
 | slug | varchar(64) |  | false |  |  |  |
@@ -69,6 +69,7 @@ erDiagram
 "public.sops" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.staff_invitations" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.step_up_grants" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE"
+"public.tenant_settings" |o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.tga_approval_events" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.tga_approvals" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.user" }o--o| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL"
@@ -409,6 +410,13 @@ erDiagram
   uuid tenant_id FK
   varchar token_hash
   uuid user_id FK
+}
+"public.tenant_settings" {
+  integer adult_retention_years
+  text__ draft_staging_roles
+  uuid tenant_id FK
+  timestamp_with_time_zone updated_at
+  uuid updated_by FK
 }
 "public.tga_approval_events" {
   uuid actor_id

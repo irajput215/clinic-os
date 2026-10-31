@@ -8,7 +8,7 @@
 | email | varchar(255) |  | false |  |  |  |
 | full_name | varchar(255) |  | true |  |  |  |
 | hashed_password | varchar |  | false |  |  |  |
-| id | uuid |  | false | [public.care_relationships](public.care_relationships.md) [public.clinical_record_versions](public.clinical_record_versions.md) [public.clinical_records](public.clinical_records.md) [public.practitioner_agreements](public.practitioner_agreements.md) [public.practitioner_identifiers](public.practitioner_identifiers.md) [public.sop_acknowledgements](public.sop_acknowledgements.md) [public.sop_versions](public.sop_versions.md) [public.sops](public.sops.md) [public.staff_invitations](public.staff_invitations.md) [public.step_up_grants](public.step_up_grants.md) [public.user_roles](public.user_roles.md) |  |  |
+| id | uuid |  | false | [public.care_relationships](public.care_relationships.md) [public.clinical_record_versions](public.clinical_record_versions.md) [public.clinical_records](public.clinical_records.md) [public.practitioner_agreements](public.practitioner_agreements.md) [public.practitioner_identifiers](public.practitioner_identifiers.md) [public.sop_acknowledgements](public.sop_acknowledgements.md) [public.sop_versions](public.sop_versions.md) [public.sops](public.sops.md) [public.staff_invitations](public.staff_invitations.md) [public.step_up_grants](public.step_up_grants.md) [public.tenant_settings](public.tenant_settings.md) [public.user_roles](public.user_roles.md) |  |  |
 | is_active | boolean |  | false |  |  |  |
 | is_superuser | boolean |  | false |  |  |  |
 | tenant_id | uuid |  | true |  | [public.tenants](public.tenants.md) |  |
@@ -52,6 +52,7 @@ erDiagram
 "public.staff_invitations" }o--|| "public.user" : "FOREIGN KEY (invited_by) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
 "public.staff_invitations" |o--|| "public.user" : "FOREIGN KEY (user_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
 "public.step_up_grants" }o--|| "public.user" : "FOREIGN KEY (user_id) REFERENCES #quot;user#quot;(id) ON DELETE CASCADE"
+"public.tenant_settings" }o--|| "public.user" : "FOREIGN KEY (updated_by) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
 "public.user_roles" }o--|| "public.user" : "FOREIGN KEY (granted_by) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
 "public.user_roles" }o--|| "public.user" : "FOREIGN KEY (user_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
 "public.user" }o--o| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL"
@@ -175,6 +176,13 @@ erDiagram
   uuid tenant_id FK
   varchar token_hash
   uuid user_id FK
+}
+"public.tenant_settings" {
+  integer adult_retention_years
+  text__ draft_staging_roles
+  uuid tenant_id FK
+  timestamp_with_time_zone updated_at
+  uuid updated_by FK
 }
 "public.user_roles" {
   timestamp_with_time_zone granted_at

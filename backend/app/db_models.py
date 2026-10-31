@@ -32,6 +32,7 @@ from app.modules.patients.models import (
     PatientAlert,
     PatientEmergencyContact,
 )
+from app.modules.practice.models import TenantSettings
 from app.modules.prescriptions.models import (
     DispatchAttempt,
     Prescription,
@@ -83,6 +84,7 @@ __all__ = [
     "StaffInvitation",
     "StepUpGrant",
     "Tenant",
+    "TenantSettings",
     "TgaApproval",
     "TgaApprovalEvent",
     "User",
