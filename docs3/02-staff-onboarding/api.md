@@ -1,6 +1,7 @@
 # Staff onboarding: API
 
-Status: **Proposed.** Tenant resolved from the session. Every write audited in the same transaction.
+Status: **Built** (2026-10-31), with the differences recorded under "As built" below. Tenant resolved
+from the session. Every write audited in the same transaction.
 
 ## Onboarding and the vault (`users_roles`)
 
@@ -37,3 +38,31 @@ Status: **Proposed.** Tenant resolved from the session. Every write audited in t
 `practitioner.identifier_updated`, `practitioner.agreement_recorded`, `practitioner.onboarding_read`,
 `sop.published`, `sop.acknowledged`, `prescription.sign` (reason `PRESCRIBER_NOT_READY`).
 Payloads carry kinds and statuses, never identifier values.
+
+
+## As built (2026-10-31)
+
+- **Pack status is one query** (`users_roles.onboarding.missing_items`): agreement, an `ACTIVE`
+  unexpired AHPRA and prescriber number, and the current version of every *required for onboarding*
+  SOP that applies to the person's roles. The pack dialog, the staff list and the signing gate all call
+  it. No pack rows at all reads as missing everything (fail closed).
+- **Pending vault entries are derived, not created on a role grant**: a kind with no row reads
+  `MISSING`. HPI-I and the provider number are recorded but not required (until eScripts/Medicare).
+  One provider number per person (no per-location rows yet).
+- **Identifier states**: stored `PENDING` / `ACTIVE`; `EXPIRING` (60 days) and `EXPIRED` are derived
+  from `expires_on`. Values are encrypted with `FIELD_ENCRYPTION_KEY` and only masked forms leave the
+  server. The step-up operation is `practitioner.identifier_update`, bound to the practitioner.
+- **Sign gate**: `POST /prescriptions/{id}/sign` answers `403 PRESCRIBER_NOT_READY` with
+  `detail.missing` (`AGREEMENT`, `AHPRA`, `PRESCRIBER_NUMBER`, `SOP:<id>`) after the step-up and state
+  checks and before the safety gate; audited `prescription.sign` `DENIED`, reason
+  `PRESCRIBER_NOT_READY`. It applies to anyone who signs, whatever role let them.
+- **Staff list**: `onboarding_status` is `INVITED` / `INACTIVE` / `ACTIVE`, or for an active Doctor or
+  Authorised Prescriber `PACK_INCOMPLETE` / `READY`.
+- **First hour** is built in the client from `GET /users/me/permissions`, which now also returns
+  `role_codes`; dismissal is per person per browser. No `/users/me/first-hour` route.
+- **The pack read** (`GET /users/{id}/onboarding`) is limited like other reads (the Today card reads a
+  doctor's own pack); vault writes carry the administrative limit.
+- **SOP bodies** are plain text. Print opens a standalone page stamped *UNCONTROLLED COPY*.
+- **Audit names**: `practitioner.identifier_update`, `practitioner.agreement_record`,
+  `practitioner.onboarding_read` (USER group); `sop.publish`, `sop.acknowledge` (TENANT group).
+- **Not built yet**: expiry items on Today (R17), the eRx connection id (D7e).

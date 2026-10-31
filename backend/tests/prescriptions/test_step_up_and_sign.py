@@ -59,7 +59,12 @@ def test_a_grant_is_stored_as_a_hash_and_audited(rx: RxApi, clinic: Clinic) -> N
         )
     assert token not in stored
     assert clinic.owner.tenant_id is not None
-    [event] = rx.audit(clinic.owner.tenant_id, "auth.step_up")
+    # The fixture's onboarding pack spent grants of its own (`practitioner.identifier_update`).
+    [event] = [
+        event
+        for event in rx.audit(clinic.owner.tenant_id, "auth.step_up")
+        if event["payload"]["operation"] == "prescription.sign"
+    ]
     assert event["payload"] == {
         "operation": "prescription.sign",
         "mfa_method": "PASSWORD_REENTRY",

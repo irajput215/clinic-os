@@ -239,6 +239,7 @@ granting role from an account.
 """
 
 import uuid
+from typing import NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 
@@ -247,12 +248,13 @@ from app.core.config import settings
 from app.core.rate_limit import (
     admin_rate_limit,
     rate_limit,
+    read_rate_limit,
     signup_rate_limit,
     signup_resend_rate_limit,
     signup_verify_rate_limit,
 )
 from app.models import Message, Token
-from app.modules.users_roles import service, signup
+from app.modules.users_roles import onboarding, service, signup
 from app.modules.users_roles.catalog import (
     EMAIL_NOT_CONFIGURED,
     EMAIL_UNAVAILABLE,
@@ -263,8 +265,12 @@ from app.modules.users_roles.catalog import (
     USERS_ROLES_PERMISSIONS,
 )
 from app.modules.users_roles.schemas import (
+    AgreementCreate,
+    IdentifierKind,
+    IdentifierUpdate,
     InvitationAccept,
     InvitationAccepted,
+    OnboardingPackRead,
     OrganisationSignup,
     OwnPermissionsRead,
     PermissionsPublic,
@@ -695,3 +701,72 @@ def accept_invitation(*, body: InvitationAccept) -> InvitationAccepted:
             },
         )
     return accepted
+
+
+# -- docs3 feature 02: the onboarding pack and credential vault --------------------------------------
+
+# No router-wide limit: the pack read is a person's own everyday read (the Today card), limited like
+# other reads; the vault writes are administrative and carry the administrative limit.
+onboarding_router = APIRouter(prefix="/users", tags=["users"])
+
+
+def _onboarding_refused(refused: onboarding.OnboardingRefused) -> NoReturn:
+    raise HTTPException(
+        status_code=refused.status_code,
+        detail={"code": refused.code, "message": refused.message},
+    )
+
+
+@onboarding_router.get(
+    "/{user_id}/onboarding",
+    response_model=OnboardingPackRead,
+    dependencies=[Depends(read_rate_limit)],
+)
+def read_onboarding_pack(*, actor: ActorDep, user_id: uuid.UUID) -> OnboardingPackRead:
+    """A person's onboarding pack: themself, or `tenant:configure` / `audit:read`. Values masked;
+    the read is audited. `404` for an account of another organisation."""
+    try:
+        return onboarding.read_pack(actor=actor, user_id=user_id)
+    except onboarding.OnboardingRefused as refused:
+        _onboarding_refused(refused)
+
+
+@onboarding_router.put(
+    "/{user_id}/identifiers/{kind}",
+    response_model=OnboardingPackRead,
+    dependencies=_ADMIN_DEPENDENCIES,
+)
+def update_identifier(
+    *,
+    actor: ActorDep,
+    user_id: uuid.UUID,
+    kind: IdentifierKind,
+    body: IdentifierUpdate,
+) -> OnboardingPackRead:
+    """Record or re-verify one identifier (`tenant:configure` + a step-up bound to
+    `practitioner.identifier_update` and this person). `422 IDENTIFIER_FORMAT` names the format."""
+    service.authorize(actor, onboarding.CONFIGURE)
+    try:
+        return onboarding.update_identifier(
+            actor=actor, user_id=user_id, kind=kind, body=body
+        )
+    except onboarding.OnboardingRefused as refused:
+        _onboarding_refused(refused)
+
+
+@onboarding_router.post(
+    "/{user_id}/agreements",
+    response_model=OnboardingPackRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=_ADMIN_DEPENDENCIES,
+)
+def record_agreement(
+    *, actor: ActorDep, user_id: uuid.UUID, body: AgreementCreate
+) -> OnboardingPackRead:
+    """Record the practitioner agreement the person signed (`tenant:configure`); attested by the
+    caller."""
+    service.authorize(actor, onboarding.CONFIGURE)
+    try:
+        return onboarding.record_agreement(actor=actor, user_id=user_id, body=body)
+    except onboarding.OnboardingRefused as refused:
+        _onboarding_refused(refused)

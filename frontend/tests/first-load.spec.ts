@@ -9,13 +9,19 @@ import { expect, test } from "./fixtures"
  *
  * The owner holds `tenant:read`, so the slug is asked; it waits for the permission set by design
  * (`data/tenant.ts`: never ask what the server is certain to refuse).
+ *
+ * The "Your first hour" card (docs3 feature 02) adds two reads once the permission set says who is
+ * asking: the SOPs waiting for this person, and, for a doctor (the owner here also consults), their
+ * own onboarding pack. Hidden once dismissed, it asks neither.
  */
 const EXPECTED = [
   "/api/v1/dashboard/today",
   "/api/v1/prescriptions?limit=100",
+  "/api/v1/sops",
   "/api/v1/tenants/current",
   "/api/v1/tenants/current/profile",
   "/api/v1/tga-approvals?limit=1",
+  "/api/v1/users/:id/onboarding",
   "/api/v1/users/me",
   "/api/v1/users/me/permissions",
 ]
@@ -38,7 +44,13 @@ test("a cold load of Today asks each API question once, with no waterfall", asyn
   page.on("request", (request) => {
     const url = new URL(request.url())
     if (url.pathname.startsWith("/api/"))
-      calls.push({ path: url.pathname + url.search, request })
+      calls.push({
+        path: (url.pathname + url.search).replace(
+          /\/users\/[0-9a-f-]{36}\//,
+          "/users/:id/",
+        ),
+        request,
+      })
   })
 
   await page.goto("/")

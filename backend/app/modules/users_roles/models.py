@@ -26,7 +26,7 @@ requires.
 """
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import sqlalchemy as sa
 from sqlmodel import Field, SQLModel
@@ -236,3 +236,94 @@ class SignupRequest(SQLModel, table=True):
     expires_at: datetime = Field(sa_type=_TIMESTAMPTZ)
     send_count: int = Field(default=1)
     created_at: datetime = Field(default_factory=_utcnow, sa_type=_TIMESTAMPTZ)
+
+
+# -- docs3 feature 02: the prescriber's onboarding pack ---------------------------------------------
+
+#: The identifiers a prescriber's credential vault holds (manual §15.2, App. C). The eRx connection id
+#: waits for eScripts (decision D7e) and is not stored until then.
+IDENTIFIER_KINDS: tuple[str, ...] = (
+    "AHPRA",
+    "HPI_I",
+    "PRESCRIBER_NUMBER",
+    "PROVIDER_NUMBER",
+)
+#: Recorded but not yet checked (`PENDING`), or checked and attested (`ACTIVE`). `EXPIRING` and
+#: `EXPIRED` are derived from `expires_on` at read time, never stored.
+IDENTIFIER_STATUSES: tuple[str, ...] = ("PENDING", "ACTIVE")
+
+
+def _in(values: tuple[str, ...]) -> str:
+    return ", ".join(f"'{value}'" for value in values)
+
+
+class PractitionerIdentifier(SQLModel, table=True):
+    """One identifier in a prescriber's credential vault (docs3 feature 02, R10-R12).
+
+    The value is encrypted with the field-encryption envelope patients' Medicare numbers use (D13),
+    bound to the tenant and the identifier kind; nothing in clear but the masked form at read time.
+    Verification is an attestation: who checked, when and how (D9 - no live AHPRA lookup yet). Each
+    change needs a step-up and is audited without the value.
+    """
+
+    __tablename__ = "practitioner_identifiers"
+    __table_args__ = (
+        sa.UniqueConstraint(
+            "tenant_id",
+            "user_id",
+            "kind",
+            name="uq_practitioner_identifiers_tenant_user_kind",
+        ),
+        sa.CheckConstraint(f"kind IN ({_in(IDENTIFIER_KINDS)})", name="kind"),
+        sa.CheckConstraint(f"status IN ({_in(IDENTIFIER_STATUSES)})", name="status"),
+        sa.CheckConstraint(
+            "status = 'PENDING' OR (verified_by IS NOT NULL AND verified_at IS NOT NULL"
+            " AND verification_method IS NOT NULL)",
+            name="active_is_attested",
+        ),
+    )
+
+    id: uuid.UUID = Field(
+        default_factory=uuid.uuid4,
+        primary_key=True,
+        sa_column_kwargs={"server_default": sa.text("gen_random_uuid()")},
+    )
+    tenant_id: uuid.UUID = Field(
+        foreign_key="tenants.id", ondelete="RESTRICT", nullable=False
+    )
+    user_id: uuid.UUID = Field(foreign_key="user.id", ondelete="RESTRICT")
+    kind: str
+    value_ciphertext: bytes = Field(sa_type=sa.LargeBinary)
+    status: str = Field(default="PENDING")
+    expires_on: date | None = Field(default=None)
+    verified_by: uuid.UUID | None = Field(
+        default=None, foreign_key="user.id", ondelete="RESTRICT"
+    )
+    verified_at: datetime | None = Field(default=None, sa_type=_TIMESTAMPTZ)
+    verification_method: str | None = Field(default=None, max_length=120)
+    updated_by: uuid.UUID = Field(foreign_key="user.id", ondelete="RESTRICT")
+    updated_at: datetime = Field(default_factory=_utcnow, sa_type=_TIMESTAMPTZ)
+
+
+class PractitionerAgreement(SQLModel, table=True):
+    """A prescriber's signed practitioner agreement, as attested by the clinic (R13). Append-only:
+    a newer version is a new row; the document itself waits for document storage (D10)."""
+
+    __tablename__ = "practitioner_agreements"
+    __table_args__ = (
+        sa.Index("ix_practitioner_agreements_tenant_user", "tenant_id", "user_id"),
+    )
+
+    id: uuid.UUID = Field(
+        default_factory=uuid.uuid4,
+        primary_key=True,
+        sa_column_kwargs={"server_default": sa.text("gen_random_uuid()")},
+    )
+    tenant_id: uuid.UUID = Field(
+        foreign_key="tenants.id", ondelete="RESTRICT", nullable=False
+    )
+    user_id: uuid.UUID = Field(foreign_key="user.id", ondelete="RESTRICT")
+    agreement_version: str = Field(max_length=32)
+    signed_on: date
+    attested_by: uuid.UUID = Field(foreign_key="user.id", ondelete="RESTRICT")
+    attested_at: datetime = Field(default_factory=_utcnow, sa_type=_TIMESTAMPTZ)

@@ -8,7 +8,7 @@
 | email | varchar(255) |  | false |  |  |  |
 | full_name | varchar(255) |  | true |  |  |  |
 | hashed_password | varchar |  | false |  |  |  |
-| id | uuid |  | false | [public.care_relationships](public.care_relationships.md) [public.clinical_record_versions](public.clinical_record_versions.md) [public.clinical_records](public.clinical_records.md) [public.staff_invitations](public.staff_invitations.md) [public.step_up_grants](public.step_up_grants.md) [public.user_roles](public.user_roles.md) |  |  |
+| id | uuid |  | false | [public.care_relationships](public.care_relationships.md) [public.clinical_record_versions](public.clinical_record_versions.md) [public.clinical_records](public.clinical_records.md) [public.practitioner_agreements](public.practitioner_agreements.md) [public.practitioner_identifiers](public.practitioner_identifiers.md) [public.sop_acknowledgements](public.sop_acknowledgements.md) [public.sop_versions](public.sop_versions.md) [public.sops](public.sops.md) [public.staff_invitations](public.staff_invitations.md) [public.step_up_grants](public.step_up_grants.md) [public.user_roles](public.user_roles.md) |  |  |
 | is_active | boolean |  | false |  |  |  |
 | is_superuser | boolean |  | false |  |  |  |
 | tenant_id | uuid |  | true |  | [public.tenants](public.tenants.md) |  |
@@ -41,6 +41,14 @@ erDiagram
 "public.care_relationships" }o--|| "public.user" : "FOREIGN KEY (practitioner_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
 "public.clinical_record_versions" }o--|| "public.user" : "FOREIGN KEY (author_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
 "public.clinical_records" }o--|| "public.user" : "FOREIGN KEY (author_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
+"public.practitioner_agreements" }o--|| "public.user" : "FOREIGN KEY (attested_by) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
+"public.practitioner_agreements" }o--|| "public.user" : "FOREIGN KEY (user_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
+"public.practitioner_identifiers" }o--|| "public.user" : "FOREIGN KEY (updated_by) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
+"public.practitioner_identifiers" }o--|| "public.user" : "FOREIGN KEY (user_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
+"public.practitioner_identifiers" }o--o| "public.user" : "FOREIGN KEY (verified_by) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
+"public.sop_acknowledgements" }o--|| "public.user" : "FOREIGN KEY (user_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
+"public.sop_versions" }o--|| "public.user" : "FOREIGN KEY (published_by) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
+"public.sops" }o--|| "public.user" : "FOREIGN KEY (created_by) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
 "public.staff_invitations" }o--|| "public.user" : "FOREIGN KEY (invited_by) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
 "public.staff_invitations" |o--|| "public.user" : "FOREIGN KEY (user_id) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
 "public.step_up_grants" }o--|| "public.user" : "FOREIGN KEY (user_id) REFERENCES #quot;user#quot;(id) ON DELETE CASCADE"
@@ -94,6 +102,58 @@ erDiagram
   varchar record_type
   timestamp_with_time_zone signed_at
   uuid tenant_id FK
+}
+"public.practitioner_agreements" {
+  varchar_32_ agreement_version
+  timestamp_with_time_zone attested_at
+  uuid attested_by FK
+  uuid id
+  date signed_on
+  uuid tenant_id FK
+  uuid user_id FK
+}
+"public.practitioner_identifiers" {
+  date expires_on
+  uuid id
+  varchar kind
+  varchar status
+  uuid tenant_id FK
+  timestamp_with_time_zone updated_at
+  uuid updated_by FK
+  uuid user_id FK
+  bytea value_ciphertext
+  varchar_120_ verification_method
+  timestamp_with_time_zone verified_at
+  uuid verified_by FK
+}
+"public.sop_acknowledgements" {
+  timestamp_with_time_zone acknowledged_at
+  uuid id
+  uuid sop_id FK
+  uuid tenant_id FK
+  uuid user_id FK
+  integer version FK
+}
+"public.sop_versions" {
+  text body
+  uuid id
+  timestamp_with_time_zone published_at
+  uuid published_by FK
+  uuid sop_id FK
+  uuid tenant_id FK
+  varchar_200_ title
+  integer version
+}
+"public.sops" {
+  text__ applies_to_roles
+  timestamp_with_time_zone created_at
+  uuid created_by FK
+  integer current_version
+  uuid id
+  boolean required_for_onboarding
+  uuid tenant_id FK
+  varchar_200_ title
+  timestamp_with_time_zone updated_at
 }
 "public.staff_invitations" {
   timestamp_with_time_zone accepted_at

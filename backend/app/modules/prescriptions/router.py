@@ -84,10 +84,10 @@ _KEY_MAX = 255
 
 
 def _raise(refusal: Refusal) -> NoReturn:
-    raise HTTPException(
-        status_code=refusal.status_code,
-        detail={"code": refusal.code, "message": refusal.message},
-    )
+    detail: dict[str, object] = {"code": refusal.code, "message": refusal.message}
+    if refusal.missing:
+        detail["missing"] = list(refusal.missing)
+    raise HTTPException(status_code=refusal.status_code, detail=detail)
 
 
 def _intent_key(idempotency_key: str | None) -> str:

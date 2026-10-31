@@ -34,6 +34,7 @@ export interface NavItem {
     | "/approvals"
     | "/admin"
     | "/settings"
+    | "/sops"
   /**
    * The clinic's public booking page, opened outside the app shell at `/book/<slug>`. Shown only
    * once the signed-in clinic's slug is known.
@@ -87,7 +88,7 @@ export const NAV: Array<{ group: string; items: NavItem[] }> = [
     items: [
       { label: "Patient mail", icon: Mail },
       { label: "Inbox", icon: Inbox },
-      { label: "SOPs & policies", icon: BookOpen },
+      { label: "SOPs & policies", icon: BookOpen, to: "/sops" },
       {
         label: "Administration",
         icon: UserCog,

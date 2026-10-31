@@ -16,6 +16,8 @@ export type MyPermissions =
       codes: readonly string[]
       /** Held only through a care relationship (a doctor's or nurse's patient grants, T1-34). */
       relationshipBound: readonly string[]
+      /** The account's own role codes (docs3 feature 02: the "first hour" card). */
+      roleCodes: readonly string[]
     }
   | { known: false }
 
@@ -28,13 +30,14 @@ export const myPermissionsQuery = queryOptions({
         known: true,
         codes: data.permissions,
         relationshipBound: data.relationship_bound ?? [],
+        roleCodes: data.role_codes ?? [],
       }
     } catch (error) {
       const status = httpStatus(error)
       if (status === 404 || status === 422) return { known: false }
       // `403` is the answer for an account with no organisation: it holds nothing.
       if (status === 403)
-        return { known: true, codes: [], relationshipBound: [] }
+        return { known: true, codes: [], relationshipBound: [], roleCodes: [] }
       throw error
     }
   },

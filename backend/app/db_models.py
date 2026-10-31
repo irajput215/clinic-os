@@ -37,9 +37,12 @@ from app.modules.prescriptions.models import (
     Prescription,
     PrescriptionEvent,
 )
+from app.modules.sops.models import Sop, SopAcknowledgement, SopVersion
 from app.modules.tga_approvals.models import TgaApproval, TgaApprovalEvent
 from app.modules.users_roles.models import (
     Permission,
+    PractitionerAgreement,
+    PractitionerIdentifier,
     Role,
     RolePermission,
     SignupRequest,
@@ -67,11 +70,16 @@ __all__ = [
     "PatientAlert",
     "PatientEmergencyContact",
     "Permission",
+    "PractitionerAgreement",
+    "PractitionerIdentifier",
     "Prescription",
     "PrescriptionEvent",
     "Role",
     "RolePermission",
     "SignupRequest",
+    "Sop",
+    "SopAcknowledgement",
+    "SopVersion",
     "StaffInvitation",
     "StepUpGrant",
     "Tenant",

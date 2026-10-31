@@ -20,7 +20,7 @@
 | ---- | ---- | ---------- |
 | ck_step_up_grants_consumed_after_issue | CHECK | CHECK (((consumed_at IS NULL) OR (consumed_at >= issued_at))) |
 | ck_step_up_grants_max_lifetime | CHECK | CHECK ((expires_at <= (issued_at + '00:02:00'::interval))) |
-| ck_step_up_grants_operation | CHECK | CHECK (((operation)::text = ANY ((ARRAY['prescription.sign'::character varying, 'prescription.dispatch'::character varying])::text[]))) |
+| ck_step_up_grants_operation | CHECK | CHECK (((operation)::text = ANY ((ARRAY['prescription.sign'::character varying, 'prescription.dispatch'::character varying, 'practitioner.identifier_update'::character varying])::text[]))) |
 | ck_step_up_grants_token_hash | CHECK | CHECK (((token_hash)::text ~ '^[0-9a-f]{64}$'::text)) |
 | ck_step_up_grants_window | CHECK | CHECK ((expires_at > issued_at)) |
 | fk_step_up_grants_tenant_id_tenants | FOREIGN KEY | FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE |

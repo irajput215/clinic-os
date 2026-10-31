@@ -59,6 +59,11 @@ _CLEANUP_ORDER = (
     "patient_emergency_contacts",
     "patients",
     "pharmacies",
+    "sop_acknowledgements",
+    "sop_versions",
+    "sops",
+    "practitioner_identifiers",
+    "practitioner_agreements",
     "staff_invitations",
     "user_roles",
     "role_permissions",
@@ -141,6 +146,8 @@ def _week() -> str:
         "/tga-approvals",
         "/prescriptions",
         f"/appointments?{_week()}",
+        "/sops",
+        "/sops/matrix",
     ],
 )
 def test_signed_in_reads_work_as_the_app_role(
