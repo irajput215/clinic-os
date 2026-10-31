@@ -32,6 +32,7 @@
 | Name | Definition |
 | ---- | ---------- |
 | ix_sop_acknowledgements_tenant_user | CREATE INDEX ix_sop_acknowledgements_tenant_user ON public.sop_acknowledgements USING btree (tenant_id, user_id) |
+| ix_sop_acknowledgements_user_id | CREATE INDEX ix_sop_acknowledgements_user_id ON public.sop_acknowledgements USING btree (user_id) |
 | pk_sop_acknowledgements | CREATE UNIQUE INDEX pk_sop_acknowledgements ON public.sop_acknowledgements USING btree (id) |
 | uq_sop_acknowledgements_tenant_sop_version_user | CREATE UNIQUE INDEX uq_sop_acknowledgements_tenant_sop_version_user ON public.sop_acknowledgements USING btree (tenant_id, sop_id, version, user_id) |
 

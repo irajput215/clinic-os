@@ -34,6 +34,7 @@
 
 | Name | Definition |
 | ---- | ---------- |
+| ix_staff_invitations_invited_by | CREATE INDEX ix_staff_invitations_invited_by ON public.staff_invitations USING btree (invited_by) |
 | ix_staff_invitations_tenant_id | CREATE INDEX ix_staff_invitations_tenant_id ON public.staff_invitations USING btree (tenant_id) |
 | pk_staff_invitations | CREATE UNIQUE INDEX pk_staff_invitations ON public.staff_invitations USING btree (user_id) |
 

@@ -10,7 +10,7 @@ any table is defined.
 
 from sqlmodel import SQLModel
 
-from app.core.metadata import NAMING_CONVENTION
+from app.core.metadata import NAMING_CONVENTION, index_foreign_keys
 from app.models import User
 from app.modules.appointments.models import (
     Appointment,
@@ -50,6 +50,9 @@ from app.modules.users_roles.models import (
     StaffInvitation,
     UserRole,
 )
+
+# Every foreign key gets an index (see `index_foreign_keys`); after every model is imported.
+index_foreign_keys(SQLModel.metadata)
 
 __all__ = [
     "NAMING_CONVENTION",

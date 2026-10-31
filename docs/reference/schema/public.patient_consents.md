@@ -40,6 +40,7 @@
 
 | Name | Definition |
 | ---- | ---------- |
+| ix_patient_consents_application_id | CREATE INDEX ix_patient_consents_application_id ON public.patient_consents USING btree (application_id) |
 | ix_patient_consents_tenant_patient | CREATE INDEX ix_patient_consents_tenant_patient ON public.patient_consents USING btree (tenant_id, patient_id) |
 | pk_patient_consents | CREATE UNIQUE INDEX pk_patient_consents ON public.patient_consents USING btree (id) |
 

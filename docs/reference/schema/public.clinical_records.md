@@ -36,6 +36,7 @@
 
 | Name | Definition |
 | ---- | ---------- |
+| ix_clinical_records_author_id | CREATE INDEX ix_clinical_records_author_id ON public.clinical_records USING btree (author_id) |
 | ix_clinical_records_tenant_patient_created_at | CREATE INDEX ix_clinical_records_tenant_patient_created_at ON public.clinical_records USING btree (tenant_id, patient_id, created_at) |
 | pk_clinical_records | CREATE UNIQUE INDEX pk_clinical_records ON public.clinical_records USING btree (id) |
 | uq_clinical_records_tenant_id_id | CREATE UNIQUE INDEX uq_clinical_records_tenant_id_id ON public.clinical_records USING btree (tenant_id, id) |

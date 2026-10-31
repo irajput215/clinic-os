@@ -37,6 +37,7 @@
 
 | Name | Definition |
 | ---- | ---------- |
+| ix_sops_created_by | CREATE INDEX ix_sops_created_by ON public.sops USING btree (created_by) |
 | pk_sops | CREATE UNIQUE INDEX pk_sops ON public.sops USING btree (id) |
 | uq_sops_tenant_id_id | CREATE UNIQUE INDEX uq_sops_tenant_id_id ON public.sops USING btree (tenant_id, id) |
 

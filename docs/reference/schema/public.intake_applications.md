@@ -50,6 +50,8 @@
 
 | Name | Definition |
 | ---- | ---------- |
+| ix_intake_applications_tenant_id_appointment_id | CREATE INDEX ix_intake_applications_tenant_id_appointment_id ON public.intake_applications USING btree (tenant_id, appointment_id) |
+| ix_intake_applications_tenant_id_pharmacy_id | CREATE INDEX ix_intake_applications_tenant_id_pharmacy_id ON public.intake_applications USING btree (tenant_id, pharmacy_id) |
 | ix_intake_applications_tenant_patient | CREATE INDEX ix_intake_applications_tenant_patient ON public.intake_applications USING btree (tenant_id, patient_id) |
 | ix_intake_applications_tenant_status_created | CREATE INDEX ix_intake_applications_tenant_status_created ON public.intake_applications USING btree (tenant_id, status, created_at) |
 | pk_intake_applications | CREATE UNIQUE INDEX pk_intake_applications ON public.intake_applications USING btree (id) |

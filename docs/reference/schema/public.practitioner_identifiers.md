@@ -43,6 +43,9 @@
 
 | Name | Definition |
 | ---- | ---------- |
+| ix_practitioner_identifiers_updated_by | CREATE INDEX ix_practitioner_identifiers_updated_by ON public.practitioner_identifiers USING btree (updated_by) |
+| ix_practitioner_identifiers_user_id | CREATE INDEX ix_practitioner_identifiers_user_id ON public.practitioner_identifiers USING btree (user_id) |
+| ix_practitioner_identifiers_verified_by | CREATE INDEX ix_practitioner_identifiers_verified_by ON public.practitioner_identifiers USING btree (verified_by) |
 | pk_practitioner_identifiers | CREATE UNIQUE INDEX pk_practitioner_identifiers ON public.practitioner_identifiers USING btree (id) |
 | uq_practitioner_identifiers_tenant_user_kind | CREATE UNIQUE INDEX uq_practitioner_identifiers_tenant_user_kind ON public.practitioner_identifiers USING btree (tenant_id, user_id, kind) |
 

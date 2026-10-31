@@ -12,7 +12,7 @@ fails when it is not applied.
 
 from typing import Any
 
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 from sqlmodel import SQLModel
 
 import app.db_models  # noqa: F401 - importing registers every table on SQLModel.metadata
@@ -134,3 +134,32 @@ def test_the_tenant_checks_are_named_as_the_decisions_record_says() -> None:
 
     assert "ck_tenants_status" in actual
     assert "ck_tenants_slug_lowercase" in actual
+
+
+def test_every_foreign_key_has_an_index() -> None:
+    """Postgres indexes only the referenced side of a foreign key; the referencing side needs one of
+    its own, or a parent-to-child join and the RESTRICT check on a parent's delete scan the child.
+    `index_foreign_keys` adds them; this asserts the database it built has every one."""
+    with engine.connect() as connection:
+        missing = (
+            connection.execute(
+                text(
+                    """
+                SELECT c.conrelid::regclass::text || '.' || c.conname
+                FROM pg_constraint c
+                WHERE c.contype = 'f' AND c.connamespace = 'public'::regnamespace
+                  AND NOT EXISTS (
+                    SELECT 1 FROM pg_index i
+                    WHERE i.indrelid = c.conrelid
+                      AND (string_to_array(i.indkey::text, ' ')::int2[])
+                          [1:array_length(c.conkey, 1)] @> c.conkey
+                      AND (string_to_array(i.indkey::text, ' ')::int2[])
+                          [1:array_length(c.conkey, 1)] <@ c.conkey)
+                ORDER BY 1
+                """
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert missing == []

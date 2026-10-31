@@ -36,6 +36,7 @@
 
 | Name | Definition |
 | ---- | ---------- |
+| ix_sop_versions_published_by | CREATE INDEX ix_sop_versions_published_by ON public.sop_versions USING btree (published_by) |
 | pk_sop_versions | CREATE UNIQUE INDEX pk_sop_versions ON public.sop_versions USING btree (id) |
 | uq_sop_versions_tenant_sop_version | CREATE UNIQUE INDEX uq_sop_versions_tenant_sop_version ON public.sop_versions USING btree (tenant_id, sop_id, version) |
 

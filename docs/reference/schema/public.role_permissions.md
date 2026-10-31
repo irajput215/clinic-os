@@ -24,6 +24,7 @@
 
 | Name | Definition |
 | ---- | ---------- |
+| ix_role_permissions_permission_id | CREATE INDEX ix_role_permissions_permission_id ON public.role_permissions USING btree (permission_id) |
 | ix_role_permissions_tenant_id | CREATE INDEX ix_role_permissions_tenant_id ON public.role_permissions USING btree (tenant_id) |
 | pk_role_permissions | CREATE UNIQUE INDEX pk_role_permissions ON public.role_permissions USING btree (role_id, permission_id) |
 
