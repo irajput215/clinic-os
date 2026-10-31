@@ -49,7 +49,9 @@ All errors use the existing `application/problem+json` envelope (`app/core/error
 - **Steps:** `consents` is always done (consent wording is versioned with the platform, feature 03 as
   built). `permissions_reviewed` is shown as optional and never ticked (no audit event for opening the
   grid yet). `prescriber_ready` uses feature 02's pack status.
-- **Not enforced yet:** "who may stage drafts" is recorded and shown; staging is still decided by each
-  role's `prescription:create`. Retention is stored, not enforced.
+- **Doctor-only prescribing (owner decision, 2026-10-31):** "who may stage drafts" (R4) is withdrawn.
+  Only Doctors and Authorised Prescribers write scripts; the Nurse role lost `prescription:create` and
+  `prescription:modify`, and the `draft_staging_roles` column was dropped. The settings hold retention
+  only, which is stored, not enforced.
 - **R7** ("Your clinic is ready" once) is not built: the card simply disappears when every required
   step is done.

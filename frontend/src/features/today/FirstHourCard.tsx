@@ -60,9 +60,9 @@ const QUICK_STARTS: Array<{ roles: string[]; title: string; lines: Line[] }> = [
     roles: ["NURSE"],
     title: "Nurse",
     lines: [
-      { text: "Open the script queue", to: "/scripts" },
-      { text: "Stage a draft with the triage outcome", to: "/scripts" },
-      { text: "Check the approval before you stage", to: "/approvals" },
+      { text: "Find a patient and open their record", to: "/patients" },
+      { text: "Write a consult note", to: "/patients" },
+      { text: "Check a patient's TGA approval", to: "/approvals" },
     ],
   },
   {

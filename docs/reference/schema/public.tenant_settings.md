@@ -5,7 +5,6 @@
 | Name | Type | Default | Nullable | Children | Parents | Comment |
 | ---- | ---- | ------- | -------- | -------- | ------- | ------- |
 | adult_retention_years | integer |  | false |  |  |  |
-| draft_staging_roles | text[] |  | false |  |  |  |
 | tenant_id | uuid |  | false |  | [public.tenants](public.tenants.md) |  |
 | updated_at | timestamp with time zone |  | false |  |  |  |
 | updated_by | uuid |  | false |  | [public.user](public.user.md) |  |
@@ -15,12 +14,10 @@
 | Name | Type | Definition |
 | ---- | ---- | ---------- |
 | ck_tenant_settings_adult_retention_years | CHECK | CHECK ((adult_retention_years >= 7)) |
-| ck_tenant_settings_draft_staging_roles | CHECK | CHECK ((('NURSE'::text = ANY (draft_staging_roles)) AND (draft_staging_roles <@ ARRAY['NURSE'::text, 'DOCTOR'::text, 'ADMINISTRATOR'::text]))) |
 | fk_tenant_settings_tenant_id_tenants | FOREIGN KEY | FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT |
 | fk_tenant_settings_updated_by_user | FOREIGN KEY | FOREIGN KEY (updated_by) REFERENCES "user"(id) ON DELETE RESTRICT |
 | pk_tenant_settings | PRIMARY KEY | PRIMARY KEY (tenant_id) |
 | tenant_settings_adult_retention_years_not_null | n | NOT NULL adult_retention_years |
-| tenant_settings_draft_staging_roles_not_null | n | NOT NULL draft_staging_roles |
 | tenant_settings_tenant_id_not_null | n | NOT NULL tenant_id |
 | tenant_settings_updated_at_not_null | n | NOT NULL updated_at |
 | tenant_settings_updated_by_not_null | n | NOT NULL updated_by |
@@ -42,7 +39,6 @@ erDiagram
 
 "public.tenant_settings" {
   integer adult_retention_years
-  text__ draft_staging_roles
   uuid tenant_id FK
   timestamp_with_time_zone updated_at
   uuid updated_by FK

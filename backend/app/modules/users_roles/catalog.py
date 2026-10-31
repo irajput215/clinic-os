@@ -146,6 +146,9 @@ SYSTEM_ROLE_CATALOGUE: Final[tuple[tuple[str, str, frozenset[str]], ...]] = (
     (
         "NURSE",
         "Nurse",
+        # Doctor-only prescribing (owner decision, 2026-10-31): a nurse reads the script queue but
+        # no longer stages or edits a draft (`prescription:create`, `prescription:modify` removed by
+        # migration `doctor_only_prescribing`). Every script is written by its prescriber.
         frozenset(
             {
                 "patient:read",
@@ -153,8 +156,6 @@ SYSTEM_ROLE_CATALOGUE: Final[tuple[tuple[str, str, frozenset[str]], ...]] = (
                 "patient:update",
                 "clinical_record:read",
                 "clinical_record:write",
-                "prescription:create",
-                "prescription:modify",
                 "prescription:read",
                 "tga_approval:read",
             }
@@ -285,7 +286,8 @@ AUDIT_READ_PERMISSION: Final[str] = "audit:read"
 TGA_APPROVAL_READ: Final[str] = "tga_approval:read"
 
 # The permission each prescription route requires (`docs2/sdlc/07-script-queue/api.md`, agreed
-# 2026-10-07). Staging is the existing `prescription:create` (the matrix's `G draft` for a Nurse);
+# 2026-10-07). Staging is the existing `prescription:create` (held by prescribers only since the
+# doctor-only decision of 2026-10-31; the matrix's `G draft` for a Nurse is withdrawn);
 # signing is `prescription:sign` (`G pr`: prescriber of record only, enforced by the service and by a
 # database check); dispatch is `prescription:dispatch`; the queue read is the added `prescription:read`.
 PRESCRIPTION_PERMISSIONS: Final[dict[str, str]] = {
