@@ -29,6 +29,7 @@ import {
 } from "@/lib/format"
 import { currentUserQuery, displayName } from "@/lib/session"
 import { FirstHourCard } from "./FirstHourCard"
+import { SetupChecklist } from "./SetupChecklist"
 
 interface AttentionItem {
   id: string
@@ -106,6 +107,7 @@ export function TodayPage() {
           .join(" · ")}
       />
 
+      <SetupChecklist />
       <FirstHourCard userId={me.id} />
 
       <div className="grid grid-cols-2 gap-3.5 md:grid-cols-4">

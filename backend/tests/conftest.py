@@ -102,6 +102,7 @@ def db() -> Generator[Session]:
         session.execute(delete(CareRelationship))
         # docs3 feature 02: onboarding rows name their practitioner and attester (RESTRICT).
         for table in (
+            "tenant_settings",
             "sop_acknowledgements",
             "sop_versions",
             "sops",

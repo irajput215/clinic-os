@@ -2025,6 +2025,40 @@ export type PharmacyRead = {
 };
 
 /**
+ * PracticeSettingsRead
+ */
+export type PracticeSettingsRead = {
+    /**
+     * Draft Staging Roles
+     */
+    draft_staging_roles: Array<'NURSE' | 'DOCTOR' | 'ADMINISTRATOR'>;
+    /**
+     * Adult Retention Years
+     */
+    adult_retention_years: number;
+    /**
+     * Updated At
+     */
+    updated_at: string | null;
+};
+
+/**
+ * PracticeSettingsUpdate
+ *
+ * Both fields, every time: the Practice tab saves them together. Unknown fields are refused.
+ */
+export type PracticeSettingsUpdate = {
+    /**
+     * Draft Staging Roles
+     */
+    draft_staging_roles: Array<'NURSE' | 'DOCTOR' | 'ADMINISTRATOR'>;
+    /**
+     * Adult Retention Years
+     */
+    adult_retention_years: number;
+};
+
+/**
  * PractitionerRead
  *
  * A bookable member of staff: an active account holding a Doctor, Authorised Prescriber or
@@ -2707,6 +2741,48 @@ export type SafetyAnswers = {
      * Substance Dependence
      */
     substance_dependence: boolean;
+};
+
+/**
+ * SetupRead
+ *
+ * The setup checklist (R1-R3), every step derived from live data.
+ */
+export type SetupRead = {
+    /**
+     * Steps
+     */
+    steps: Array<SetupStep>;
+    /**
+     * Required Done
+     */
+    required_done: number;
+    /**
+     * Required Total
+     */
+    required_total: number;
+    /**
+     * Ready
+     */
+    ready: boolean;
+};
+
+/**
+ * SetupStep
+ */
+export type SetupStep = {
+    /**
+     * Key
+     */
+    key: 'clinic_name' | 'hours' | 'team_invited' | 'prescriber_ready' | 'workflow' | 'consents' | 'permissions_reviewed' | 'booking_page' | 'integrations';
+    /**
+     * Status
+     */
+    status: 'done' | 'todo' | 'optional' | 'informational';
+    /**
+     * Required
+     */
+    required: boolean;
 };
 
 /**
@@ -7235,3 +7311,60 @@ export type sopsAcknowledgeResponses = {
 };
 
 export type sopsAcknowledgeResponse = sopsAcknowledgeResponses[keyof sopsAcknowledgeResponses];
+
+export type tenantsReadSetupData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/tenants/current/setup';
+};
+
+export type tenantsReadSetupResponses = {
+    /**
+     * Successful Response
+     */
+    200: SetupRead;
+};
+
+export type tenantsReadSetupResponse = tenantsReadSetupResponses[keyof tenantsReadSetupResponses];
+
+export type tenantsReadSettingsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/tenants/current/settings';
+};
+
+export type tenantsReadSettingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: PracticeSettingsRead;
+};
+
+export type tenantsReadSettingsResponse = tenantsReadSettingsResponses[keyof tenantsReadSettingsResponses];
+
+export type tenantsUpdateSettingsData = {
+    body: PracticeSettingsUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/tenants/current/settings';
+};
+
+export type tenantsUpdateSettingsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type tenantsUpdateSettingsError = tenantsUpdateSettingsErrors[keyof tenantsUpdateSettingsErrors];
+
+export type tenantsUpdateSettingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: PracticeSettingsRead;
+};
+
+export type tenantsUpdateSettingsResponse = tenantsUpdateSettingsResponses[keyof tenantsUpdateSettingsResponses];

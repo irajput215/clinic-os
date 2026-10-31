@@ -12,7 +12,8 @@ import { expect, test } from "./fixtures"
  *
  * The "Your first hour" card (docs3 feature 02) adds two reads once the permission set says who is
  * asking: the SOPs waiting for this person, and, for a doctor (the owner here also consults), their
- * own onboarding pack. Hidden once dismissed, it asks neither.
+ * own onboarding pack. Hidden once dismissed, it asks neither. The setup checklist (docs3 feature 01)
+ * adds one for whoever configures the practice, as the owner does.
  */
 const EXPECTED = [
   "/api/v1/dashboard/today",
@@ -20,6 +21,7 @@ const EXPECTED = [
   "/api/v1/sops",
   "/api/v1/tenants/current",
   "/api/v1/tenants/current/profile",
+  "/api/v1/tenants/current/setup",
   "/api/v1/tga-approvals?limit=1",
   "/api/v1/users/:id/onboarding",
   "/api/v1/users/me",

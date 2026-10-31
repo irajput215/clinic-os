@@ -59,6 +59,7 @@ _CLEANUP_ORDER = (
     "patient_emergency_contacts",
     "patients",
     "pharmacies",
+    "tenant_settings",
     "sop_acknowledgements",
     "sop_versions",
     "sops",
@@ -148,6 +149,8 @@ def _week() -> str:
         f"/appointments?{_week()}",
         "/sops",
         "/sops/matrix",
+        "/tenants/current/setup",
+        "/tenants/current/settings",
     ],
 )
 def test_signed_in_reads_work_as_the_app_role(

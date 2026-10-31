@@ -37,6 +37,7 @@ import { describeError } from "@/lib/http"
 import { currentUserQuery, signOut } from "@/lib/session"
 import { z } from "@/lib/zod"
 import { ClinicTab } from "./ClinicTab"
+import { PracticeTab } from "./PracticeTab"
 import { SETTINGS_TAB_KEYS, SETTINGS_TABS, type SettingsTab } from "./tabs"
 
 export function SettingsPage({ tab }: { tab: SettingsTab }) {
@@ -44,7 +45,7 @@ export function SettingsPage({ tab }: { tab: SettingsTab }) {
   const { data: me } = useSuspenseQuery(currentUserQuery)
   const canConfigureClinic = useCanConfigureClinic()
   const keys = SETTINGS_TAB_KEYS.filter(
-    (key) => key !== "clinic" || canConfigureClinic,
+    (key) => (key !== "clinic" && key !== "practice") || canConfigureClinic,
   )
 
   return (
@@ -52,7 +53,7 @@ export function SettingsPage({ tab }: { tab: SettingsTab }) {
       <PageHeader
         title="Settings"
         subtitle={
-          tab === "clinic"
+          tab === "clinic" || tab === "practice"
             ? "Your clinic: how it appears to your staff and your patients. Changes here apply to everyone in your clinic."
             : "Your own account: how you appear, how you sign in. Changes here apply only to you."
         }
@@ -77,6 +78,15 @@ export function SettingsPage({ tab }: { tab: SettingsTab }) {
             <SkeletonRows rows={2} />
           ) : canConfigureClinic ? (
             <ClinicTab />
+          ) : (
+            <NotForYourRole />
+          )
+        ) : null}
+        {tab === "practice" ? (
+          canConfigureClinic === undefined ? (
+            <SkeletonRows rows={2} />
+          ) : canConfigureClinic ? (
+            <PracticeTab />
           ) : (
             <NotForYourRole />
           )
