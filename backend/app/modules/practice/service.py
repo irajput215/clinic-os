@@ -5,15 +5,14 @@ can never disagree with the clinic: the display name, the opening hours row, the
 prescribers' onboarding packs (feature 02) and the saved practice settings.
 
 The practice settings are stored and shown. Retention is not enforced yet (nothing is ever
-hard-deleted), and "who may stage drafts" is recorded for the practice; staging itself is still
-decided by the `prescription:create` permission of each role.
+hard-deleted). Who writes scripts is not a setting: only prescribers hold `prescription:create`.
 """
 
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
-from typing import Final, cast
+from typing import Final
 
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert
@@ -22,7 +21,6 @@ from sqlmodel import Session, select
 from app.core.db import tenant_transaction
 from app.modules.audit import service as audit
 from app.modules.practice.models import (
-    DEFAULT_STAGING_ROLES,
     MIN_ADULT_RETENTION_YEARS,
     TenantSettings,
 )
@@ -31,7 +29,6 @@ from app.modules.practice.schemas import (
     PracticeSettingsUpdate,
     SetupRead,
     SetupStep,
-    StagingRole,
     StepKey,
 )
 from app.modules.users_roles import onboarding
@@ -57,12 +54,10 @@ def _row(session: Session, tenant_id: uuid.UUID) -> TenantSettings | None:
 def _read(row: TenantSettings | None) -> PracticeSettingsRead:
     if row is None:
         return PracticeSettingsRead(
-            draft_staging_roles=cast(list[StagingRole], list(DEFAULT_STAGING_ROLES)),
             adult_retention_years=MIN_ADULT_RETENTION_YEARS,
             updated_at=None,
         )
     return PracticeSettingsRead(
-        draft_staging_roles=cast(list[StagingRole], list(row.draft_staging_roles)),
         adult_retention_years=row.adult_retention_years,
         updated_at=row.updated_at,
     )
@@ -76,17 +71,12 @@ def read_settings(*, actor: Actor) -> PracticeSettingsRead:
 def update_settings(
     *, actor: Actor, body: PracticeSettingsUpdate
 ) -> PracticeSettingsRead:
-    """Save both settings; audited `tenant.config_changed` with the names of what changed (R6)."""
+    """Save the settings; audited `tenant.config_changed` with the names of what changed (R6)."""
     with _transaction(actor) as session:
         before = _read(_row(session, actor.tenant_id))
         changed = [
             name
             for name, old, new in (
-                (
-                    "draft_staging_roles",
-                    before.draft_staging_roles,
-                    body.draft_staging_roles,
-                ),
                 (
                     "adult_retention_years",
                     before.adult_retention_years,
@@ -97,7 +87,6 @@ def update_settings(
         ]
         now = datetime.now(UTC)
         values = {
-            "draft_staging_roles": list(body.draft_staging_roles),
             "adult_retention_years": body.adult_retention_years,
             "updated_by": actor.user_id,
             "updated_at": now,

@@ -43,8 +43,8 @@ required · `pr` prescriber of record only · `draft` draft records only · `own
 | `patient:export` | G `su` | G `su` | – | – | G `su` | – | G `su` `pl` |
 | `clinical_record:read` | G | G | G `cr` | G `cr` | G | – | G `ro` `pl` |
 | `clinical_record:write` | G | G | G `cr` | G `cr` | – | – | – |
-| `prescription:create` | G | G | G | G `draft` | – | – | – |
-| `prescription:modify` | G | G | G `own` | G `draft` | – | – | – |
+| `prescription:create` | G | G | G | – ¹ | – | – | – |
+| `prescription:modify` | G | G | G `own` | – ¹ | – | – | – |
 | `prescription:sign` | G `pr` | G `pr` | G `pr` | – | – | – | – |
 | `prescription:dispatch` | G | G | G | – | – | – | – |
 | `tga_approval:read` | G | G | G | G | G | – | G |
@@ -56,6 +56,11 @@ required · `pr` prescriber of record only · `draft` draft records only · `own
 | `users:manage` | G `su` | – | – | – | G `su` | – | – |
 | `tenant:configure` | G `su` | – | – | – | – | – | – |
 | `pharmacy:dispatch` | G | – | – | – | – | G | – |
+
+¹ Withdrawn 2026-10-31 (owner decision: doctor-only prescribing). A nurse no longer stages or edits a
+script draft; only prescribers write scripts. Migration `6e35bb45b360` removed the grants; the Practice
+Owner keeps the codes so it can grant the prescriber roles, and cannot sign without a complete
+onboarding pack (docs3 feature 02).
 
 `users:manage` **never** includes granting a permission the actor does not hold, and never includes
 `tenant:configure`. Source: `06-authentication-rbac.md` §9.

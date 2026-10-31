@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Loader2 } from "lucide-react"
 import { useEffect, useId, useState } from "react"
 import { toast } from "sonner"
-import type { PracticeSettingsRead } from "@/client/types.gen"
 import { Button } from "@/components/ui/button"
 import { practiceSettingsQuery, savePracticeSettings } from "@/data/practice"
 import {
@@ -14,39 +13,18 @@ import {
 } from "@/design/primitives"
 import { describeError } from "@/lib/http"
 
-type StagingRole = PracticeSettingsRead["draft_staging_roles"][number]
-
-const STAGING_CHOICES: Array<{ label: string; roles: StagingRole[] }> = [
-  { label: "Nurses", roles: ["NURSE"] },
-  { label: "Nurses and doctors", roles: ["NURSE", "DOCTOR"] },
-  {
-    label: "Nurses, doctors and reception",
-    roles: ["NURSE", "DOCTOR", "ADMINISTRATOR"],
-  },
-]
-
-const choiceOf = (roles: readonly string[]) =>
-  STAGING_CHOICES.findIndex(
-    (c) =>
-      c.roles.length === roles.length &&
-      c.roles.every((r) => roles.includes(r)),
-  )
-
 /**
- * Settings → Practice (manual §15.5): who may stage script drafts, and how long adult records are
- * kept. Both are saved together and audited. Retention is recorded now and enforced in a later phase;
- * nothing is ever hard-deleted.
+ * Settings → Practice (manual §15.5): how long adult records are kept. Saved and audited; enforced in
+ * a later phase, and nothing is ever hard-deleted. Who writes scripts is not a setting: only doctors
+ * and authorised prescribers do.
  */
 export function PracticeTab() {
   const settings = useQuery(practiceSettingsQuery)
   const queryClient = useQueryClient()
-  const [choice, setChoice] = useState(0)
   const [years, setYears] = useState("7")
-  const ids = { years: useId(), group: useId() }
+  const ids = { years: useId() }
   useEffect(() => {
-    if (!settings.data) return
-    setChoice(Math.max(0, choiceOf(settings.data.draft_staging_roles)))
-    setYears(String(settings.data.adult_retention_years))
+    if (settings.data) setYears(String(settings.data.adult_retention_years))
   }, [settings.data])
   const yearsNumber = Number(years)
   const yearsError =
@@ -57,10 +35,7 @@ export function PracticeTab() {
         : undefined
   const save = useMutation({
     mutationFn: () =>
-      savePracticeSettings({
-        draft_staging_roles: STAGING_CHOICES[choice].roles,
-        adult_retention_years: yearsNumber,
-      }),
+      savePracticeSettings({ adult_retention_years: yearsNumber }),
     onSuccess: (saved) => {
       queryClient.setQueryData(practiceSettingsQuery.queryKey, saved)
       void queryClient.invalidateQueries({ queryKey: ["practice", "setup"] })
@@ -71,7 +46,7 @@ export function PracticeTab() {
   if (settings.isPending)
     return (
       <Card>
-        <SkeletonRows rows={4} />
+        <SkeletonRows rows={3} />
       </Card>
     )
   if (settings.isError)
@@ -90,32 +65,6 @@ export function PracticeTab() {
         if (!yearsError) save.mutate()
       }}
     >
-      <Card title="Practice workflow">
-        <fieldset aria-describedby={ids.group}>
-          <legend className="field-label">Who may stage script drafts</legend>
-          <div className="space-y-1">
-            {STAGING_CHOICES.map((c, i) => (
-              <label
-                key={c.label}
-                className="flex min-h-11 items-center gap-2 text-sm"
-              >
-                <input
-                  type="radio"
-                  name="staging"
-                  className="size-4"
-                  checked={choice === i}
-                  onChange={() => setChoice(i)}
-                />
-                {c.label}
-              </label>
-            ))}
-          </div>
-          <p id={ids.group} className="mt-1 text-xs text-stone">
-            Reception can suggest a product only as a note, never as a
-            selection. A doctor always reviews and signs.
-          </p>
-        </fieldset>
-      </Card>
       <Card title="Record retention">
         <Field
           label="Adult records (years)"
@@ -138,6 +87,12 @@ export function PracticeTab() {
         <p className="mt-3 text-sm text-stone">
           Records of minors: kept until the patient turns 25. Nothing is ever
           deleted outright.
+        </p>
+      </Card>
+      <Card title="Prescribing">
+        <p className="text-sm text-stone">
+          Only doctors and authorised prescribers write, sign and send scripts.
+          Nurses can read the script queue.
         </p>
       </Card>
       {save.isError ? <FormAlert>{describeError(save.error)}</FormAlert> : null}

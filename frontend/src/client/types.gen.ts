@@ -2029,10 +2029,6 @@ export type PharmacyRead = {
  */
 export type PracticeSettingsRead = {
     /**
-     * Draft Staging Roles
-     */
-    draft_staging_roles: Array<'NURSE' | 'DOCTOR' | 'ADMINISTRATOR'>;
-    /**
      * Adult Retention Years
      */
     adult_retention_years: number;
@@ -2045,13 +2041,9 @@ export type PracticeSettingsRead = {
 /**
  * PracticeSettingsUpdate
  *
- * Both fields, every time: the Practice tab saves them together. Unknown fields are refused.
+ * Unknown fields are refused (a `tenant_id` or the retired `draft_staging_roles` included).
  */
 export type PracticeSettingsUpdate = {
-    /**
-     * Draft Staging Roles
-     */
-    draft_staging_roles: Array<'NURSE' | 'DOCTOR' | 'ADMINISTRATOR'>;
     /**
      * Adult Retention Years
      */

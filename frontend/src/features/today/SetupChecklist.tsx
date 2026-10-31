@@ -57,9 +57,9 @@ const STEPS: Record<
     search: { tab: "staff" },
   },
   workflow: {
-    title: "Practice workflow",
-    detail: "Who stages script drafts, and how long records are kept.",
-    action: "Set workflow",
+    title: "Practice settings",
+    detail: "How long records are kept.",
+    action: "Set retention",
     to: "/settings",
     search: { tab: "practice" },
   },
