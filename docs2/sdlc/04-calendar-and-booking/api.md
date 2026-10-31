@@ -107,3 +107,11 @@ copies each existing row's hours onto its working days.
   added on 2026-10-08 (above).
 - **Availability is tenant configuration** (above) is superseded by "Clinic hours, slot length and
   booking emails" for the shape of the table and the slot step.
+
+
+## Patient intake (docs3 feature 03, 2026-10-31)
+
+The public page is now the six-step application (about you, health, history, consents, pharmacy,
+declaration) followed by the time. `POST /public/{clinic_slug}/bookings` carries it as `application`;
+`GET /public/{clinic_slug}/intake-form` serves the consents and partner pharmacies. Staff review it under
+Patients > Online applications. Contract: `docs3/03-patient-intake/api.md`.

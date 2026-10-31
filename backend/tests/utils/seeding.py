@@ -59,9 +59,12 @@ _INSERT_RELATIONSHIP = sa.text(
 _DELETE_ORDER = (
     "DELETE FROM care_relationships WHERE tenant_id = ANY(:tenant_ids)",
     "DELETE FROM clinics WHERE tenant_id = ANY(:tenant_ids)",
+    "DELETE FROM patient_consents WHERE tenant_id = ANY(:tenant_ids)",
+    "DELETE FROM intake_applications WHERE tenant_id = ANY(:tenant_ids)",
     "DELETE FROM patient_alerts WHERE tenant_id = ANY(:tenant_ids)",
     "DELETE FROM patient_emergency_contacts WHERE tenant_id = ANY(:tenant_ids)",
     "DELETE FROM patients WHERE tenant_id = ANY(:tenant_ids)",
+    "DELETE FROM pharmacies WHERE tenant_id = ANY(:tenant_ids)",
     'DELETE FROM "user" WHERE tenant_id = ANY(:tenant_ids)',
     "DELETE FROM tenants WHERE id = ANY(:tenant_ids)",
 )

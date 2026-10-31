@@ -13,7 +13,7 @@
 | family_name | varchar |  | false |  |  |  |
 | gender_identity | varchar |  | true |  |  |  |
 | given_name | varchar |  | false |  |  |  |
-| id | uuid | gen_random_uuid() | false | [public.appointments](public.appointments.md) [public.care_relationships](public.care_relationships.md) [public.clinical_records](public.clinical_records.md) [public.patient_alerts](public.patient_alerts.md) [public.patient_emergency_contacts](public.patient_emergency_contacts.md) [public.patients](public.patients.md) [public.prescriptions](public.prescriptions.md) [public.tga_approvals](public.tga_approvals.md) |  |  |
+| id | uuid | gen_random_uuid() | false | [public.appointments](public.appointments.md) [public.care_relationships](public.care_relationships.md) [public.clinical_records](public.clinical_records.md) [public.intake_applications](public.intake_applications.md) [public.patient_alerts](public.patient_alerts.md) [public.patient_consents](public.patient_consents.md) [public.patient_emergency_contacts](public.patient_emergency_contacts.md) [public.patients](public.patients.md) [public.prescriptions](public.prescriptions.md) [public.tga_approvals](public.tga_approvals.md) |  |  |
 | ihi | bytea |  | true |  |  |  |
 | ihi_blind_index | bytea |  | true |  |  |  |
 | medicare_blind_index | bytea |  | true |  |  |  |
@@ -23,6 +23,7 @@
 | phone | varchar |  | true |  |  |  |
 | postcode | varchar |  | true |  |  |  |
 | preferred_name | varchar |  | true |  |  |  |
+| preferred_pharmacy_id | uuid |  | true |  | [public.pharmacies](public.pharmacies.md) |  |
 | receives_communications | boolean | true | false |  |  |  |
 | sex_at_birth | varchar |  | true |  |  |  |
 | state | varchar |  | true |  |  |  |
@@ -30,7 +31,7 @@
 | status_changed_at | timestamp with time zone |  | true |  |  |  |
 | status_reason | varchar(500) |  | true |  |  |  |
 | suburb | varchar |  | true |  |  |  |
-| tenant_id | uuid |  | false | [public.appointments](public.appointments.md) [public.clinical_records](public.clinical_records.md) [public.patient_alerts](public.patient_alerts.md) [public.patient_emergency_contacts](public.patient_emergency_contacts.md) [public.prescriptions](public.prescriptions.md) [public.tga_approvals](public.tga_approvals.md) | [public.tenants](public.tenants.md) |  |
+| tenant_id | uuid |  | false | [public.appointments](public.appointments.md) [public.clinical_records](public.clinical_records.md) [public.intake_applications](public.intake_applications.md) [public.patient_alerts](public.patient_alerts.md) [public.patient_consents](public.patient_consents.md) [public.patient_emergency_contacts](public.patient_emergency_contacts.md) [public.prescriptions](public.prescriptions.md) [public.tga_approvals](public.tga_approvals.md) | [public.tenants](public.tenants.md) [public.pharmacies](public.pharmacies.md) |  |
 | timezone | varchar(64) | 'Australia/Sydney'::character varying | false |  |  |  |
 | updated_at | timestamp with time zone |  | false |  |  |  |
 
@@ -43,6 +44,7 @@
 | ck_patients_status | CHECK | CHECK (((status)::text = ANY ((ARRAY['CURRENT'::character varying, 'REVIEW'::character varying, 'WAITING_LIST'::character varying, 'CLAIMANT'::character varying, 'ARCHIVED'::character varying, 'DISCHARGED'::character varying, 'BLOCKED'::character varying, 'DECEASED'::character varying])::text[]))) |
 | fk_patients_merged_into_patient_id_patients | FOREIGN KEY | FOREIGN KEY (merged_into_patient_id) REFERENCES patients(id) ON DELETE RESTRICT |
 | fk_patients_tenant_id_tenants | FOREIGN KEY | FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT |
+| fk_patients_tenant_preferred_pharmacy | FOREIGN KEY | FOREIGN KEY (tenant_id, preferred_pharmacy_id) REFERENCES pharmacies(tenant_id, id) ON DELETE RESTRICT |
 | patients_created_at_not_null | n | NOT NULL created_at |
 | patients_date_of_birth_not_null | n | NOT NULL date_of_birth |
 | patients_family_name_not_null | n | NOT NULL family_name |
@@ -79,11 +81,14 @@ erDiagram
 "public.appointments" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
 "public.care_relationships" }o--|| "public.patients" : "FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE RESTRICT"
 "public.clinical_records" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
+"public.intake_applications" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
 "public.patient_alerts" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
+"public.patient_consents" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
 "public.patient_emergency_contacts" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
 "public.patients" }o--o| "public.patients" : "FOREIGN KEY (merged_into_patient_id) REFERENCES patients(id) ON DELETE RESTRICT"
 "public.prescriptions" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
 "public.tga_approvals" }o--|| "public.patients" : "FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, id) ON DELETE RESTRICT"
+"public.patients" }o--|| "public.pharmacies" : "FOREIGN KEY (tenant_id, preferred_pharmacy_id) REFERENCES pharmacies(tenant_id, id) ON DELETE RESTRICT"
 "public.patients" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 
 "public.patients" {
@@ -106,6 +111,7 @@ erDiagram
   varchar phone
   varchar postcode
   varchar preferred_name
+  uuid preferred_pharmacy_id FK
   boolean receives_communications
   varchar sex_at_birth
   varchar state
@@ -155,6 +161,26 @@ erDiagram
   timestamp_with_time_zone signed_at
   uuid tenant_id FK
 }
+"public.intake_applications" {
+  jsonb answers
+  uuid appointment_id FK
+  jsonb consents
+  timestamp_with_time_zone created_at
+  boolean created_patient
+  timestamp_with_time_zone decided_at
+  uuid decided_by
+  varchar_500_ decision_note
+  varchar decision_reason_code
+  varchar_255_ declaration_name
+  timestamp_with_time_zone declared_at
+  text__ flags
+  uuid id
+  jsonb own_pharmacy
+  uuid patient_id FK
+  uuid pharmacy_id FK
+  varchar status
+  uuid tenant_id FK
+}
 "public.patient_alerts" {
   timestamp_with_time_zone created_at
   uuid created_by
@@ -165,6 +191,19 @@ erDiagram
   uuid tenant_id FK
   varchar_120_ text
   varchar tone
+}
+"public.patient_consents" {
+  uuid application_id FK
+  timestamp_with_time_zone created_at
+  uuid id
+  varchar kind
+  varchar method
+  uuid patient_id FK
+  uuid recorded_by
+  timestamp_with_time_zone signed_at
+  uuid tenant_id FK
+  varchar_64_ text_sha256
+  varchar_32_ version
 }
 "public.patient_emergency_contacts" {
   timestamp_with_time_zone created_at
@@ -228,6 +267,19 @@ erDiagram
   daterange validity_interval
   timestamp_with_time_zone verified_at
   uuid verified_by
+}
+"public.pharmacies" {
+  varchar_255_ address
+  timestamp_with_time_zone created_at
+  varchar created_from
+  varchar_255_ email
+  uuid id
+  boolean is_partner
+  varchar_255_ name
+  varchar_64_ phone
+  varchar_32_ provider_number
+  varchar_255_ suburb
+  uuid tenant_id FK
 }
 "public.tenants" {
   timestamp_with_time_zone created_at

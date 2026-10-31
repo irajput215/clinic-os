@@ -223,6 +223,7 @@ class PatientRead(SQLModel):
     ihi_masked: str | None
     receives_communications: bool
     timezone: str
+    preferred_pharmacy_id: uuid.UUID | None
     escript_ready: EScriptReadiness
     created_at: datetime
     updated_at: datetime

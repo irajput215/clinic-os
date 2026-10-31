@@ -41,6 +41,130 @@ export type AlertRead = {
 };
 
 /**
+ * ApplicationCard
+ *
+ * One row of the applications queue: enough to triage, no answers.
+ */
+export type ApplicationCard = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Patient Id
+     */
+    patient_id: string;
+    /**
+     * Patient Name
+     */
+    patient_name: string;
+    /**
+     * Date Of Birth
+     */
+    date_of_birth: string;
+    /**
+     * Matched Existing
+     */
+    matched_existing: boolean;
+    /**
+     * Flags
+     */
+    flags: Array<string>;
+    /**
+     * Appointment Starts At
+     */
+    appointment_starts_at: string | null;
+};
+
+/**
+ * ApplicationDetail
+ */
+export type ApplicationDetail = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Patient Id
+     */
+    patient_id: string;
+    /**
+     * Patient Name
+     */
+    patient_name: string;
+    /**
+     * Date Of Birth
+     */
+    date_of_birth: string;
+    /**
+     * Matched Existing
+     */
+    matched_existing: boolean;
+    /**
+     * Flags
+     */
+    flags: Array<string>;
+    /**
+     * Appointment Starts At
+     */
+    appointment_starts_at: string | null;
+    /**
+     * Answers
+     */
+    answers: {
+        [key: string]: unknown;
+    };
+    /**
+     * Consents
+     */
+    consents: Array<{
+        [key: string]: string;
+    }>;
+    /**
+     * Pharmacy
+     */
+    pharmacy: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Declaration Name
+     */
+    declaration_name: string;
+    /**
+     * Declared At
+     */
+    declared_at: string;
+    /**
+     * Decided At
+     */
+    decided_at: string | null;
+    /**
+     * Decision Reason Code
+     */
+    decision_reason_code: string | null;
+    /**
+     * Decision Note
+     */
+    decision_note: string | null;
+};
+
+/**
  * AppointmentCreate
  *
  * `POST /appointments`. The server computes `ends_at` from the type (R2).
@@ -590,6 +714,50 @@ export type ClinicalRecordsPublic = {
 };
 
 /**
+ * ConsentGiven
+ */
+export type ConsentGiven = {
+    /**
+     * Kind
+     */
+    kind: 'PRIVACY' | 'TELEHEALTH' | 'TREATMENT';
+    /**
+     * Version
+     */
+    version: string;
+};
+
+/**
+ * ConsentRecord
+ */
+export type ConsentRecord = {
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Version
+     */
+    version: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Method
+     */
+    method: string;
+    /**
+     * Signed At
+     */
+    signed_at: string;
+    /**
+     * Current
+     */
+    current: boolean;
+};
+
+/**
  * DayAppointment
  *
  * One booking on a day's schedule, with the practitioner's display name (Today, R2).
@@ -822,6 +990,182 @@ export type HTTPValidationError = {
 };
 
 /**
+ * IntakeApplicationIn
+ *
+ * Steps 1-6 of the public application, beyond the name, birth date and contact details the
+ * booking already carries.
+ */
+export type IntakeApplicationIn = {
+    /**
+     * Sex At Birth
+     */
+    sex_at_birth: 'FEMALE' | 'MALE' | 'INTERSEX';
+    /**
+     * Address Line
+     */
+    address_line: string;
+    /**
+     * Suburb
+     */
+    suburb: string;
+    /**
+     * State
+     */
+    state: 'ACT' | 'NSW' | 'NT' | 'QLD' | 'SA' | 'TAS' | 'VIC' | 'WA';
+    /**
+     * Postcode
+     */
+    postcode: string;
+    /**
+     * Primary Condition
+     */
+    primary_condition: 'CHRONIC_PAIN' | 'SLEEP' | 'ANXIETY' | 'DEPRESSION' | 'PTSD' | 'NAUSEA' | 'NEUROLOGICAL' | 'OTHER';
+    /**
+     * Other Conditions
+     */
+    other_conditions?: Array<string>;
+    /**
+     * Current Medicines
+     */
+    current_medicines?: string;
+    safety: SafetyAnswers;
+    /**
+     * Tried Conventional
+     */
+    tried_conventional: boolean;
+    /**
+     * Conventional Detail
+     */
+    conventional_detail?: string;
+    /**
+     * Cannabis Used Before
+     */
+    cannabis_used_before: boolean;
+    /**
+     * Cannabis Forms
+     */
+    cannabis_forms?: Array<'DRY_HERB' | 'OIL' | 'CAPSULE' | 'VAPE' | 'EDIBLE' | 'OTHER'>;
+    /**
+     * Cannabis Duration
+     */
+    cannabis_duration?: 'LESS_THAN_6_MONTHS' | 'SIX_TO_24_MONTHS' | 'MORE_THAN_2_YEARS' | null;
+    /**
+     * Side Effects
+     */
+    side_effects?: string;
+    /**
+     * What Helped
+     */
+    what_helped?: string;
+    /**
+     * Consents
+     */
+    consents: Array<ConsentGiven>;
+    /**
+     * Pharmacy Id
+     */
+    pharmacy_id?: string | null;
+    own_pharmacy?: OwnPharmacy | null;
+    /**
+     * Declaration Name
+     */
+    declaration_name: string;
+};
+
+/**
+ * IntakeBriefing
+ *
+ * The doctor's one-glance briefing before the first consult (manual §5.4).
+ *
+ * Built from the patient's own answers. No range suggestion (decision D11), and never shown to the
+ * patient.
+ */
+export type IntakeBriefing = {
+    /**
+     * Application Id
+     */
+    application_id: string;
+    /**
+     * Submitted At
+     */
+    submitted_at: string;
+    /**
+     * Primary Condition
+     */
+    primary_condition: string;
+    /**
+     * Other Conditions
+     */
+    other_conditions: Array<string>;
+    /**
+     * Tried Conventional
+     */
+    tried_conventional: boolean;
+    /**
+     * Conventional Detail
+     */
+    conventional_detail: string;
+    /**
+     * Current Medicines
+     */
+    current_medicines: string;
+    /**
+     * Safety Flags
+     */
+    safety_flags: Array<string>;
+    /**
+     * Cannabis Used Before
+     */
+    cannabis_used_before: boolean;
+    /**
+     * Cannabis Forms
+     */
+    cannabis_forms: Array<string>;
+    /**
+     * Cannabis Duration
+     */
+    cannabis_duration: string | null;
+    /**
+     * Side Effects
+     */
+    side_effects: string;
+    /**
+     * What Helped
+     */
+    what_helped: string;
+    /**
+     * Pharmacy
+     */
+    pharmacy: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Declaration Name
+     */
+    declaration_name: string;
+    /**
+     * Declared At
+     */
+    declared_at: string;
+};
+
+/**
+ * IntakeForm
+ *
+ * `GET /public/{clinic_slug}/intake-form`: what the application needs to show.
+ */
+export type IntakeForm = {
+    /**
+     * Consents
+     */
+    consents: Array<PublicConsent>;
+    /**
+     * Partner Pharmacies
+     */
+    partner_pharmacies: Array<PublicPharmacy>;
+};
+
+/**
  * InvitationAccept
  *
  * The body of `POST /api/v1/users/invitations/accept`: the emailed token and a new password.
@@ -946,6 +1290,38 @@ export type OwnPermissionsRead = {
      * Relationship Bound
      */
     relationship_bound?: Array<string>;
+};
+
+/**
+ * OwnPharmacy
+ *
+ * The patient's own pharmacy, in full (manual §5.1 step 5).
+ */
+export type OwnPharmacy = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Suburb
+     */
+    suburb: string;
+    /**
+     * Address
+     */
+    address: string;
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Phone
+     */
+    phone: string;
+    /**
+     * Provider Number
+     */
+    provider_number?: string | null;
 };
 
 /**
@@ -1126,6 +1502,10 @@ export type PatientRead = {
      * Timezone
      */
     timezone: string;
+    /**
+     * Preferred Pharmacy Id
+     */
+    preferred_pharmacy_id: string | null;
     escript_ready: EScriptReadiness;
     /**
      * Created At
@@ -1326,6 +1706,78 @@ export type PermissionsPublic = {
 };
 
 /**
+ * PharmacyCreate
+ */
+export type PharmacyCreate = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Suburb
+     */
+    suburb: string;
+    /**
+     * Address
+     */
+    address?: string | null;
+    /**
+     * Email
+     */
+    email?: string | null;
+    /**
+     * Phone
+     */
+    phone?: string | null;
+    /**
+     * Provider Number
+     */
+    provider_number?: string | null;
+    /**
+     * Is Partner
+     */
+    is_partner?: boolean;
+};
+
+/**
+ * PharmacyRead
+ */
+export type PharmacyRead = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Suburb
+     */
+    suburb: string;
+    /**
+     * Address
+     */
+    address: string | null;
+    /**
+     * Email
+     */
+    email: string | null;
+    /**
+     * Phone
+     */
+    phone: string | null;
+    /**
+     * Provider Number
+     */
+    provider_number: string | null;
+    /**
+     * Is Partner
+     */
+    is_partner: boolean;
+};
+
+/**
  * PractitionerRead
  *
  * A bookable member of staff: an active account holding a Doctor, Authorised Prescriber or
@@ -1348,6 +1800,16 @@ export type PractitionerRead = {
      * Title
      */
     title: string;
+};
+
+/**
+ * PreferredPharmacy
+ */
+export type PreferredPharmacy = {
+    /**
+     * Pharmacy Id
+     */
+    pharmacy_id: string | null;
 };
 
 /**
@@ -1820,6 +2282,7 @@ export type PublicBookingRequest = {
      * Consent
      */
     consent: true;
+    application?: IntakeApplicationIn | null;
 };
 
 /**
@@ -1832,6 +2295,48 @@ export type PublicClinicRead = {
      * Display Name
      */
     display_name: string;
+};
+
+/**
+ * PublicConsent
+ */
+export type PublicConsent = {
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Version
+     */
+    version: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Body
+     */
+    body: string;
+};
+
+/**
+ * PublicPharmacy
+ *
+ * A partner pharmacy as the public page shows it: name and suburb only.
+ */
+export type PublicPharmacy = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Suburb
+     */
+    suburb: string;
 };
 
 /**
@@ -1856,6 +2361,20 @@ export type PublicSlot = {
      * Ends At
      */
     ends_at: string;
+};
+
+/**
+ * RejectBody
+ */
+export type RejectBody = {
+    /**
+     * Reason Code
+     */
+    reason_code: 'NOT_ELIGIBLE' | 'NEEDS_IN_PERSON_REVIEW' | 'DUPLICATE' | 'INCOMPLETE' | 'OTHER';
+    /**
+     * Note
+     */
+    note?: string | null;
 };
 
 /**
@@ -1915,6 +2434,32 @@ export type RolesPublic = {
      * Count
      */
     count: number;
+};
+
+/**
+ * SafetyAnswers
+ *
+ * The safety screen (manual §5.1 step 2). A "yes" is a flag for the doctor, never a stop.
+ *
+ * The question set is provisional until the Clinical Safety Officer confirms it (docs3 R3).
+ */
+export type SafetyAnswers = {
+    /**
+     * Psychosis History
+     */
+    psychosis_history: boolean;
+    /**
+     * Pregnant Or Breastfeeding
+     */
+    pregnant_or_breastfeeding: boolean;
+    /**
+     * Heart Condition
+     */
+    heart_condition: boolean;
+    /**
+     * Substance Dependence
+     */
+    substance_dependence: boolean;
 };
 
 /**
@@ -5139,6 +5684,40 @@ export type publicBookingReadPublicClinicResponses = {
 
 export type publicBookingReadPublicClinicResponse = publicBookingReadPublicClinicResponses[keyof publicBookingReadPublicClinicResponses];
 
+export type publicBookingReadIntakeFormData = {
+    body?: never;
+    path: {
+        /**
+         * Clinic Slug
+         */
+        clinic_slug: string;
+    };
+    query?: never;
+    url: '/api/v1/public/{clinic_slug}/intake-form';
+};
+
+export type publicBookingReadIntakeFormErrors = {
+    /**
+     * No such clinic, or not taking bookings
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type publicBookingReadIntakeFormError = publicBookingReadIntakeFormErrors[keyof publicBookingReadIntakeFormErrors];
+
+export type publicBookingReadIntakeFormResponses = {
+    /**
+     * Successful Response
+     */
+    200: IntakeForm;
+};
+
+export type publicBookingReadIntakeFormResponse = publicBookingReadIntakeFormResponses[keyof publicBookingReadIntakeFormResponses];
+
 export type publicBookingListPublicSlotsData = {
     body?: never;
     path: {
@@ -5765,3 +6344,266 @@ export type careRelationshipsEndCareRelationshipResponses = {
 };
 
 export type careRelationshipsEndCareRelationshipResponse = careRelationshipsEndCareRelationshipResponses[keyof careRelationshipsEndCareRelationshipResponses];
+
+export type intakeListApplicationsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Status
+         */
+        status?: 'SUBMITTED' | 'ACCEPTED' | 'REJECTED';
+    };
+    url: '/api/v1/intake-applications';
+};
+
+export type intakeListApplicationsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type intakeListApplicationsError = intakeListApplicationsErrors[keyof intakeListApplicationsErrors];
+
+export type intakeListApplicationsResponses = {
+    /**
+     * Response Intake-List Applications
+     *
+     * Successful Response
+     */
+    200: Array<ApplicationCard>;
+};
+
+export type intakeListApplicationsResponse = intakeListApplicationsResponses[keyof intakeListApplicationsResponses];
+
+export type intakeReadApplicationData = {
+    body?: never;
+    path: {
+        /**
+         * Application Id
+         */
+        application_id: string;
+    };
+    query?: never;
+    url: '/api/v1/intake-applications/{application_id}';
+};
+
+export type intakeReadApplicationErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type intakeReadApplicationError = intakeReadApplicationErrors[keyof intakeReadApplicationErrors];
+
+export type intakeReadApplicationResponses = {
+    /**
+     * Successful Response
+     */
+    200: ApplicationDetail;
+};
+
+export type intakeReadApplicationResponse = intakeReadApplicationResponses[keyof intakeReadApplicationResponses];
+
+export type intakeAcceptApplicationData = {
+    body?: never;
+    path: {
+        /**
+         * Application Id
+         */
+        application_id: string;
+    };
+    query?: never;
+    url: '/api/v1/intake-applications/{application_id}/accept';
+};
+
+export type intakeAcceptApplicationErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type intakeAcceptApplicationError = intakeAcceptApplicationErrors[keyof intakeAcceptApplicationErrors];
+
+export type intakeAcceptApplicationResponses = {
+    /**
+     * Response Intake-Accept Application
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: string;
+    };
+};
+
+export type intakeAcceptApplicationResponse = intakeAcceptApplicationResponses[keyof intakeAcceptApplicationResponses];
+
+export type intakeRejectApplicationData = {
+    body: RejectBody;
+    path: {
+        /**
+         * Application Id
+         */
+        application_id: string;
+    };
+    query?: never;
+    url: '/api/v1/intake-applications/{application_id}/reject';
+};
+
+export type intakeRejectApplicationErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type intakeRejectApplicationError = intakeRejectApplicationErrors[keyof intakeRejectApplicationErrors];
+
+export type intakeRejectApplicationResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type intakeRejectApplicationResponse = intakeRejectApplicationResponses[keyof intakeRejectApplicationResponses];
+
+export type intakeReadIntakeBriefingData = {
+    body?: never;
+    path: {
+        /**
+         * Patient Id
+         */
+        patient_id: string;
+    };
+    query?: never;
+    url: '/api/v1/patients/{patient_id}/intake-briefing';
+};
+
+export type intakeReadIntakeBriefingErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type intakeReadIntakeBriefingError = intakeReadIntakeBriefingErrors[keyof intakeReadIntakeBriefingErrors];
+
+export type intakeReadIntakeBriefingResponses = {
+    /**
+     * Response Intake-Read Intake Briefing
+     *
+     * Successful Response
+     */
+    200: IntakeBriefing | null;
+};
+
+export type intakeReadIntakeBriefingResponse = intakeReadIntakeBriefingResponses[keyof intakeReadIntakeBriefingResponses];
+
+export type intakeListPatientConsentsData = {
+    body?: never;
+    path: {
+        /**
+         * Patient Id
+         */
+        patient_id: string;
+    };
+    query?: never;
+    url: '/api/v1/patients/{patient_id}/consents';
+};
+
+export type intakeListPatientConsentsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type intakeListPatientConsentsError = intakeListPatientConsentsErrors[keyof intakeListPatientConsentsErrors];
+
+export type intakeListPatientConsentsResponses = {
+    /**
+     * Response Intake-List Patient Consents
+     *
+     * Successful Response
+     */
+    200: Array<ConsentRecord>;
+};
+
+export type intakeListPatientConsentsResponse = intakeListPatientConsentsResponses[keyof intakeListPatientConsentsResponses];
+
+export type intakeSetPatientPharmacyData = {
+    body: PreferredPharmacy;
+    path: {
+        /**
+         * Patient Id
+         */
+        patient_id: string;
+    };
+    query?: never;
+    url: '/api/v1/patients/{patient_id}/pharmacy';
+};
+
+export type intakeSetPatientPharmacyErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type intakeSetPatientPharmacyError = intakeSetPatientPharmacyErrors[keyof intakeSetPatientPharmacyErrors];
+
+export type intakeSetPatientPharmacyResponses = {
+    /**
+     * Successful Response
+     */
+    200: PatientRead;
+};
+
+export type intakeSetPatientPharmacyResponse = intakeSetPatientPharmacyResponses[keyof intakeSetPatientPharmacyResponses];
+
+export type intakeListPharmaciesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/pharmacies';
+};
+
+export type intakeListPharmaciesResponses = {
+    /**
+     * Response Intake-List Pharmacies
+     *
+     * Successful Response
+     */
+    200: Array<PharmacyRead>;
+};
+
+export type intakeListPharmaciesResponse = intakeListPharmaciesResponses[keyof intakeListPharmaciesResponses];
+
+export type intakeCreatePharmacyData = {
+    body: PharmacyCreate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/pharmacies';
+};
+
+export type intakeCreatePharmacyErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type intakeCreatePharmacyError = intakeCreatePharmacyErrors[keyof intakeCreatePharmacyErrors];
+
+export type intakeCreatePharmacyResponses = {
+    /**
+     * Successful Response
+     */
+    201: PharmacyRead;
+};
+
+export type intakeCreatePharmacyResponse = intakeCreatePharmacyResponses[keyof intakeCreatePharmacyResponses];

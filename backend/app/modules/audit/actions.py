@@ -83,6 +83,14 @@ ACTION_CATALOGUE: Final[tuple[tuple[str, tuple[str, ...]], ...]] = (
             # care team. The resource is the patient; the payload names the relationship.
             "care_relationship.create",
             "care_relationship.end",
+            # Registered with patient intake (docs3 feature 03, 2026-10-31): a public application,
+            # a staff read of one, and the clinic's decision. The resource is the application; the
+            # payload names the patient. The answers themselves are never audited.
+            "intake.application_submit",
+            "intake.application_read",
+            "intake.application_decide",
+            # A pharmacy added to the clinic's directory (manual §8.1).
+            "pharmacy.create",
         ),
     ),
     (
@@ -226,6 +234,10 @@ PAYLOAD_ALLOW_LIST: Final[MappingProxyType[str, frozenset[str]]] = MappingProxyT
         "patient.read": frozenset(
             {"care_relationship_id", "purpose", "result_count", "query_filters"}
         ),
+        # docs3 feature 03: ids and statuses only - never an answer, a name or the declaration.
+        "intake.application_submit": frozenset({"patient_id"}),
+        "intake.application_read": frozenset({"patient_id"}),
+        "intake.application_decide": frozenset({"patient_id", "to_state"}),
         # `04-audit-log/05-data-and-audit.md`: `audit.read` carries `query_filters` and `result_count`.
         "audit.read": frozenset({"query_filters", "result_count"}),
         # `06-clinical-records/05-data-and-audit.md` maps its four story labels onto the two

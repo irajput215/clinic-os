@@ -201,6 +201,9 @@ class AppointmentsApi:
                 # The outbox references the bookings and the hours the settings (RESTRICT, CASCADE).
                 for table in (
                     "appointment_notifications",
+                    # An application holds its booking (RESTRICT); consents name it.
+                    "patient_consents",
+                    "intake_applications",
                     "appointments",
                     "appointment_hours",
                     "appointment_settings",

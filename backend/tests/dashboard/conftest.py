@@ -110,7 +110,12 @@ class DashboardApi:
     def cleanup(self) -> None:
         with engine.begin() as conn:
             for tenant_id in self.rx._tenants:
-                for table in ("appointment_notifications", "appointments"):
+                for table in (
+                    "appointment_notifications",
+                    "patient_consents",
+                    "intake_applications",
+                    "appointments",
+                ):
                     conn.execute(
                         text(f"DELETE FROM {table} WHERE tenant_id = :t"),  # noqa: S608
                         {"t": tenant_id},

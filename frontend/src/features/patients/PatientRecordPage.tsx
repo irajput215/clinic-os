@@ -42,6 +42,7 @@ import {
   patientRef,
 } from "@/lib/format"
 import { CareTeamCard } from "./CareTeamCard"
+import { ConsentsCard, IntakeBriefingCard, PharmacyCard } from "./IntakeParts"
 import { NotesTab } from "./NotesTab"
 import { PatientFormDialog } from "./PatientFormDialog"
 import {
@@ -273,6 +274,9 @@ function OverviewTab({ patientId }: { patientId: string }) {
             </ul>
           )}
         </Card>
+        <IntakeBriefingCard patientId={patientId} />
+        <PharmacyCard patient={p} />
+        <ConsentsCard patientId={patientId} />
         <CareTeamCard patientId={patientId} />
       </div>
     </div>

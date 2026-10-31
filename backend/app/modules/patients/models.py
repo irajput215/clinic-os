@@ -87,6 +87,12 @@ class Patient(SQLModel, table=True):
         # Named explicitly rather than relying on the convention: the convention keys the unique
         # constraint on the first column alone, which would collide with the primary key name.
         sa.UniqueConstraint("tenant_id", "id", name="uq_patients_tenant_id_id"),
+        sa.ForeignKeyConstraint(
+            ["tenant_id", "preferred_pharmacy_id"],
+            ["pharmacies.tenant_id", "pharmacies.id"],
+            name="fk_patients_tenant_preferred_pharmacy",
+            ondelete="RESTRICT",
+        ),
         # `tenant_id` leads every index (design, "Indexes (tenant_id leading)"). The plain
         # single-column index the design does not ask for is deliberately absent: the composite
         # indexes below already serve a tenant-scoped scan.
@@ -160,6 +166,8 @@ class Patient(SQLModel, table=True):
         max_length=64,
         sa_column_kwargs={"server_default": DEFAULT_TIMEZONE},
     )
+    # The pharmacy future scripts default to (manual §3.5), from the clinic's directory (feature 03).
+    preferred_pharmacy_id: uuid.UUID | None = None
     created_at: datetime = Field(default_factory=_utcnow, sa_type=_TIMESTAMPTZ)
     updated_at: datetime = Field(
         default_factory=_utcnow,

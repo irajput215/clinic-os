@@ -165,6 +165,11 @@ def test_the_five_declared_paths_are_served() -> None:
         f"{PATIENTS_URL}/{{patient_id}}/emergency-contacts/{{contact_id}}/remove": {
             "post"
         },
+        # Patient intake (docs3 feature 03): the doctor's briefing, the consents signed, and the
+        # pharmacy future scripts default to.
+        f"{PATIENTS_URL}/{{patient_id}}/intake-briefing": {"get"},
+        f"{PATIENTS_URL}/{{patient_id}}/consents": {"get"},
+        f"{PATIENTS_URL}/{{patient_id}}/pharmacy": {"post"},
     }
 
     assert sorted(

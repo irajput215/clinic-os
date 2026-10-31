@@ -381,7 +381,7 @@ test("the public screens fit every width", async ({ page }, testInfo) => {
   await button(page, "Continue").click()
   await checkEveryWidth(page, testInfo, "book-details", [
     h1(page, "A little about you"),
-    button(page, "Choose a time"),
+    button(page, "Continue"),
   ])
 })
 
