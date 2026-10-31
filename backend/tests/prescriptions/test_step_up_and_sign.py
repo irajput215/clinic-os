@@ -140,7 +140,7 @@ def test_a_nurse_cannot_sign_and_the_refusal_is_audited(
     rx: RxApi, clinic: Clinic
 ) -> None:
     nurse = rx.related_member(clinic, "NURSE")
-    staged = rx.stage(clinic, nurse)
+    staged = rx.stage(clinic)
     response = rx.client.post(
         f"{URL}/{staged['id']}/sign",
         json={"step_up_token": "x" * 43},

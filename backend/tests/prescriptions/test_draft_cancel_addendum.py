@@ -128,19 +128,26 @@ def test_only_the_drafter_or_the_prescriber_may_edit_or_cancel(
     rx: RxApi, clinic: Clinic
 ) -> None:
     staged = rx.stage(clinic)  # drafted by the owner, addressed to the owner
+    # Another doctor holds `prescription:modify` but neither drafted nor prescribes this script; a
+    # nurse holds no prescribing code at all (doctor-only prescribing, 2026-10-31).
+    doctor = rx.related_member(clinic, "DOCTOR")
     nurse = rx.related_member(clinic, "NURSE")
-    for response in (
-        rx.client.patch(
-            f"{URL}/{staged['id']}", json={"repeats": 1}, headers=nurse.headers
-        ),
-        rx.client.post(
-            f"{URL}/{staged['id']}/cancel",
-            json={"reason_code": "DUPLICATE"},
-            headers=nurse.headers,
-        ),
+    for who, expected in (
+        (doctor, "NOT_DRAFTER_OR_PRESCRIBER"),
+        (nurse, "PERMISSION_NOT_HELD"),
     ):
-        assert response.status_code == 403, response.text
-        assert code(response) == "NOT_DRAFTER_OR_PRESCRIBER"
+        for response in (
+            rx.client.patch(
+                f"{URL}/{staged['id']}", json={"repeats": 1}, headers=who.headers
+            ),
+            rx.client.post(
+                f"{URL}/{staged['id']}/cancel",
+                json={"reason_code": "DUPLICATE"},
+                headers=who.headers,
+            ),
+        ):
+            assert response.status_code == 403, response.text
+            assert code(response) == expected
     assert rx.row(staged["id"])["state"] == "DRAFT"
 
 

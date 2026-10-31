@@ -179,7 +179,6 @@ erDiagram
 }
 "public.tenant_settings" {
   integer adult_retention_years
-  text__ draft_staging_roles
   uuid tenant_id FK
   timestamp_with_time_zone updated_at
   uuid updated_by FK

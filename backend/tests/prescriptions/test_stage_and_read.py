@@ -77,12 +77,21 @@ def test_another_tenants_patient_is_not_found(rx: RxApi, clinic: Clinic) -> None
     assert code(response) == "PATIENT_NOT_FOUND"
 
 
-def test_a_nurse_stages_a_draft_for_the_doctor(rx: RxApi, clinic: Clinic) -> None:
-    """US-6: the draft is `DRAFT`, tenant from the session, drafter and prescriber recorded apart."""
+def test_a_nurse_cannot_stage_a_draft(rx: RxApi, clinic: Clinic) -> None:
+    """Doctor-only prescribing (owner decision, 2026-10-31): a nurse reads the queue, never drafts."""
     nurse = rx.related_member(clinic, "NURSE")
-    body = rx.stage(clinic, nurse)
+    response = rx.stage_raw(nurse, clinic)
+    assert response.status_code == 403, response.text
+    assert code(response) == "PERMISSION_NOT_HELD"
+    assert rx.list(nurse).status_code == 200
+
+
+def test_a_doctor_stages_a_draft_for_the_prescriber(rx: RxApi, clinic: Clinic) -> None:
+    """US-6: the draft is `DRAFT`, tenant from the session, drafter and prescriber recorded apart."""
+    doctor = rx.related_member(clinic, "DOCTOR")
+    body = rx.stage(clinic, doctor)
     assert body["state"] == "DRAFT"
-    assert body["drafted_by"] == str(nurse.user_id)
+    assert body["drafted_by"] == str(doctor.user_id)
     assert body["prescriber_id"] == str(clinic.owner.user_id)
     assert body["prescriber_name"] == "Practice Owner"
     assert body["patient_name"] == "Ada Synthetic"
@@ -151,16 +160,18 @@ def test_prescribers_are_the_accounts_holding_prescription_sign(
     rx: RxApi, clinic: Clinic
 ) -> None:
     nurse = rx.member(clinic, "NURSE")
-    response = rx.client.get(f"{URL}/prescribers", headers=nurse.headers)
+    response = rx.client.get(f"{URL}/prescribers", headers=clinic.verifier.headers)
     assert response.status_code == 200
     ids = {item["id"] for item in response.json()["data"]}
     assert str(clinic.owner.user_id) in ids
     assert str(clinic.verifier.user_id) in ids  # a DOCTOR
     assert str(nurse.user_id) not in ids
-    pharmacy = rx.member(clinic, "PHARMACY")
-    assert (
-        rx.client.get(f"{URL}/prescribers", headers=pharmacy.headers).status_code == 403
-    )
+    # Only someone who may stage a script needs the list: a nurse no longer does.
+    for member in (nurse, rx.member(clinic, "PHARMACY")):
+        assert (
+            rx.client.get(f"{URL}/prescribers", headers=member.headers).status_code
+            == 403
+        )
 
 
 def test_a_blocked_patient_cannot_have_a_script_staged(
