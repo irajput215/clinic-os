@@ -114,12 +114,13 @@ export const rejectApplication = async (
 export const briefingQuery = (patientId: string) =>
   queryOptions({
     queryKey: ["patients", "detail", patientId, "briefing"],
-    queryFn: async (): Promise<IntakeBriefing | null> =>
-      (
-        await IntakeService.readIntakeBriefing({
-          path: { patient_id: patientId },
-        })
-      ).data ?? null,
+    // The generated client turns a `null` body into `{}`, so "never applied" is told apart by shape.
+    queryFn: async (): Promise<IntakeBriefing | null> => {
+      const { data } = await IntakeService.readIntakeBriefing({
+        path: { patient_id: patientId },
+      })
+      return data && "safety_flags" in data ? data : null
+    },
     staleTime: 60_000,
   })
 
