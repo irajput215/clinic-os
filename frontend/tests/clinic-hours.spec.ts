@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto"
 import { signInWithApi, signUp } from "./accounts"
+import { fillApplication } from "./booking"
 import { expect, openSignedIn, test } from "./fixtures"
 import { waitForEmailHtml } from "./mail"
 
@@ -83,18 +84,8 @@ test("the owner sets the hours and slot length, and the booking page offers exac
   await booking.goto(`/book/${slug}`)
   await booking.getByRole("button", { name: /Initial doctor consult/ }).click()
   await booking.getByRole("button", { name: "Continue" }).click()
-  await booking
-    .getByLabel("What would you like help with?")
-    .fill("Chronic knee pain")
-  await booking.getByText("yes", { exact: true }).click()
-  await booking.getByLabel("Given name").fill("Nora")
-  await booking.getByLabel("Family name").fill("Quinn")
-  await booking.getByLabel("Date of birth").fill("1990-03-21")
-  await booking.getByLabel("Mobile").fill("0412 555 019")
   const email = `hours-${randomBytes(4).toString("hex")}@example.com`
-  await booking.getByLabel("Email").fill(email)
-  await booking.getByRole("checkbox").check()
-  await booking.getByRole("button", { name: "Choose a time" }).click()
+  await fillApplication(booking, { given: "Nora", family: "Quinn", email })
 
   const days = booking.getByRole("button", { pressed: true }).first()
   await expect(days).toContainText(open.slice(0, 3), { ignoreCase: true })
