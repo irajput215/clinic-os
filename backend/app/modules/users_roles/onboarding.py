@@ -26,7 +26,7 @@ from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
-from typing import Final
+from typing import Final, cast
 
 from fastapi import status
 from sqlalchemy import text
@@ -46,7 +46,9 @@ from app.modules.users_roles.policy import Actor
 from app.modules.users_roles.schemas import (
     AgreementCreate,
     AgreementRead,
+    IdentifierKind,
     IdentifierRead,
+    IdentifierState,
     IdentifierUpdate,
     OnboardingPackRead,
     PackSopRead,
@@ -223,7 +225,7 @@ def _names(
     return {user_id: full_name or email for user_id, full_name, email in rows}
 
 
-def _state(row: PractitionerIdentifier | None, today: date) -> str:
+def _state(row: PractitionerIdentifier | None, today: date) -> IdentifierState:
     if row is None:
         return "MISSING"
     if row.status == "PENDING":
@@ -312,10 +314,10 @@ def _pack(session: Session, *, tenant_id: uuid.UUID, user: User) -> OnboardingPa
         ),
         identifiers=[
             IdentifierRead(
-                kind=kind,  # type: ignore[arg-type]
+                kind=cast(IdentifierKind, kind),
                 label=LABELS[kind],
                 required=kind in REQUIRED_IDENTIFIERS,
-                state=_state(row, today),  # type: ignore[arg-type]
+                state=_state(row, today),
                 masked=masked(row) if row else None,
                 expires_on=row.expires_on if row else None,
                 verified_by_name=names.get(row.verified_by)
