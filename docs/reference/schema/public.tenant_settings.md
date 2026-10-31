@@ -29,6 +29,7 @@
 
 | Name | Definition |
 | ---- | ---------- |
+| ix_tenant_settings_updated_by | CREATE INDEX ix_tenant_settings_updated_by ON public.tenant_settings USING btree (updated_by) |
 | pk_tenant_settings | CREATE UNIQUE INDEX pk_tenant_settings ON public.tenant_settings USING btree (tenant_id) |
 
 ## Relations

@@ -32,7 +32,9 @@
 
 | Name | Definition |
 | ---- | ---------- |
+| ix_practitioner_agreements_attested_by | CREATE INDEX ix_practitioner_agreements_attested_by ON public.practitioner_agreements USING btree (attested_by) |
 | ix_practitioner_agreements_tenant_user | CREATE INDEX ix_practitioner_agreements_tenant_user ON public.practitioner_agreements USING btree (tenant_id, user_id) |
+| ix_practitioner_agreements_user_id | CREATE INDEX ix_practitioner_agreements_user_id ON public.practitioner_agreements USING btree (user_id) |
 | pk_practitioner_agreements | CREATE UNIQUE INDEX pk_practitioner_agreements ON public.practitioner_agreements USING btree (id) |
 
 ## Relations

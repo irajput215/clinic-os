@@ -41,6 +41,7 @@
 
 | Name | Definition |
 | ---- | ---------- |
+| ix_clinical_record_versions_author_id | CREATE INDEX ix_clinical_record_versions_author_id ON public.clinical_record_versions USING btree (author_id) |
 | ix_clinical_record_versions_body_fts | CREATE INDEX ix_clinical_record_versions_body_fts ON public.clinical_record_versions USING gin (to_tsvector('english'::regconfig, (body)::text)) WHERE ((body)::text <> ''::text) |
 | pk_clinical_record_versions | CREATE UNIQUE INDEX pk_clinical_record_versions ON public.clinical_record_versions USING btree (id) |
 | uq_clinical_record_versions_tenant_record_version | CREATE UNIQUE INDEX uq_clinical_record_versions_tenant_record_version ON public.clinical_record_versions USING btree (tenant_id, clinical_record_id, version) |

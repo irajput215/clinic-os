@@ -41,6 +41,7 @@
 | Name | Definition |
 | ---- | ---------- |
 | ix_step_up_grants_tenant_user_issued | CREATE INDEX ix_step_up_grants_tenant_user_issued ON public.step_up_grants USING btree (tenant_id, user_id, issued_at) |
+| ix_step_up_grants_user_id | CREATE INDEX ix_step_up_grants_user_id ON public.step_up_grants USING btree (user_id) |
 | pk_step_up_grants | CREATE UNIQUE INDEX pk_step_up_grants ON public.step_up_grants USING btree (id) |
 | uq_step_up_grants_token_hash | CREATE UNIQUE INDEX uq_step_up_grants_token_hash ON public.step_up_grants USING btree (token_hash) |
 

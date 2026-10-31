@@ -59,6 +59,7 @@
 
 | Name | Definition |
 | ---- | ---------- |
+| ix_dispatch_attempts_tenant_id_approval_id | CREATE INDEX ix_dispatch_attempts_tenant_id_approval_id ON public.dispatch_attempts USING btree (tenant_id, approval_id) |
 | ix_dispatch_attempts_tenant_state_requested | CREATE INDEX ix_dispatch_attempts_tenant_state_requested ON public.dispatch_attempts USING btree (tenant_id, state, requested_at) |
 | pk_dispatch_attempts | CREATE UNIQUE INDEX pk_dispatch_attempts ON public.dispatch_attempts USING btree (id) |
 | uq_dispatch_attempts_one_live | CREATE UNIQUE INDEX uq_dispatch_attempts_one_live ON public.dispatch_attempts USING btree (tenant_id, prescription_id) WHERE ((state)::text = ANY ((ARRAY['QUEUED'::character varying, 'REQUIRES_RECONCILIATION'::character varying])::text[])) |

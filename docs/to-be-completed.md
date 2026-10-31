@@ -3,7 +3,7 @@ doc_id: OZ-PENDING-SCOPE
 title: ClinicOS Remaining Scope & Implementation Backlog
 owner: CTO (interim: Ishu Rajput)
 status: APPROVED — Active Roadmap
-last_reviewed: 2026-10-06
+last_reviewed: 2026-10-31
 classification: RESTRICTED
 repo_docs:
   - README.md
@@ -20,6 +20,36 @@ repo_docs:
 ---
 
 # ClinicOS Remaining Scope & Implementation Backlog
+
+> ## Where things stand (2026-10-31)
+>
+> **This section supersedes the board below, which is kept as the record of how the foundations were
+> built (last reviewed 2026-10-06).** The current plan is [`docs3/roadmap.md`](../docs3/roadmap.md);
+> gaps against the Platform Manual are in [`docs3/gap-analysis.md`](../docs3/gap-analysis.md).
+>
+> **Built and merged** (each with its tests; backend suite ~1,075 tests, Playwright e2e in four shards):
+>
+> | Area | Module(s) | Evidence |
+> |---|---|---|
+> | Tenancy, organisation signup, clinic display name, step-up | `identity_tenancy` | PRs #19-#22, #78 |
+> | RBAC, staff invitations, onboarding pack, credential vault, signing gate | `users_roles` | PR #88 |
+> | Append-only, hash-chained audit trail (written with `COMMIT`) | `audit` | PR #82 |
+> | Patient record: lifecycle status, alerts, emergency contacts, encrypted Medicare/IHI | `patients`, `care_relationships` | PR #86 |
+> | Consult notes (signed, amended) | `clinical_records` | - |
+> | TGA approvals (four-eyes verification) | `tga_approvals` | - |
+> | Prescribing: safety gate, sign with step-up, dispatch outbox | `prescriptions` | - |
+> | Calendar, opening hours, public booking with the six-step online application | `appointments`, `intake` | PRs #79, #87 |
+> | SOPs, versions and acknowledgement | `sops` | PR #88 |
+> | Clinic setup checklist, practice settings | `practice` | PR #89 |
+> | Today dashboard, "your first hour" by role | `dashboard` | PRs #88, #89 |
+> | The app runs as the least-privilege `clinos_app` role; every foreign key indexed | migrations | PRs #85, this change |
+>
+> **Owner actions before real patient data:** set `FIELD_ENCRYPTION_KEY`; point `DATABASE_URL` at the
+> `clinos_app` login and `MIGRATION_DATABASE_URL` at the owner login; host the app in the same region as
+> the database (Sydney); complete each doctor's onboarding pack (signing is refused until then).
+>
+> **Not built yet** (see the roadmap): live eScripts / Medicare / SMS integrations (vendor decisions D7),
+> billing and payouts, reports and exports, document storage, the TGA inbox, waitlist, automations.
 
 This document provides a single, exhaustive inventory of all features, technical controls, database tables,
 and compliance gates that remain **to be completed** across the ClinicOS repository. It is mapped directly

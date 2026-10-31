@@ -39,6 +39,9 @@
 
 | Name | Definition |
 | ---- | ---------- |
+| ix_care_relationships_clinic_id | CREATE INDEX ix_care_relationships_clinic_id ON public.care_relationships USING btree (clinic_id) |
+| ix_care_relationships_patient_id | CREATE INDEX ix_care_relationships_patient_id ON public.care_relationships USING btree (patient_id) |
+| ix_care_relationships_practitioner_id | CREATE INDEX ix_care_relationships_practitioner_id ON public.care_relationships USING btree (practitioner_id) |
 | ix_care_relationships_tenant_practitioner_patient | CREATE INDEX ix_care_relationships_tenant_practitioner_patient ON public.care_relationships USING btree (tenant_id, practitioner_id, patient_id) |
 | pk_care_relationships | CREATE UNIQUE INDEX pk_care_relationships ON public.care_relationships USING btree (id) |
 | uq_care_relationships_tenant_id_id | CREATE UNIQUE INDEX uq_care_relationships_tenant_id_id ON public.care_relationships USING btree (tenant_id, id) |

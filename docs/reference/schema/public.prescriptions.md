@@ -78,6 +78,7 @@
 | Name | Definition |
 | ---- | ---------- |
 | ix_prescriptions_tenant_created | CREATE INDEX ix_prescriptions_tenant_created ON public.prescriptions USING btree (tenant_id, created_at, id) |
+| ix_prescriptions_tenant_id_approval_id | CREATE INDEX ix_prescriptions_tenant_id_approval_id ON public.prescriptions USING btree (tenant_id, approval_id) |
 | ix_prescriptions_tenant_patient_created | CREATE INDEX ix_prescriptions_tenant_patient_created ON public.prescriptions USING btree (tenant_id, patient_id, created_at) |
 | ix_prescriptions_tenant_prescriber | CREATE INDEX ix_prescriptions_tenant_prescriber ON public.prescriptions USING btree (tenant_id, prescriber_id) |
 | ix_prescriptions_tenant_state | CREATE INDEX ix_prescriptions_tenant_state ON public.prescriptions USING btree (tenant_id, state) |

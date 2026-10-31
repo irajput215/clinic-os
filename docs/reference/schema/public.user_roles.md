@@ -31,6 +31,8 @@
 
 | Name | Definition |
 | ---- | ---------- |
+| ix_user_roles_granted_by | CREATE INDEX ix_user_roles_granted_by ON public.user_roles USING btree (granted_by) |
+| ix_user_roles_role_id | CREATE INDEX ix_user_roles_role_id ON public.user_roles USING btree (role_id) |
 | ix_user_roles_tenant_id_user_id | CREATE INDEX ix_user_roles_tenant_id_user_id ON public.user_roles USING btree (tenant_id, user_id) |
 | pk_user_roles | CREATE UNIQUE INDEX pk_user_roles ON public.user_roles USING btree (user_id, role_id) |
 | uq_user_roles_tenant_id_user_id_role_id | CREATE UNIQUE INDEX uq_user_roles_tenant_id_user_id_role_id ON public.user_roles USING btree (tenant_id, user_id, role_id) |
