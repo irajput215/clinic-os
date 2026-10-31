@@ -33,6 +33,7 @@
 | [public.sops](public.sops.md) | 9 |  | BASE TABLE |
 | [public.staff_invitations](public.staff_invitations.md) | 8 |  | BASE TABLE |
 | [public.step_up_grants](public.step_up_grants.md) | 9 |  | BASE TABLE |
+| [public.tenant_settings](public.tenant_settings.md) | 5 |  | BASE TABLE |
 | [public.tenants](public.tenants.md) | 9 |  | BASE TABLE |
 | [public.tga_approval_events](public.tga_approval_events.md) | 9 |  | BASE TABLE |
 | [public.tga_approvals](public.tga_approvals.md) | 23 |  | BASE TABLE |
@@ -343,6 +344,8 @@ erDiagram
 "public.staff_invitations" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.step_up_grants" }o--|| "public.user" : "FOREIGN KEY (user_id) REFERENCES #quot;user#quot;(id) ON DELETE CASCADE"
 "public.step_up_grants" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE"
+"public.tenant_settings" }o--|| "public.user" : "FOREIGN KEY (updated_by) REFERENCES #quot;user#quot;(id) ON DELETE RESTRICT"
+"public.tenant_settings" |o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.tga_approval_events" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
 "public.tga_approval_events" }o--|| "public.tga_approvals" : "FOREIGN KEY (tenant_id, approval_id) REFERENCES tga_approvals(tenant_id, id) ON DELETE RESTRICT"
 "public.tga_approvals" }o--|| "public.tenants" : "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
@@ -720,6 +723,13 @@ erDiagram
   uuid tenant_id FK
   varchar token_hash
   uuid user_id FK
+}
+"public.tenant_settings" {
+  integer adult_retention_years
+  text__ draft_staging_roles
+  uuid tenant_id FK
+  timestamp_with_time_zone updated_at
+  uuid updated_by FK
 }
 "public.tenants" {
   timestamp_with_time_zone created_at
