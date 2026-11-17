@@ -30,6 +30,8 @@ that is a defect.
 | [D-008](D-008-signup-email-verification.md) | Organisation signup is verified by email; one answer for every address; the organisation is created on verification | **Accepted** | No |
 | [D-009](D-009-scheduled-jobs-and-booking-reminders.md) | Booking reminders: transactional outbox plus an idempotent job; the trigger (GitHub Actions schedule calling a token-protected endpoint) is the owner's to enable | **Accepted** for the mechanism · 🔴 **OPEN** for the trigger | No |
 | [D-010](D-010-prescription-corrections.md) | Prescription edit, cancel and addendum: drafter or prescriber edits and cancels; an addendum retires the signed original in the same transaction; interim closed cancel-reason list | **Accepted** for the mechanism · 🔴 **OPEN** for the reason codes, who cancels a colleague's script, and corrections after dispatch | No - fail-safe interim |
+| [D-011](D-011-tga-inbox-pipeline-architecture.md) | TGA inbox pipeline is backend code; cloud services only for mailbox, storage, malware scan and OCR; no automated activation of an approval | **Proposed** · 🔴 **OPEN** for the cloud and vendors | No (Gate 5 reviews it) |
+| [D-012](D-012-parchment-erx-adapter.md) | Parchment reached through the existing dispatch outbox as one `DispatchTransport` adapter; signed webhook; minimum-data payload | **Proposed** · 🔴 **OPEN** for contract, credentials and payload | Production enablement blocked at Gate 5 |
 
 Two records resolve contradictions **inside** the source contract rather than divergences from it. They
 are recorded here because a contradiction the source cannot settle is the implementer's decision whether
