@@ -100,6 +100,22 @@ human author.
 
 Steps 1–5 run end to end in CI and staging with no third-party data flow.
 
+**Progress (2026-11-17):** the backend for steps 1–4 is built in `backend/app/modules/tga_inbox/`, with
+stand-ins for every vendor (`adapters.py`) and a standard-library text-layer reader (`pdf_text.py`),
+tested in `backend/tests/tga_inbox/`. Not yet built: the review screen (frontend half of step 4), the
+draft note (step 5), a separate extractor database role, a platform-level quarantine for mail to an
+unknown address, and the real vendors (step 6). Choices made in the build, each recorded in the module
+docstrings:
+
+- Review routes use the existing `tga_inbox:process` permission rather than adding `tga_inbox:read`
+  and `tga_inbox:verify` (a permission-matrix change needs approval).
+- Accept creates a `PENDING` approval with `source = INBOX_EXTRACTION`; activation stays with
+  `POST /tga-approvals/{id}/verify` by a second clinician, so four-eyes holds.
+- Decisions are audited as `tga_approval.verify` and reads as `tga_approval.read` (no new audit
+  actions); ingestion as `tga_document.ingest` / `tga_document.extract`, already in the catalogue.
+- Extraction thresholds and confidences are provisional until the Clinical Safety Officer signs them
+  off; the composite score is shown and never decides.
+
 ## Alternatives considered
 
 - **Zapier.** Rejected. Clinical documents (name, IHI, condition) would transit a US-hosted automation

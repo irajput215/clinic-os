@@ -1,5 +1,5 @@
 import warnings
-from typing import Literal, Self
+from typing import Annotated, Literal, Self
 
 from pydantic import (
     EmailStr,
@@ -11,7 +11,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -130,6 +130,28 @@ class Settings(BaseSettings):
     # run but ties every stored identifier to SECRET_KEY: set this before real identifiers are stored,
     # and never change it without re-encrypting.
     FIELD_ENCRYPTION_KEY: SecretStr | None = None
+
+    # The TGA inbox (FEAT-09, D-011). The bearer token the mailbox adapter sends to
+    # `POST /api/v1/tga-inbox/messages`. Unset (the default) turns ingestion off: the route answers
+    # `404`. At least 32 characters when set; never logged.
+    TGA_INBOX_INGEST_TOKEN: SecretStr | None = Field(default=None, min_length=32)
+    # The mail domain the clinic inbox addresses live under: `tga+<tenant id>@<domain>`. The tenant is
+    # resolved from that address (the mailbox identity), never from anything else in the message.
+    TGA_INBOX_DOMAIN: str = "inbox.clinicos.local"
+    # Sender domains whose mail is processed. Empty (the default) quarantines every message: fail
+    # closed. Comma-separated in the environment, e.g. `tga.gov.au`.
+    TGA_INBOX_ALLOWED_SENDER_DOMAINS: Annotated[list[str], NoDecode] = []
+    # Where the stand-in object store keeps originals (D-011 step 2). Unset: an in-process store,
+    # which keeps nothing across restarts and is only for tests and local runs.
+    TGA_INBOX_STORAGE_DIR: str | None = None
+
+    @field_validator("TGA_INBOX_ALLOWED_SENDER_DOMAINS", mode="before")
+    @classmethod
+    def _split_sender_domains(cls, value: str | list[str] | None) -> list[str]:
+        if value is None:
+            return []
+        items = value.split(",") if isinstance(value, str) else value
+        return [item.strip().lower() for item in items if item.strip()]
 
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":

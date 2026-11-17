@@ -968,6 +968,8 @@ def _create_row(
     creation_reason: str,
     created_by: uuid.UUID,
     supersedes_id: uuid.UUID | None = None,
+    source: str = "MANUAL_ENTRY",
+    source_document_id: uuid.UUID | None = None,
 ) -> TgaApproval:
     row = TgaApproval(
         tenant_id=tenant_id,
@@ -978,8 +980,9 @@ def _create_row(
         valid_from=valid_from,
         valid_to=valid_to,
         state="PENDING",
-        source="MANUAL_ENTRY",
+        source=source,
         creation_reason=creation_reason,
+        source_document_id=source_document_id,
         created_by=created_by,
         supersedes_id=supersedes_id,
     )
@@ -993,7 +996,7 @@ def _create_row(
         to_state="PENDING",
         reason=creation_reason,
         actor_id=created_by,
-        source="MANUAL_ENTRY",
+        source=source,
     )
     _record(session, action=APPROVAL_CREATE, resource_id=row.id)
     session.refresh(row)
@@ -1050,6 +1053,57 @@ def create_approval(
         # key, or the exclusion constraint. The `with` block has rolled the transaction back by the
         # time this runs, so the mapping is a plain refusal and nothing is left half-written.
         return _constraint_refusal(error)
+
+
+def create_from_inbox(
+    session: Session,
+    *,
+    tenant_id: uuid.UUID,
+    actor_id: uuid.UUID,
+    approval_in: TgaApprovalCreate,
+    source_document_id: uuid.UUID,
+) -> TgaApprovalRead | Refusal:
+    """The TGA inbox's one writer into this module (FEAT-09 stage 12, D-011 §2), on the caller's
+    transaction so the approval, the inbox decision and both audit events commit together.
+
+    The approval starts `PENDING` with `source = INBOX_EXTRACTION`, created by the reviewer who
+    accepted the extracted values. It reaches `ACTIVE` only through `verify_approval`, by a
+    **different** clinician (`ck_tga_approvals_four_eyes`): nothing automated activates it (R14). An
+    `IntegrityError` propagates; the caller maps it with `constraint_refusal` after the rollback.
+    """
+    if _duplicate_grain(session, tenant_id=tenant_id, approval_in=approval_in):
+        _record(
+            session,
+            action=APPROVAL_CREATE,
+            resource_id=None,
+            result="DENIED",
+            reason=DUPLICATE_APPROVAL_GRAIN,
+        )
+        return _refuse(
+            DUPLICATE_APPROVAL_GRAIN,
+            status.HTTP_409_CONFLICT,
+            "An approval already exists for this patient, category, dosage form and window",
+        )
+    row = _create_row(
+        session,
+        tenant_id=tenant_id,
+        patient_id=approval_in.patient_id,
+        tga_category=approval_in.tga_category,
+        dosage_form=approval_in.dosage_form,
+        approval_reference=approval_in.approval_reference,
+        valid_from=approval_in.valid_from,
+        valid_to=approval_in.valid_to,
+        creation_reason=approval_in.creation_reason,
+        created_by=actor_id,
+        source="INBOX_EXTRACTION",
+        source_document_id=source_document_id,
+    )
+    return _read(row)
+
+
+def constraint_refusal(error: IntegrityError) -> Refusal:
+    """The public name of the database-refusal mapping, for a caller that owns the transaction."""
+    return _constraint_refusal(error)
 
 
 def supersede_approval(

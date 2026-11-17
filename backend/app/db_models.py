@@ -40,6 +40,11 @@ from app.modules.prescriptions.models import (
 )
 from app.modules.sops.models import Sop, SopAcknowledgement, SopVersion
 from app.modules.tga_approvals.models import TgaApproval, TgaApprovalEvent
+from app.modules.tga_inbox.models import (
+    TgaExtractionResult,
+    TgaInboxAttachment,
+    TgaInboxMessage,
+)
 from app.modules.users_roles.models import (
     Permission,
     PractitionerAgreement,
@@ -90,6 +95,9 @@ __all__ = [
     "TenantSettings",
     "TgaApproval",
     "TgaApprovalEvent",
+    "TgaExtractionResult",
+    "TgaInboxAttachment",
+    "TgaInboxMessage",
     "User",
     "UserRole",
 ]
