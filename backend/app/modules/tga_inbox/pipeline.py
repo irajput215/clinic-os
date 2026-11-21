@@ -60,7 +60,7 @@ def as_extractor(session: Session) -> None:
     review decision. It holds even when the application connects as a superuser (local runs, CI),
     because a superuser that sets a role takes that role's privileges.
     """
-    session.execute(_AS_EXTRACTOR)
+    session.connection().execute(_AS_EXTRACTOR)
 
 
 EXTRACT: Final[str] = "tga_document.extract"

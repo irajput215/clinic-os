@@ -86,6 +86,24 @@ def _refuse(code: str, status_code: int, message: str) -> Refusal:
     return Refusal(code=code, status_code=status_code, message=message)
 
 
+# T2-32: *"a reviewer cannot verify a patient they may not access under the care-relationship rule"*.
+# Accepting files an approval against a patient, and a candidate shows a patient's name and date of
+# birth, so both need the reviewer to be able to read that patient. A role whose `patient:read` is
+# relationship-bound (D-007) needs an active care relationship; an unconditional grant does not.
+REVIEWER_PATIENT_PERMISSION: Final[str] = "patient:read"
+
+
+def _patient_decision(actor: Actor, patient_id: uuid.UUID) -> Decision | None:
+    """The policy decision for the reviewer on this patient; `None` when there is no such patient of
+    this tenant (absent and another tenant's are one answer)."""
+    resolved = patients_service.patient_access(
+        actor=actor, patient_id=patient_id, permission=REVIEWER_PATIENT_PERMISSION
+    )
+    if resolved.patient is None or resolved.access is None:
+        return None
+    return resolved.access.decision
+
+
 def _record(
     session: Session,
     *,
@@ -272,7 +290,9 @@ def list_queue(*, actor: Actor, state: str | None, limit: int) -> InboxQueue:
         return InboxQueue(data=data, count=int(count))
 
 
-def _detail(session: Session, *, message: TgaInboxMessage) -> InboxMessageDetail:
+def _detail(
+    session: Session, *, message: TgaInboxMessage, actor: Actor
+) -> InboxMessageDetail:
     tenant_id = message.tenant_id
     attachments = _attachments(session, tenant_id=tenant_id, message_id=message.id)
     results = _results(
@@ -316,6 +336,11 @@ def _detail(session: Session, *, message: TgaInboxMessage) -> InboxMessageDetail
             ihi=best.get("PATIENT_IHI"),
             medicare=best.get("PATIENT_MEDICARE"),
         ):
+            # A patient the reviewer may not read is not shown, so a proposal never discloses a
+            # name or date of birth the care-relationship rule withholds (T2-32).
+            decision = _patient_decision(actor, candidate.patient_id)
+            if decision is None or not decision.allowed:
+                continue
             candidates.append(
                 MatchCandidateRead(
                     patient_id=candidate.patient_id,
@@ -369,7 +394,7 @@ def read_message(*, actor: Actor, message_id: uuid.UUID) -> InboxMessageDetail |
                 reason="NOT_FOUND",
             )
             return None
-        detail = _detail(session, message=message)
+        detail = _detail(session, message=message, actor=actor)
         _record(
             session,
             action=READ,
@@ -481,7 +506,7 @@ def claim(
         message.lease_expires_at = now + timedelta(minutes=CLAIM_MINUTES)
         session.add(message)
         session.flush()
-        return _detail(session, message=message)
+        return _detail(session, message=message, actor=actor)
 
 
 def _holding(
@@ -555,6 +580,26 @@ def accept(
     *, actor: Actor, message_id: uuid.UUID, request: AcceptRequest
 ) -> DecisionResult | Refusal | None:
     """Accept or correct the extracted values and create a `PENDING` approval (stage 12)."""
+    # The reviewer must be able to read the chosen patient (T2-32). Decided before the decision's
+    # transaction opens, as the approvals router does; the refusal is audited on its own transaction,
+    # and nothing is written. `404` for a patient of no-one's or another tenant's; the policy's own
+    # `403` (for example `AUTHZ_CARE_RELATIONSHIP_DENIED`) for a patient the reviewer may not access.
+    decision = _patient_decision(actor, request.patient_id)
+    if decision is None or not decision.allowed:
+        reason = "PATIENT_NOT_FOUND" if decision is None else decision.code.value
+        with _transaction(actor) as session:
+            _record(
+                session,
+                action=DECIDE,
+                resource_id=message_id,
+                result="DENIED",
+                reason=reason,
+            )
+        if decision is None:
+            return _refuse(
+                "PATIENT_NOT_FOUND", status.HTTP_404_NOT_FOUND, "Patient not found"
+            )
+        return _refuse(decision.code.value, decision.status_code, decision.message)
     try:
         with _transaction(actor) as session:
             held = _holding(session, actor=actor, message_id=message_id)

@@ -49,7 +49,7 @@ ruling:
 | **T2-27…T2-29** Point-in-time match | **Pre-existing** | `tga_approvals` | Not touched by this work. |
 | **T2-30** Composite score and four policy values | **Differs** | A composite (mean of the five mandatory fields' confidence) and a per-field floor, shown on the review screen; auto-create does not exist | Thresholds are **constants** in `extraction.py`, not configuration writable under `tenant:configure` with step-up. Match confidence is not in the composite. No CSO sign-off. |
 | **T2-31** Low-confidence routing names the field | **Partial** | Every message goes to a person; fields under the floor are flagged by name | `TGA_EXTRACTION_LOW_CONFIDENCE` is not written (not in the audit catalogue). |
-| **T2-32** Verification queue with a lease | **Partial — defect** | Oldest first; 15-minute lease; second claim `409`; accept, correct, reject and defer; correct and reject need a reason code | **Defect:** accept does **not** apply the care-relationship rule to the reviewer for the chosen patient. No alert for items older than 4 hours. |
+| **T2-32** Verification queue with a lease | **Partial** | Oldest first; 15-minute lease; second claim `409`; accept, correct, reject and defer; correct and reject need a reason code; **the reviewer must be able to read the chosen patient under the care-relationship rule, or accept is refused (`403 AUTHZ_CARE_RELATIONSHIP_DENIED`, audited) and such a patient is not shown as a candidate** (fixed 2026-11-21, `tests/tga_inbox/test_reviewer_care_relationship.py`) | No alert for items older than 4 hours. |
 | **T2-33** No automated path to `ACTIVE` | **Partial** | Accept creates `PENDING` only; activation is the existing verify by a second clinician (four-eyes); the pipeline writes as `clinos_extractor`, which the database refuses on `tga_approvals` and `patients` (tested) | No test that **enumerates every writer** of `tga_approvals.state`. |
 | **T2-34** Verification UI | **Partial** | `/tga-inbox` and `/tga-inbox/{id}`: PDF beside fields, confidence and method per field, candidates with agreeing identifiers, nothing pre-selected | Page number shown but no jump to the page. No Playwright spec (CI has no inbox token). No CSO usability note. |
 | **T2-35** Filing reversal | **Not done** | | |
@@ -84,7 +84,7 @@ work added only the adapter.
 
 ## 5. What is owed, in order
 
-1. **Fix the T2-32 defect**: apply the care-relationship rule to the reviewer on accept. A safety control; do first.
+1. ~~**Fix the T2-32 defect**: apply the care-relationship rule to the reviewer on accept.~~ **Fixed 2026-11-21**: accept is refused and candidates are hidden for a patient the reviewer may not read.
 2. **Rule on C1–C3** (§1).
 3. **Approve or amend D-011 and D-012.** Both remain Proposed; the code follows them.
 4. **CSO decisions:** the threshold values (T2-30), the correction and rejection reason lists, the golden set (T2-44).
