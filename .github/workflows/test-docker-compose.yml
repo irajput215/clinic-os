@@ -1,10 +1,19 @@
 name: Test Docker Compose
 
 on:
+  # Branch model: `main` is the working (dev) branch and deploys on every push with no CI in front
+  # of it. Tests and checks run only on the `testing` and `prod` branches and on pull requests into
+  # them. Run this workflow by hand from the Actions tab to check `main` at any time.
   push:
     branches:
-      - master
+      - testing
+      - prod
   pull_request:
+    branches:
+      - testing
+      - prod
+  workflow_dispatch:
+
 permissions:
   contents: read
 

@@ -39,6 +39,21 @@ docker compose up -d
 `.env` is **not** committed. Run `cp .env.example .env` before anything that reads settings — CI does
 exactly this. Rotate the placeholder values before deploying.
 
+## Branches and CI
+
+| Branch | Purpose | What runs on push |
+|---|---|---|
+| `main` | Day-to-day work (dev). Every push deploys, so changes are visible straight away | `Deploy` only, no tests |
+| `testing` | Promote `main` here to run the full CI | Backend tests, Playwright, docker-compose test, security scanning, zizmor |
+| `prod` | Release branch | The same CI as `testing` |
+
+Pull requests into `testing` or `prod` run the same checks. Pull requests into `main` run none. Any CI
+workflow can still be started by hand on any branch from the Actions tab (`workflow_dispatch`).
+Promote by merging `main` into `testing`, then `testing` into `prod`.
+
+Deploying from `main` without tests is the owner's choice for speed (2026-11-21). The local checks in
+"Always" below still apply before a commit.
+
 ## Non-negotiables
 
 The full statement is [docs/reference/build-contract.md](docs/reference/build-contract.md) §6 and §8.

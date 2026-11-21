@@ -1490,3 +1490,115 @@ def set_preferred_pharmacy(
         )
         session.refresh(patient)
         return to_read(patient)
+
+
+# --------------------------------------------------------------------------------------------
+# TGA inbox matching (FEAT-09 R10, R11; D-011)
+# --------------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class InboxMatchCandidate:
+    """A patient the inbox *proposes*, and which identifiers agreed. Never a write, never a merge."""
+
+    patient_id: uuid.UUID
+    display_name: str
+    date_of_birth: date
+    agreed: tuple[str, ...]
+
+
+# The identifiers that count towards a match. A name is one identifier however many parts agree.
+STRONG_IDENTIFIERS: Final[frozenset[str]] = frozenset({"DOB", "IHI", "MEDICARE"})
+
+
+def inbox_match_candidates(
+    session: Session,
+    *,
+    tenant_id: uuid.UUID,
+    full_name: str | None,
+    date_of_birth: date | None,
+    ihi: str | None,
+    medicare: str | None,
+    limit: int = 5,
+) -> list[InboxMatchCandidate]:
+    """Patients of **this** tenant on whom at least two independent identifiers agree, one of them
+    the date of birth or a national identifier (FEAT-09 R10).
+
+    Runs on the caller's tenant transaction, so RLS scopes it (R11); the national identifiers are
+    compared through the tenant-scoped blind index, so an IHI is not a key that crosses tenants. The
+    result is ordered by how many identifiers agreed and then by id, and carries no "selected" flag:
+    the reviewer chooses (R15).
+    """
+    conditions: list[ColumnElement[bool]] = []
+    if ihi:
+        conditions.append(
+            col(Patient.ihi_blind_index)
+            == field_crypto.blind_index(ihi, tenant_id=tenant_id, kind=IHI)
+        )
+    if medicare:
+        conditions.append(
+            col(Patient.medicare_blind_index)
+            == field_crypto.blind_index(medicare, tenant_id=tenant_id, kind=MEDICARE)
+        )
+    if date_of_birth:
+        conditions.append(col(Patient.date_of_birth) == date_of_birth)
+    if not conditions:
+        return []
+    rows = session.exec(
+        select(Patient)
+        .where(
+            Patient.tenant_id == tenant_id,
+            col(Patient.deleted_at).is_(None),
+            col(Patient.merged_into_patient_id).is_(None),
+            or_(*conditions),
+        )
+        .order_by(col(Patient.id))
+        .limit(200)
+    ).all()
+    words = [word.lower() for word in (full_name or "").split() if word]
+    ihi_index = (
+        field_crypto.blind_index(ihi, tenant_id=tenant_id, kind=IHI) if ihi else None
+    )
+    medicare_index = (
+        field_crypto.blind_index(medicare, tenant_id=tenant_id, kind=MEDICARE)
+        if medicare
+        else None
+    )
+    found: list[InboxMatchCandidate] = []
+    for patient in rows:
+        agreed: list[str] = []
+        if date_of_birth and patient.date_of_birth == date_of_birth:
+            agreed.append("DOB")
+        if ihi_index is not None and patient.ihi_blind_index == ihi_index:
+            agreed.append("IHI")
+        if (
+            medicare_index is not None
+            and patient.medicare_blind_index == medicare_index
+        ):
+            agreed.append("MEDICARE")
+        if words and patient.family_name.lower() == words[-1]:
+            given = patient.given_name.lower()
+            if len(words) == 1 or words[0] == given or given.startswith(words[0]):
+                agreed.append("NAME")
+        if len(agreed) >= 2 and STRONG_IDENTIFIERS.intersection(agreed):
+            found.append(
+                InboxMatchCandidate(
+                    patient_id=patient.id,
+                    display_name=f"{patient.given_name} {patient.family_name}",
+                    date_of_birth=patient.date_of_birth,
+                    agreed=tuple(agreed),
+                )
+            )
+    found.sort(
+        key=lambda candidate: (-len(candidate.agreed), str(candidate.patient_id))
+    )
+    return found[:limit]
+
+
+def live_patient_exists(
+    session: Session, *, tenant_id: uuid.UUID, patient_id: uuid.UUID
+) -> bool:
+    """Whether a live patient of this tenant has this id, on the caller's transaction."""
+    return (
+        _live_patient(session, tenant_id=tenant_id, patient_id=patient_id) is not None
+    )
