@@ -101,6 +101,22 @@ state, `200` only after commit, quarantine (`202`) for a payload that maps to no
 | 5 | Token storage and display; patient delivery | Contract decision on who delivers |
 | 6 | Production enablement | Items 1–8, Gate 5 sign-off |
 
+**Progress (2026-11-21):** steps 1 and 2 are built in
+`backend/app/modules/prescriptions/transports/`, tested in `backend/tests/prescriptions/test_parchment.py`:
+
+- `resilience.py`: deadline, at most 4 attempts with full jitter for a `NotSent` that is transient
+  only, circuit breaker, bulkhead. An unknown outcome is never retried; reconciliation resolves it.
+- `parchment.py`: the adapter, the DRAFT payload allow-list (`PAYLOAD_FIELDS`, pinned by a test), the
+  mapping of every provider answer to the outbox's four outcomes, and `SimulatedParchmentWire`.
+- `identities.py`: patient (IHI, sex, address, Medicare), prescriber (an `ACTIVE`, unexpired HPI-I and
+  prescriber number) and the approval reference, read through each module's facade. Anything missing
+  is refused before a payload is built.
+
+The real HTTP wire is **not** written: Parchment's documentation could not be reached from the build
+environment and no endpoint or field of theirs is guessed. `configured_transport()` still returns
+`None`. Not in the payload yet: the practice's HPI-O and address (no column exists). The eScript token
+reference is returned by the wire but not stored (needs a schema change and the delivery decision).
+
 ## Alternatives considered
 
 - **Call Parchment directly from the sign or dispatch route.** Rejected: a timeout would leave the

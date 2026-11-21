@@ -1791,3 +1791,12 @@ def _decide(
     # No live row at this grain: the state of the most recent one is the reason.
     row = same_grain[0]
     return _Decision(reason=_STATE_REASONS[row.state], row=row)
+
+
+def approval_reference(
+    session: Session, *, tenant_id: uuid.UUID, approval_id: uuid.UUID
+) -> str | None:
+    """The regulator reference an approval was recorded under, for the eRx payload (D-012 §3).
+    On the caller's tenant transaction; `None` for absent or another tenant's."""
+    row = _load(session, tenant_id=tenant_id, approval_id=approval_id)
+    return None if row is None else row.approval_reference
