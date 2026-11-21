@@ -19,8 +19,8 @@
     "email:export": "bun run --filter emails export"
   },
   "dependencies": {
-    "@neon/config": "^1.8.3",
-    "@neon/env": "^1.5.0"
+    "@neon/config": "^1.9.4",
+    "@neon/env": "^1.6.5"
   },
   "overrides": {
     "js-yaml": "4.3.2"
