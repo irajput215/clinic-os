@@ -34,7 +34,10 @@ bound to the transaction's tenant exactly as `clinos_app` is.
 `NOLOGIN` and `PASSWORD NULL`, like every role here: no credential in a migration. `clinos_app` is
 made a member so the running application can `SET LOCAL ROLE clinos_extractor` inside one transaction
 and fall back to itself at commit. Membership is the only change to `clinos_app`: its own privileges are
-a superset of the extractor's, so it gains nothing.
+a superset of the extractor's, so it gains nothing. The role running the migration is made a member
+too, for a deployment whose application still connects as that login. An application connecting as
+any **other** role needs `GRANT clinos_extractor TO <that role>` before ingestion is switched on, or
+every ingest fails with `permission denied to set role`: fail closed, never a silent bypass.
 """
 from alembic import op
 
@@ -69,9 +72,14 @@ def upgrade() -> None:
     # The design's explicit denial: nothing the extractor runs may touch an approval.
     op.execute(f"REVOKE ALL ON tga_approvals, tga_approval_events, patients FROM {_ROLE}")
     op.execute(f"GRANT {_ROLE} TO clinos_app")
+    # A deployment whose application connects as the same login the migrations run as (the default:
+    # `MIGRATION_DATABASE_URL` falls back to `DATABASE_URL`) must be able to switch into the role too.
+    # On PostgreSQL 16+ creating a role does not let its creator `SET ROLE` to it, so say so here.
+    op.execute(f"GRANT {_ROLE} TO CURRENT_USER")
 
 
 def downgrade() -> None:
+    op.execute(f"REVOKE {_ROLE} FROM CURRENT_USER")
     op.execute(f"REVOKE {_ROLE} FROM clinos_app")
     for table in _GRANTS:
         op.execute(f"REVOKE ALL ON {table} FROM {_ROLE}")
