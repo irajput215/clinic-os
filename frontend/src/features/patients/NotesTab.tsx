@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Loader2, Lock, PenLine } from "lucide-react"
+import { FileText, Loader2, Lock, PenLine } from "lucide-react"
 import { useId, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -11,6 +11,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { categoryShort, formLabel } from "@/data/approvals"
+import { patientTgaLettersQuery } from "@/data/inbox"
 import { parseSoap, patientRecordsQuery, recordsRepo } from "@/data/records"
 import type { ClinicalRecordSummary, SoapNote } from "@/data/types"
 import {
@@ -21,7 +23,7 @@ import {
   Pill,
   SkeletonRows,
 } from "@/design/primitives"
-import { formatDayMonthTime } from "@/lib/format"
+import { formatDate, formatDayMonthTime } from "@/lib/format"
 import { describeError } from "@/lib/http"
 import { currentUserQuery } from "@/lib/session"
 
@@ -97,6 +99,20 @@ export function NotesTab({ patientId }: { patientId: string }) {
 
   return (
     <div className="space-y-3.5">
+      <TgaLetters
+        patientId={patientId}
+        onStart={(note) => {
+          if (
+            !isEmpty(draft) &&
+            !window.confirm("Replace the note you have started?")
+          )
+            return
+          setDraft(note)
+          toast.success(
+            "Draft filled from the TGA letter. Check it, then save and sign it as your note.",
+          )
+        }}
+      />
       <Card title="New consult note">
         <SoapEditor value={draft} onChange={setDraft} />
         <div className="mt-3.5 flex items-center justify-between gap-3 max-sm:flex-col max-sm:items-stretch">
@@ -269,5 +285,60 @@ function AmendDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/**
+ * Accepted TGA letters for this patient, each offering its draft note (D-011 §3). Hidden when there
+ * are none, or when the server refuses (the composer below is the caller's own decision either way).
+ */
+function TgaLetters({
+  patientId,
+  onStart,
+}: {
+  patientId: string
+  onStart: (note: SoapNote) => void
+}) {
+  const letters = useQuery(patientTgaLettersQuery(patientId))
+  if (!letters.data || letters.data.length === 0) return null
+  return (
+    <Card title="From TGA letters">
+      <ul className="grid gap-2">
+        {letters.data.map((letter) => (
+          <li
+            key={letter.message_id}
+            className="flex flex-wrap items-center gap-3 rounded-inner border border-line px-3.5 py-2.5"
+          >
+            <FileText className="size-4 text-stone" aria-hidden />
+            <span className="min-w-0 flex-1 text-sm">
+              <span className="font-medium text-ink">
+                {letter.values.APPROVAL_REFERENCE ?? "TGA approval"}
+              </span>
+              <span className="text-stone">
+                {" "}
+                · received {formatDate(letter.received_at)}
+                {letter.values.TGA_CATEGORY
+                  ? ` · ${categoryShort(letter.values.TGA_CATEGORY)}`
+                  : ""}
+                {letter.values.DOSAGE_FORM
+                  ? ` · ${formLabel(letter.values.DOSAGE_FORM)}`
+                  : ""}
+              </span>
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onStart(letter.draft_note)}
+            >
+              Start note from letter
+            </Button>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2.5 text-xs text-stone">
+        The draft is filled in for you to check and complete. It is your note:
+        nothing is saved until you save it, and it is signed by you.
+      </p>
+    </Card>
   )
 }

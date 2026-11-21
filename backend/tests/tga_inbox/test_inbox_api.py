@@ -496,3 +496,67 @@ def test_an_unset_sender_allow_list_trusts_nobody(
         inbox.detail(clinic.owner, message_id).json()["state_reason"]
         == "UNTRUSTED_SENDER"
     )
+
+
+# -- the draft note (D-011 step 5) --------------------------------------------------------------------
+
+
+def _letters(inbox: InboxApi, actor, patient_id) -> object:  # type: ignore[no-untyped-def]
+    return inbox.client.get(
+        f"{API}/patients/{patient_id}/tga-letters", headers=actor.headers
+    )
+
+
+def test_an_accepted_letter_offers_a_draft_note_and_writes_no_record(
+    inbox: InboxApi, clinic: Clinic
+) -> None:
+    assert _letters(inbox, clinic.owner, clinic.patient_id).json() == []
+    message_id = inbox.delivered(clinic.tenant_id)
+    detail = inbox.post(clinic.owner, message_id, "claim").json()
+    accepted = inbox.post(
+        clinic.owner,
+        message_id,
+        "accept",
+        _accept_body(
+            clinic,
+            detail,
+            values={"DOSAGE_FORM": "ORAL_LIQUID"},
+            correction_reason="VOCABULARY_MAPPING",
+        ),
+    )
+    assert accepted.status_code == 200, accepted.text
+
+    response = _letters(inbox, clinic.owner, clinic.patient_id)
+    assert response.status_code == 200, response.text
+    [letter] = response.json()
+    assert letter["message_id"] == str(message_id)
+    assert letter["approval_id"] == accepted.json()["approval_id"]
+    # The draft is built from the **accepted** values, the correction included.
+    assert letter["values"]["DOSAGE_FORM"] == "ORAL_LIQUID"
+    note = letter["draft_note"]
+    assert "Approval SAS-2026-004512." in note["objective"]
+    assert "Approved: Category 3, Oral liquid." in note["objective"]
+    assert "Valid from 1 March 2026 to 28 February 2027" in note["objective"]
+    assert "Dr Grace Example" in note["objective"]
+    assert note["subjective"] == "" and note["assessment"] == ""
+    # No national identifiers in the note text, and no clinical record exists until a person saves one.
+    assert SYNTHETIC_IHI not in str(note)
+    assert (
+        inbox.scalar(
+            "SELECT count(*) FROM clinical_records WHERE patient_id = :p",
+            p=clinic.patient_id,
+        )
+        == 0
+    )
+    reads = inbox.audit(clinic.tenant_id, "tga_approval.read")
+    assert reads[-1]["result"] == "SUCCESS"
+
+
+def test_letters_are_refused_without_clinical_access_and_404_across_clinics(
+    inbox: InboxApi, clinic: Clinic
+) -> None:
+    pharmacy = inbox.add(clinic.owner, "PHARMACY")
+    assert _letters(inbox, pharmacy, clinic.patient_id).status_code == 403
+    stranger = inbox.register()
+    assert _letters(inbox, stranger, clinic.patient_id).status_code == 404
+    assert _letters(inbox, clinic.owner, uuid.uuid4()).status_code == 404

@@ -56,14 +56,16 @@ from app.modules.tga_inbox.schemas import (
     AcceptRequest,
     AttachmentRead,
     DecisionResult,
+    DraftNote,
     ExtractedFieldRead,
     FieldName,
     InboxMessageDetail,
     InboxMessageSummary,
     InboxQueue,
     MatchCandidateRead,
+    PatientTgaLetter,
 )
-from app.modules.users_roles.policy import Actor
+from app.modules.users_roles.policy import Actor, Decision
 
 READ: Final[str] = "tga_approval.read"
 DECIDE: Final[str] = "tga_approval.verify"
@@ -685,3 +687,160 @@ def _iso(value: str) -> date:
     if parsed is None:
         raise ValueError("not a date")
     return parsed
+
+
+# -- the draft note (D-011 §3, step 5) ---------------------------------------------------------------
+
+# What a note drafted from a letter may say: the approval and who it names. No IHI, no Medicare number
+# (the record already holds them), and no clinical judgement: the briefing-note rule (D11) applies.
+_NOTE_DATE_FIELDS: Final[tuple[str, ...]] = ("VALID_FROM", "VALID_TO")
+
+
+def _words(token: str) -> str:
+    """A controlled token as words: `ORAL_LIQUID` -> `Oral liquid`, `CATEGORY_3` -> `Category 3`."""
+    return token.replace("_", " ").capitalize()
+
+
+def _long_date(value: str | None) -> str | None:
+    parsed = extraction.parse_date(value) if value else None
+    return f"{parsed.day} {parsed:%B %Y}" if parsed else value
+
+
+def draft_note(
+    *, received_at: datetime, sender: str, values: dict[str, str]
+) -> DraftNote:
+    """A factual SOAP draft from accepted values. Deterministic, so the same letter drafts the same
+    note; the clinician edits it before saving."""
+    received = received_at.astimezone(UTC)
+    lines = [
+        f"TGA approval letter received {received.day} {received:%B %Y} from {sender}.",
+    ]
+    reference = values.get("APPROVAL_REFERENCE")
+    if reference:
+        lines.append(f"Approval {reference}.")
+    grant = ", ".join(
+        _words(value)
+        for value in (values.get("TGA_CATEGORY"), values.get("DOSAGE_FORM"))
+        if value
+    )
+    if grant:
+        lines.append(f"Approved: {grant}.")
+    if values.get("VALID_FROM") or values.get("VALID_TO"):
+        lines.append(
+            f"Valid from {_long_date(values.get('VALID_FROM')) or 'not stated'} to "
+            f"{_long_date(values.get('VALID_TO')) or 'not stated'} (end date as printed)."
+        )
+    prescriber = values.get("PRESCRIBER_NAME")
+    if prescriber:
+        hpi = values.get("PRESCRIBER_HPI_I")
+        lines.append(
+            f"Prescriber named on the letter: {prescriber}"
+            + (f" (HPI-I {hpi})." if hpi else ".")
+        )
+    return DraftNote(
+        subjective="",
+        objective=" ".join(lines),
+        assessment="",
+        plan=(
+            "Approval recorded as pending from the TGA inbox. Verify it on the approvals register "
+            "before prescribing."
+        ),
+    )
+
+
+def _accepted_values(
+    session: Session, *, tenant_id: uuid.UUID, message_id: uuid.UUID
+) -> dict[str, str]:
+    attachment_ids = [
+        a.id for a in _attachments(session, tenant_id=tenant_id, message_id=message_id)
+    ]
+    values: dict[str, str] = {}
+    for row in _results(session, tenant_id=tenant_id, attachment_ids=attachment_ids):
+        if row.accepted_value is None:
+            continue
+        value = _decrypt(
+            row.accepted_value, tenant_id=tenant_id, kind=value_kind(row.field_name)
+        )
+        if value is not None:
+            values[row.field_name] = value
+    return values
+
+
+class LetterRefusal(Exception):
+    """The patient is not reachable (`404`) or the treating-relationship rule refused (the decision)."""
+
+    def __init__(self, decision: Decision | None) -> None:
+        super().__init__("refused")
+        self.decision = decision
+
+
+def letters_for_patient(
+    *, actor: Actor, patient_id: uuid.UUID
+) -> list[PatientTgaLetter]:
+    """The patient's accepted TGA letters, newest first, each with a draft note (D-011 §3).
+
+    `clinical_record:read` under the treating-relationship rule (D-007), like the intake briefing:
+    a letter is clinical context. A patient of another tenant is `404`; a refused relationship is the
+    policy's own answer. Both are audited, and so is the read.
+    """
+    resolved = patients_service.patient_access(
+        actor=actor, patient_id=patient_id, permission="clinical_record:read"
+    )
+    if (
+        resolved.patient is None
+        or resolved.access is None
+        or not resolved.access.allowed
+    ):
+        with _transaction(actor) as session:
+            _record(
+                session,
+                action=READ,
+                resource_id=None,
+                result="DENIED",
+                reason="NOT_FOUND"
+                if resolved.patient is None or resolved.access is None
+                else resolved.access.decision.code.value,
+            )
+        raise LetterRefusal(
+            None if resolved.access is None else resolved.access.decision
+        )
+    access = resolved.access
+    with _transaction(actor) as session:
+        messages = session.exec(
+            select(TgaInboxMessage)
+            .where(
+                TgaInboxMessage.tenant_id == actor.tenant_id,
+                TgaInboxMessage.patient_id == patient_id,
+                TgaInboxMessage.processing_state == "VERIFIED",
+            )
+            .order_by(col(TgaInboxMessage.decided_at).desc(), col(TgaInboxMessage.id))
+            .limit(20)
+        ).all()
+        letters: list[PatientTgaLetter] = []
+        for message in messages:
+            values = _accepted_values(
+                session, tenant_id=actor.tenant_id, message_id=message.id
+            )
+            letters.append(
+                PatientTgaLetter(
+                    message_id=message.id,
+                    received_at=message.received_at,
+                    decided_at=message.decided_at,
+                    approval_id=message.approval_id,
+                    values=cast(dict[FieldName, str], values),
+                    draft_note=draft_note(
+                        received_at=message.received_at,
+                        sender=message.from_address,
+                        values=values,
+                    ),
+                )
+            )
+        payload: dict[str, object] = {
+            "patient_id": str(patient_id),
+            "purpose": access.purpose,
+            "result_count": len(letters),
+        }
+        if access.care_relationship_id is not None:
+            payload["care_relationship_id"] = str(access.care_relationship_id)
+        _record(session, action=READ, resource_id=None, payload=payload)
+        return letters

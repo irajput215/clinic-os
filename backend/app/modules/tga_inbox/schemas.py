@@ -190,3 +190,25 @@ class DecisionResult(_Strict):
     message_id: uuid.UUID
     processing_state: str
     approval_id: uuid.UUID | None = None
+
+
+# -- the draft note (D-011 §3) -------------------------------------------------------------------
+
+
+class DraftNote(_Strict):
+    """A SOAP draft for a clinician to start a note from. Not a clinical record until they save and
+    sign it as its author; the same shape as the consult-note composer's `SoapNote`."""
+
+    subjective: str
+    objective: str
+    assessment: str
+    plan: str
+
+
+class PatientTgaLetter(_Strict):
+    message_id: uuid.UUID
+    received_at: datetime
+    decided_at: datetime | None
+    approval_id: uuid.UUID | None
+    values: dict[FieldName, str]
+    draft_note: DraftNote

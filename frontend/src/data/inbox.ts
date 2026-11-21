@@ -5,6 +5,7 @@ import type {
   DecisionResult,
   InboxMessageDetail,
   InboxQueue,
+  PatientTgaLetter,
 } from "@/client/types.gen"
 
 /**
@@ -168,3 +169,22 @@ export const confidenceTone = (
   belowFloor: boolean,
 ): "ok" | "warn" | "danger" =>
   confidence == null ? "danger" : belowFloor ? "warn" : "ok"
+
+/**
+ * The patient's accepted TGA letters, each with a draft note built from the accepted values
+ * (`GET /patients/{id}/tga-letters`, `clinical_record:read` with a care relationship). The draft is
+ * never stored: it fills the consult-note composer, and becomes a record only when a clinician saves
+ * it as their own note and signs it (D-011 §3).
+ */
+export const patientTgaLettersQuery = (patientId: string) =>
+  queryOptions({
+    queryKey: ["inbox", "patient-letters", patientId],
+    queryFn: async () =>
+      (
+        await TgaInboxService.inboxPatientTgaLetters({
+          path: { patient_id: patientId },
+        })
+      ).data as PatientTgaLetter[],
+    staleTime: 30_000,
+    retry: false,
+  })

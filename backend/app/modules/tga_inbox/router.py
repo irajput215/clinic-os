@@ -46,6 +46,7 @@ from app.modules.tga_inbox.schemas import (
     InboxMessageDetail,
     InboxQueue,
     IngestResult,
+    PatientTgaLetter,
     RejectRequest,
 )
 from app.modules.tga_inbox.service import Refusal
@@ -54,6 +55,8 @@ from app.modules.users_roles.policy import Actor, can, enforce
 PROCESS = "tga_inbox:process"
 
 router = APIRouter(prefix="/tga-inbox", tags=["tga-inbox"])
+# The patient-scoped read (`GET /patients/{id}/tga-letters`), owned by this module.
+patient_router = APIRouter(prefix="/patients", tags=["tga-inbox"])
 
 ingest_rate_limit = rate_limit(scope="tga-inbox-ingest", limit=120, window_seconds=60)
 
@@ -263,3 +266,33 @@ def reject_message(
 def defer_message(*, actor: ActorDep, message_id: uuid.UUID) -> DecisionResult:
     _authorize(actor, action=service.DECIDE)
     return _answer(service.defer(actor=actor, message_id=message_id))
+
+
+@patient_router.get(
+    "/{patient_id}/tga-letters",
+    response_model=list[PatientTgaLetter],
+    dependencies=[Depends(read_rate_limit)],
+)
+def patient_tga_letters(
+    *, actor: ActorDep, patient_id: uuid.UUID
+) -> list[PatientTgaLetter]:
+    """The patient's accepted TGA letters, each with a draft note a clinician may start from.
+
+    `clinical_record:read` under the treating-relationship rule (D-007). The draft is built at read
+    time from the accepted values and is never stored: it becomes a clinical record only when a
+    clinician saves it as a note, as its author, and signs it (D-011 §3).
+    """
+    decision = can(actor, "clinical_record:read")
+    if not decision.allowed:
+        service.audit_denial(
+            actor=actor, action=service.READ, reason=decision.code.value
+        )
+    enforce(decision)
+    try:
+        return service.letters_for_patient(actor=actor, patient_id=patient_id)
+    except service.LetterRefusal as refused:
+        if refused.decision is not None:
+            enforce(refused.decision)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found"
+        ) from refused
