@@ -15,7 +15,7 @@ from typing import Any, Final, LiteralString, cast
 from uuid import UUID
 
 import psycopg
-from sqlalchemy import Connection, Select, TextClause, event, exc
+from sqlalchemy import Connection, Select, TextClause, event, exc, text
 from sqlalchemy.pool import ConnectionPoolEntry, PoolProxiedConnection
 from sqlalchemy.sql.compiler import SQLCompiler
 from sqlmodel import Session, create_engine, select
@@ -99,6 +99,23 @@ def _refuse_dead_connection(
         raise exc.DisconnectionError("pooled connection was closed by the server")
 
 
+#: `true` when the connected login is not bound by row-level security: a superuser, or `BYPASSRLS`
+#: (Neon's `neondb_owner` has it). RLS is then decorative and only the application's own predicates
+#: keep tenants apart. `docs/progress.md` P5 / `docs3/roadmap.md` go-live blocker.
+_BYPASSES_RLS: Final = text(
+    "SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user"
+)
+RLS_BYPASS_WARNING: Final = (
+    "Database login bypasses row-level security: tenant isolation rests on application code alone. "
+    "Connect as clinos_app (docs/reference/runbook-run-as-clinos-app.md)"
+)
+
+
+def connection_bypasses_rls(connection: Connection) -> bool:
+    """Whether the login behind `connection` ignores row-level security policies."""
+    return bool(connection.execute(_BYPASSES_RLS).scalar_one())
+
+
 def warm_pool(connections: int = POOL_SIZE) -> None:
     """Fill the pool before the first request needs it. Never raises.
 
@@ -114,6 +131,9 @@ def warm_pool(connections: int = POOL_SIZE) -> None:
     try:
         # One first, alone: the first connection initialises the dialect.
         opened.append(engine.connect())
+        # Said once, at start-up, so a deployment still on an owner login cannot go unnoticed.
+        if connection_bypasses_rls(opened[0]):
+            logger.warning(RLS_BYPASS_WARNING)
         with ThreadPoolExecutor(max_workers=max(connections - 1, 1)) as pool:
             opened.extend(pool.map(lambda _: engine.connect(), range(connections - 1)))
     except Exception:  # noqa: BLE001 - start-up must not fail on a database blip
