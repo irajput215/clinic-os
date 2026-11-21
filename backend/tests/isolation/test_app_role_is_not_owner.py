@@ -32,6 +32,9 @@ ROLES = (
     "clinos_retention",
     "clinos_readonly_audit",
     "clinos_auth",
+    # FEAT-09 R14 (migration 9c4e2b7d1a05): the TGA inbox pipeline writes as this role, which holds
+    # nothing on tga_approvals or patients. Deferred by 33c56ebab859 until its table existed.
+    "clinos_extractor",
 )
 
 # The one exception the design names: a revoke is a real `DELETE` on these two link tables
@@ -79,7 +82,7 @@ _GRANTS_FOR_APP_ON = text(
 )
 
 
-def test_the_five_roles_exist_with_least_privilege_attributes() -> None:
+def test_the_declared_roles_exist_with_least_privilege_attributes() -> None:
     with engine.connect() as conn:
         actual = {
             row[0]

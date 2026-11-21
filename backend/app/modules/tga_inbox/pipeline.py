@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Final
 
+from sqlalchemy import text
 from sqlmodel import Session, select
 
 from app.core import field_crypto
@@ -43,6 +44,25 @@ from app.modules.tga_inbox.models import (
 )
 
 INGEST: Final[str] = "tga_document.ingest"
+
+# FEAT-09 R14: the pipeline writes as `clinos_extractor`, which holds `SELECT, INSERT` on the three
+# inbox tables and the audit log and **nothing** on `tga_approvals` or `patients` (migration
+# `9c4e2b7d1a05`). `SET LOCAL` ends with the transaction, so the pooled connection is back to its own
+# role at commit or rollback, and no other request inherits it.
+EXTRACTOR_ROLE: Final[str] = "clinos_extractor"
+_AS_EXTRACTOR: Final = text(f"SET LOCAL ROLE {EXTRACTOR_ROLE}")
+
+
+def as_extractor(session: Session) -> None:
+    """Run the rest of this transaction with the extractor's privileges only.
+
+    The database, not this code, then refuses any write outside ingestion: an approval, a patient, a
+    review decision. It holds even when the application connects as a superuser (local runs, CI),
+    because a superuser that sets a role takes that role's privileges.
+    """
+    session.execute(_AS_EXTRACTOR)
+
+
 EXTRACT: Final[str] = "tga_document.extract"
 
 ALLOWED_CONTENT_TYPES: Final[frozenset[str]] = frozenset({"application/pdf"})
@@ -273,6 +293,7 @@ def ingest(
             raise UnknownMailbox
 
     with tenant_transaction(tenant_id=tenant_id) as session:
+        as_extractor(session)
         existing = session.exec(
             select(TgaInboxMessage).where(
                 TgaInboxMessage.tenant_id == tenant_id,
@@ -317,6 +338,7 @@ def ingest(
     state, reason = _message_outcome(items, trusted=trusted)
 
     with tenant_transaction(tenant_id=tenant_id) as session:
+        as_extractor(session)
         row = TgaInboxMessage(
             tenant_id=tenant_id,
             provider_message_id=message.provider_message_id,

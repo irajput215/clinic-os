@@ -105,7 +105,9 @@ stand-ins for every vendor (`adapters.py`) and a standard-library text-layer rea
 tested in `backend/tests/tga_inbox/`. The review screen (2026-11-21) is `frontend/src/features/inbox/` at
 `/tga-inbox`. The draft note (2026-11-21) is built at read time by `GET /patients/{id}/tga-letters` and offered in the
 patient's Notes tab ("Start note from letter"); it is never stored and becomes a record only when a
-clinician saves it as their own note and signs it. Not yet built: a separate extractor database role, a platform-level quarantine for mail to an
+clinician saves it as their own note and signs it. The pipeline's write transactions run as `clinos_extractor` (2026-11-21, migration `9c4e2b7d1a05`): `SELECT,
+INSERT` on the inbox tables and the audit log only, nothing on `tga_approvals` or `patients`. Not yet
+built: a platform-level quarantine for mail to an
 unknown address, and the real vendors (step 6). Choices made in the build, each recorded in the module
 docstrings:
 
