@@ -34,6 +34,9 @@ const contentSecurityPolicy = (apiUrl: string): Plugin => {
     "base-uri 'none'",
     "form-action 'self'",
     "object-src 'none'",
+    // The TGA inbox review screen frames the letter PDF from an object URL its own script made
+    // (`blob:` URLs are bound to this origin); nothing else is framed.
+    "frame-src blob:",
   ].join("; ")
   return {
     name: "clinic-os-csp",

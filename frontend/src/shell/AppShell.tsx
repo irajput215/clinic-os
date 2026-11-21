@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils"
 import { BrandMark } from "./BrandMark"
 import { GlobalSearch } from "./GlobalSearch"
 import { type CountKey, NAV } from "./nav"
-import { useCanAdminister } from "./useCanAdminister"
+import { useCanAdminister, useHoldsPermission } from "./useCanAdminister"
 
 function useNavCounts(): Record<CountKey, number | undefined> {
   const scripts = useQuery({ ...scriptsQuery, retry: false })
@@ -32,6 +32,7 @@ function useNavCounts(): Record<CountKey, number | undefined> {
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const counts = useNavCounts()
   const canAdminister = useCanAdminister()
+  const canProcessInbox = useHoldsPermission("tga_inbox:process")
   const clinicSlug = useClinicSlug()
   const clinicName = useClinicName()
   const { data: me } = useQuery(currentUserQuery)
@@ -80,6 +81,8 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             <ul className="space-y-px">
               {items.map((item) => {
                 if (item.requiresAdmin && !canAdminister) return null
+                // One permission-gated entry today, the TGA inbox; widen this when there are more.
+                if (item.requiresPermission && !canProcessInbox) return null
                 if (item.bookingPage && !clinicSlug) return null
                 const Icon = item.icon
                 const count = item.count ? counts[item.count] : undefined

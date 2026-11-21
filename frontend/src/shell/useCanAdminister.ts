@@ -24,3 +24,22 @@ export function useCanAdminister(): boolean {
     return permissions.data.codes.includes(MANAGE_USERS)
   return true
 }
+
+/**
+ * Whether the signed-in account holds `code`, for hiding an entry it could not use. Unknown or failed
+ * permission sets show the entry (the server's `403` answers), exactly as `useCanAdminister` does.
+ */
+export function useHoldsPermission(code: string | undefined): boolean {
+  const me = useQuery(currentUserQuery)
+  const permissions = useQuery({
+    ...myPermissionsQuery,
+    retry: false,
+    enabled:
+      Boolean(code) && Boolean(me.data?.tenant_id) && !me.data?.is_superuser,
+  })
+  if (!code) return true
+  if (!me.data?.tenant_id) return false
+  if (permissions.isPending) return false
+  if (permissions.data?.known) return permissions.data.codes.includes(code)
+  return true
+}
