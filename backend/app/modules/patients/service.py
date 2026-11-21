@@ -1602,3 +1602,58 @@ def live_patient_exists(
     return (
         _live_patient(session, tenant_id=tenant_id, patient_id=patient_id) is not None
     )
+
+
+# --------------------------------------------------------------------------------------------
+# eScript dispatch identity (D-012 §3)
+# --------------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, repr=False)
+class EScriptPatient:
+    """What an eScript needs about the patient, decrypted. HIGHLY_SENSITIVE: never logged."""
+
+    given_name: str
+    family_name: str
+    date_of_birth: date
+    sex: str | None
+    ihi: str | None
+    address_line: str | None
+    suburb: str | None
+    state: str | None
+    postcode: str | None
+    medicare_number: str | None
+    medicare_irn: int | None
+    missing: tuple[str, ...]
+
+    def __repr__(self) -> str:
+        return "EScriptPatient(<HIGHLY_SENSITIVE>)"
+
+
+def escript_patient(
+    session: Session, *, tenant_id: uuid.UUID, patient_id: uuid.UUID
+) -> EScriptPatient | None:
+    """The live patient's eScript identity on the caller's tenant transaction, or `None`.
+
+    `missing` uses `escript_readiness`'s codes, so the dispatch refusal and the record's
+    "eScript-ready" chip agree on what is needed.
+    """
+    patient = _live_patient(session, tenant_id=tenant_id, patient_id=patient_id)
+    if patient is None:
+        return None
+    return EScriptPatient(
+        given_name=patient.given_name,
+        family_name=patient.family_name,
+        date_of_birth=patient.date_of_birth,
+        sex=patient.sex_at_birth,
+        ihi=field_crypto.decrypt(patient.ihi, tenant_id=tenant_id, kind=IHI),
+        address_line=patient.address_line,
+        suburb=patient.suburb,
+        state=patient.state,
+        postcode=patient.postcode,
+        medicare_number=field_crypto.decrypt(
+            patient.medicare_number, tenant_id=tenant_id, kind=MEDICARE
+        ),
+        medicare_irn=patient.medicare_irn,
+        missing=tuple(escript_readiness(patient).missing),
+    )

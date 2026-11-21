@@ -540,3 +540,64 @@ def signing_readiness(
     transaction, so the answer is the one the signature commits against."""
     missing = missing_items(session, tenant_id=tenant_id, user_id=user_id)
     return NotReady(missing) if missing else None
+
+
+@dataclass(frozen=True, repr=False)
+class EScriptPrescriber:
+    """What an eScript needs about the prescriber, decrypted. HIGHLY_SENSITIVE: never logged."""
+
+    full_name: str
+    hpi_i: str | None
+    prescriber_number: str | None
+    missing: tuple[str, ...]
+
+    def __repr__(self) -> str:
+        return "EScriptPrescriber(<HIGHLY_SENSITIVE>)"
+
+
+def escript_prescriber(
+    session: Session, *, tenant_id: uuid.UUID, user_id: uuid.UUID
+) -> EScriptPrescriber | None:
+    """The prescriber's name and **current** HPI-I and prescriber number (D-012 §3).
+
+    Only an identifier in the state `ACTIVE` (attested) and not expired counts: a `PENDING` or
+    expired one is reported missing, so a script is never sent under an unchecked identifier.
+    """
+    user = session.exec(
+        select(User).where(User.id == user_id, col(User.tenant_id) == tenant_id)
+    ).first()
+    if user is None:
+        return None
+    today = datetime.now(UTC).date()
+    values: dict[str, str | None] = {}
+    for kind in ("HPI_I", "PRESCRIBER_NUMBER"):
+        row = session.exec(
+            select(PractitionerIdentifier).where(
+                PractitionerIdentifier.tenant_id == tenant_id,
+                PractitionerIdentifier.user_id == user_id,
+                PractitionerIdentifier.kind == kind,
+            )
+        ).first()
+        current = row is not None and _state(row, today) in ("ACTIVE", "EXPIRING")
+        values[kind] = (
+            field_crypto.decrypt(
+                row.value_ciphertext, tenant_id=tenant_id, kind=_crypto_kind(kind)
+            )
+            if current and row is not None
+            else None
+        )
+    missing = tuple(
+        code
+        for code, value in (
+            ("PRESCRIBER_NAME", user.full_name),
+            ("HPI_I", values["HPI_I"]),
+            ("PRESCRIBER_NUMBER", values["PRESCRIBER_NUMBER"]),
+        )
+        if not value
+    )
+    return EScriptPrescriber(
+        full_name=user.full_name or "",
+        hpi_i=values["HPI_I"],
+        prescriber_number=values["PRESCRIBER_NUMBER"],
+        missing=missing,
+    )

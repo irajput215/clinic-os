@@ -69,4 +69,7 @@ def test_the_transport_interface_is_imported_only_inside_the_module() -> None:
     assert importers == [
         "modules/prescriptions/outbox.py",
         "modules/prescriptions/service.py",
+        "modules/prescriptions/transports/identities.py",
+        "modules/prescriptions/transports/parchment.py",
+        "modules/prescriptions/transports/resilience.py",
     ]
