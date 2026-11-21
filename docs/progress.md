@@ -32,7 +32,7 @@ repo_docs:
 > | Patient record: lifecycle status, alerts, emergency contacts, encrypted Medicare/IHI | `patients`, `care_relationships` | PR #86 |
 > | Consult notes (signed, amended) | `clinical_records` | - |
 > | TGA approvals (four-eyes verification) | `tga_approvals` | - |
-> | TGA inbox, backend with stand-in vendors: ingest, sender check, file checks, text layer, field extraction, patient candidates, review queue, accept into a `PENDING` approval; review screen at `/tga-inbox` (D-011 steps 1-4) | `tga_inbox` | - |
+> | TGA inbox, backend with stand-in vendors: ingest, sender check, file checks, text layer, field extraction, patient candidates, review queue, accept into a `PENDING` approval; review screen at `/tga-inbox` (D-011 steps 1-4). Mapped to the task plan, with deviations, in [`reference/reconciliation-2026-11-21-tga-inbox-and-erx.md`](reference/reconciliation-2026-11-21-tga-inbox-and-erx.md) | `tga_inbox` | #101-#105 |
 > | Prescribing: safety gate, sign with step-up, dispatch outbox | `prescriptions` | - |
 > | Calendar, opening hours, public booking with the six-step online application | `appointments`, `intake` | PRs #79, #87 |
 > | SOPs, versions and acknowledgement | `sops` | PR #88 |

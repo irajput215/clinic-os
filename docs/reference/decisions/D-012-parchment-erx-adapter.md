@@ -117,6 +117,8 @@ environment and no endpoint or field of theirs is guessed. `configured_transport
 `None`. Not in the payload yet: the practice's HPI-O and address (no column exists). The eScript token
 reference is returned by the wire but not stored (needs a schema change and the delivery decision).
 
+**Reconciliation (2026-11-21):** how the build maps to the Phase 2 and Phase 3 tasks, every deviation and what is owed: [`reconciliation-2026-11-21-tga-inbox-and-erx.md`](../reconciliation-2026-11-21-tga-inbox-and-erx.md).
+
 ## Alternatives considered
 
 - **Call Parchment directly from the sign or dispatch route.** Rejected: a timeout would leave the
