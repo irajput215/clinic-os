@@ -1,7 +1,16 @@
 name: pre-commit
 
 on:
+  # Branch model: `main` is the working (dev) branch and deploys on every push with no CI in front
+  # of it. Tests and checks run only on the `testing` and `prod` branches and on pull requests into
+  # them. Run this workflow by hand from the Actions tab to check `main` at any time.
+  # Pull requests only: this workflow pushes formatting fixes back to the PR's branch.
   pull_request:
+    branches:
+      - testing
+      - prod
+  workflow_dispatch:
+
 permissions: {}
 
 env:
