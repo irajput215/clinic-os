@@ -120,6 +120,8 @@ docstrings:
 - Extraction thresholds and confidences are provisional until the Clinical Safety Officer signs them
   off; the composite score is shown and never decides.
 
+**Reconciliation (2026-11-21):** how the build maps to the Phase 2 and Phase 3 tasks, every deviation and what is owed: [`reconciliation-2026-11-21-tga-inbox-and-erx.md`](../reconciliation-2026-11-21-tga-inbox-and-erx.md).
+
 ## Alternatives considered
 
 - **Zapier.** Rejected. Clinical documents (name, IHI, condition) would transit a US-hosted automation
