@@ -28,7 +28,7 @@ ruling:
 
 | # | Conflict | Where | Owner |
 |---|---|---|---|
-| C1 | **Phase order.** `docs/tasks/02-phase-2-tga-approval-engine.md` puts the inbox in **Phase 2** (S4–S8), before e-prescribing. `docs3/roadmap.md` (newer) puts "TGA inbox" and "Parchment" in **Phase 7**, after the go-live blockers and Phase 6. Which plan governs? | both files | Head of Product + CTO |
+| C1 | **Phase order.** `docs/tasks/02-phase-2-tga-approval-engine.md` puts the inbox in **Phase 2** (S4–S8), before e-prescribing. `docs3/roadmap.md` (newer) puts "TGA inbox" and "Parchment" in **Phase 7**, after the go-live blockers and Phase 6. Which plan governs? | both files | Head of Product + CTO. **Ruled 2026-11-21 by the owner: `docs3/roadmap.md` governs.** The go-live blockers come first, then Phase 6; the remaining inbox and Parchment tasks wait for Phase 7. |
 | C2 | **Object key.** T2-20 says the key is `documents/{tenant_id}/{document_id}/v{n}/{sanitised_filename}`. FEAT-09 design says *"the original filename is **never** the key"* (and records this as OPEN-6). The build follows the feature document (normative for requirements) and uses `tga-inbox/{tenant_id}/{sha256}`. | `docs/tasks/02…` T2-20; `docs/features/09-tga-inbox/03-design.md` | Security Lead |
 | C3 | **Task numbering.** `docs/to-be-completed.md` numbers the inbox as T2-19…T2-24 and the verification UI as T2-25…T2-30; `docs/tasks/02…` numbers them T2-17…T2-35 with different content. This document uses `docs/tasks/`. | `docs/to-be-completed.md` §Phase 2 | Delivery Lead |
 
@@ -85,11 +85,11 @@ work added only the adapter.
 ## 5. What is owed, in order
 
 1. ~~**Fix the T2-32 defect**: apply the care-relationship rule to the reviewer on accept.~~ **Fixed 2026-11-21**: accept is refused and candidates are hidden for a patient the reviewer may not read.
-2. **Rule on C1–C3** (§1).
+2. **Rule on C1–C3** (§1). C1 ruled: the roadmap governs.
 3. **Approve or amend D-011 and D-012.** Both remain Proposed; the code follows them.
 4. **CSO decisions:** the threshold values (T2-30), the correction and rejection reason lists, the golden set (T2-44).
 5. **Vendor decisions** (D-011 open items): mailbox, scanner, OCR, object store; Parchment contract and sandbox (D-012).
-6. Then the remaining tasks above, re-ordered by whichever plan C1 says governs.
+6. Then the remaining tasks above, in the roadmap's order (C1): go-live blockers, Phase 6, then these inbox and Parchment tasks in Phase 7.
 
 The go-live blockers in `docs3/roadmap.md` (run the app as `clinos_app`, move it to Sydney, turn off
 Neon scale-to-zero) apply under either plan and are independent of this list.

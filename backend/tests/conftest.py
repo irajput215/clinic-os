@@ -16,6 +16,7 @@ from app.main import app
 from app.models import User
 from app.modules.care_relationships.models import CareRelationship
 from app.modules.users_roles.models import StaffInvitation, UserRole
+from tests.utils import app_role
 from tests.utils.user import authentication_token_from_email
 from tests.utils.utils import get_superuser_token_headers
 
@@ -62,6 +63,34 @@ class MailSink:
 
     def to(self, address: str) -> list[dict[str, Any]]:
         return [message for message in self.sent if message["email_to"] == address]
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--as-app-role",
+        action="store_true",
+        help="Serve every API request as clinos_app (tests/utils/app_role.py).",
+    )
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    if config.getoption("--as-app-role"):
+        app_role.install()
+
+
+def pytest_collection_modifyitems(
+    config: pytest.Config, items: list[pytest.Item]
+) -> None:
+    if not config.getoption("--as-app-role"):
+        return
+    skip = pytest.mark.skip(
+        reason="counts statements; --as-app-role adds SET ROLE per checkout"
+    )
+    for item in items:
+        if any(
+            item.nodeid.startswith(prefix) for prefix in app_role.SKIPPED_UNDER_APP_ROLE
+        ):
+            item.add_marker(skip)
 
 
 @pytest.fixture(autouse=True)
