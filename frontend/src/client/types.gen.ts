@@ -1060,6 +1060,31 @@ export type DispatchRead = {
 };
 
 /**
+ * DraftNote
+ *
+ * A SOAP draft for a clinician to start a note from. Not a clinical record until they save and
+ * sign it as its author; the same shape as the consult-note composer's `SoapNote`.
+ */
+export type DraftNote = {
+    /**
+     * Subjective
+     */
+    subjective: string;
+    /**
+     * Objective
+     */
+    objective: string;
+    /**
+     * Assessment
+     */
+    assessment: string;
+    /**
+     * Plan
+     */
+    plan: string;
+};
+
+/**
  * EScriptReadiness
  *
  * Whether an eScript can be written for this patient (manual §3.4, "The eScript-ready rule").
@@ -2207,6 +2232,35 @@ export type PatientStatusChange = {
      * Deceased At
      */
     deceased_at?: string | null;
+};
+
+/**
+ * PatientTgaLetter
+ */
+export type PatientTgaLetter = {
+    /**
+     * Message Id
+     */
+    message_id: string;
+    /**
+     * Received At
+     */
+    received_at: string;
+    /**
+     * Decided At
+     */
+    decided_at: string | null;
+    /**
+     * Approval Id
+     */
+    approval_id: string | null;
+    /**
+     * Values
+     */
+    values: {
+        [key: string]: string;
+    };
+    draft_note: DraftNote;
 };
 
 /**
@@ -6601,6 +6655,38 @@ export type tgaInboxDeferMessageResponses = {
 };
 
 export type tgaInboxDeferMessageResponse = tgaInboxDeferMessageResponses[keyof tgaInboxDeferMessageResponses];
+
+export type tgaInboxPatientTgaLettersData = {
+    body?: never;
+    path: {
+        /**
+         * Patient Id
+         */
+        patient_id: string;
+    };
+    query?: never;
+    url: '/api/v1/patients/{patient_id}/tga-letters';
+};
+
+export type tgaInboxPatientTgaLettersErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type tgaInboxPatientTgaLettersError = tgaInboxPatientTgaLettersErrors[keyof tgaInboxPatientTgaLettersErrors];
+
+export type tgaInboxPatientTgaLettersResponses = {
+    /**
+     * Response Tga-Inbox-Patient Tga Letters
+     *
+     * Successful Response
+     */
+    200: Array<PatientTgaLetter>;
+};
+
+export type tgaInboxPatientTgaLettersResponse = tgaInboxPatientTgaLettersResponses[keyof tgaInboxPatientTgaLettersResponses];
 
 export type appointmentsListPractitionersData = {
     body?: never;

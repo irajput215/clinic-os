@@ -151,6 +151,8 @@ def test_the_five_declared_paths_are_served() -> None:
     declared_elsewhere = {
         f"{PATIENTS_URL}/{{patient_id}}/clinical-records": {"get"},
         f"{PATIENTS_URL}/{{patient_id}}/tga-approvals": {"get"},
+        # D-011 §3: the patient's accepted TGA inbox letters, each with a draft note.
+        f"{PATIENTS_URL}/{{patient_id}}/tga-letters": {"get"},
         f"{PATIENTS_URL}/{{patient_id}}/appointments": {"get"},
         f"{PATIENTS_URL}/{{patient_id}}/care-relationships": {"get", "post"},
         f"{PATIENTS_URL}/{{patient_id}}/care-relationships/{{care_relationship_id}}/end": {

@@ -38,6 +38,7 @@ from app.modules.tga_approvals.router import (
     patient_router as tga_patient_router,
 )
 from app.modules.tga_approvals.router import router as tga_approvals_router
+from app.modules.tga_inbox.router import patient_router as tga_inbox_patient_router
 from app.modules.tga_inbox.router import router as tga_inbox_router
 from app.modules.users_roles.router import (
     current_user_router,
@@ -76,6 +77,7 @@ api_router.include_router(clinical_records_router)
 api_router.include_router(tga_approvals_router)
 api_router.include_router(tga_patient_router)
 api_router.include_router(tga_inbox_router)
+api_router.include_router(tga_inbox_patient_router)
 # Feature 04 (calendar and booking, docs2/sdlc/04). The last two are the unauthenticated public
 # booking routes: the tenant is resolved from the slug on the server, never from the client.
 api_router.include_router(practitioners_router)
