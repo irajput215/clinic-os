@@ -26,6 +26,8 @@ import { Route as AppSopsRouteImport } from './routes/_app/sops'
 import { Route as BookClinicSlugRouteImport } from './routes/book.$clinicSlug'
 import { Route as AppPatientsIndexRouteImport } from './routes/_app/patients.index'
 import { Route as AppPatientsPatientIdRouteImport } from './routes/_app/patients.$patientId'
+import { Route as AppTgaInboxIndexRouteImport } from './routes/_app/tga-inbox.index'
+import { Route as AppTgaInboxMessageIdRouteImport } from './routes/_app/tga-inbox.$messageId'
 
 const AppRoute = AppRouteImport.update({
   id: '/_app',
@@ -111,6 +113,16 @@ const AppPatientsPatientIdRoute = AppPatientsPatientIdRouteImport.update({
   path: '/patients/$patientId',
   getParentRoute: () => AppRoute,
 } as any)
+const AppTgaInboxIndexRoute = AppTgaInboxIndexRouteImport.update({
+  id: '/tga-inbox/',
+  path: '/tga-inbox/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppTgaInboxMessageIdRoute = AppTgaInboxMessageIdRouteImport.update({
+  id: '/tga-inbox/$messageId',
+  path: '/tga-inbox/$messageId',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
@@ -128,7 +140,9 @@ export interface FileRoutesByFullPath {
   '/sops': typeof AppSopsRoute
   '/book/$clinicSlug': typeof BookClinicSlugRoute
   '/patients/$patientId': typeof AppPatientsPatientIdRoute
+  '/tga-inbox/$messageId': typeof AppTgaInboxMessageIdRoute
   '/patients/': typeof AppPatientsIndexRoute
+  '/tga-inbox/': typeof AppTgaInboxIndexRoute
 }
 export interface FileRoutesByTo {
   '/accept-invite': typeof AcceptInviteRoute
@@ -146,7 +160,9 @@ export interface FileRoutesByTo {
   '/book/$clinicSlug': typeof BookClinicSlugRoute
   '/': typeof AppIndexRoute
   '/patients/$patientId': typeof AppPatientsPatientIdRoute
+  '/tga-inbox/$messageId': typeof AppTgaInboxMessageIdRoute
   '/patients': typeof AppPatientsIndexRoute
+  '/tga-inbox': typeof AppTgaInboxIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -166,7 +182,9 @@ export interface FileRoutesById {
   '/book/$clinicSlug': typeof BookClinicSlugRoute
   '/_app/': typeof AppIndexRoute
   '/_app/patients/$patientId': typeof AppPatientsPatientIdRoute
+  '/_app/tga-inbox/$messageId': typeof AppTgaInboxMessageIdRoute
   '/_app/patients/': typeof AppPatientsIndexRoute
+  '/_app/tga-inbox/': typeof AppTgaInboxIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -186,7 +204,9 @@ export interface FileRouteTypes {
     | '/sops'
     | '/book/$clinicSlug'
     | '/patients/$patientId'
+    | '/tga-inbox/$messageId'
     | '/patients/'
+    | '/tga-inbox/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/accept-invite'
@@ -204,7 +224,9 @@ export interface FileRouteTypes {
     | '/book/$clinicSlug'
     | '/'
     | '/patients/$patientId'
+    | '/tga-inbox/$messageId'
     | '/patients'
+    | '/tga-inbox'
   id:
     | '__root__'
     | '/_app'
@@ -223,7 +245,9 @@ export interface FileRouteTypes {
     | '/book/$clinicSlug'
     | '/_app/'
     | '/_app/patients/$patientId'
+    | '/_app/tga-inbox/$messageId'
     | '/_app/patients/'
+    | '/_app/tga-inbox/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -358,6 +382,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPatientsPatientIdRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/tga-inbox/': {
+      id: '/_app/tga-inbox/'
+      path: '/tga-inbox'
+      fullPath: '/tga-inbox/'
+      preLoaderRoute: typeof AppTgaInboxIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/tga-inbox/$messageId': {
+      id: '/_app/tga-inbox/$messageId'
+      path: '/tga-inbox/$messageId'
+      fullPath: '/tga-inbox/$messageId'
+      preLoaderRoute: typeof AppTgaInboxMessageIdRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
@@ -370,7 +408,9 @@ interface AppRouteChildren {
   AppSopsRoute: typeof AppSopsRoute
   AppIndexRoute: typeof AppIndexRoute
   AppPatientsPatientIdRoute: typeof AppPatientsPatientIdRoute
+  AppTgaInboxMessageIdRoute: typeof AppTgaInboxMessageIdRoute
   AppPatientsIndexRoute: typeof AppPatientsIndexRoute
+  AppTgaInboxIndexRoute: typeof AppTgaInboxIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -382,7 +422,9 @@ const AppRouteChildren: AppRouteChildren = {
   AppSopsRoute: AppSopsRoute,
   AppIndexRoute: AppIndexRoute,
   AppPatientsPatientIdRoute: AppPatientsPatientIdRoute,
+  AppTgaInboxMessageIdRoute: AppTgaInboxMessageIdRoute,
   AppPatientsIndexRoute: AppPatientsIndexRoute,
+  AppTgaInboxIndexRoute: AppTgaInboxIndexRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

@@ -5,6 +5,34 @@ export type ClientOptions = {
 };
 
 /**
+ * AcceptRequest
+ *
+ * Accept or correct (FEAT-09 R16). `values` overrides what was extracted, field by field; any
+ * override makes this a correction, which needs a `correction_reason`. The patient is chosen by the
+ * reviewer from the candidates (or by search): nothing is pre-selected (R15).
+ */
+export type AcceptRequest = {
+    /**
+     * Patient Id
+     */
+    patient_id: string;
+    /**
+     * Attachment Id
+     */
+    attachment_id: string;
+    /**
+     * Values
+     */
+    values?: {
+        [key: string]: string;
+    };
+    /**
+     * Correction Reason
+     */
+    correction_reason?: string | null;
+};
+
+/**
  * AcknowledgementMatrix
  *
  * Staff x SOP x acknowledged version (R8).
@@ -367,6 +395,48 @@ export type AppointmentStatusUpdate = {
      * Status
      */
     status: 'BOOKED' | 'CONFIRMED' | 'ARRIVED' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
+};
+
+/**
+ * AttachmentRead
+ */
+export type AttachmentRead = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Filename
+     */
+    filename: string;
+    /**
+     * Content Type
+     */
+    content_type: string | null;
+    /**
+     * Size Bytes
+     */
+    size_bytes: number;
+    /**
+     * Scan State
+     */
+    scan_state: string;
+    /**
+     * Text State
+     */
+    text_state: string;
+    /**
+     * Page Count
+     */
+    page_count: number | null;
+    /**
+     * Refusal Reason
+     */
+    refusal_reason: string | null;
+    /**
+     * Viewable
+     */
+    viewable: boolean;
 };
 
 /**
@@ -929,6 +999,24 @@ export type DaySchedule = {
 };
 
 /**
+ * DecisionResult
+ */
+export type DecisionResult = {
+    /**
+     * Message Id
+     */
+    message_id: string;
+    /**
+     * Processing State
+     */
+    processing_state: string;
+    /**
+     * Approval Id
+     */
+    approval_id?: string | null;
+};
+
+/**
  * DispatchRead
  *
  * The latest outbox row for a prescription - what the clinic may be told about delivery.
@@ -1034,6 +1122,44 @@ export type EmergencyContactRead = {
 };
 
 /**
+ * ExtractedFieldRead
+ */
+export type ExtractedFieldRead = {
+    /**
+     * Attachment Id
+     */
+    attachment_id: string;
+    /**
+     * Field Name
+     */
+    field_name: 'APPROVAL_REFERENCE' | 'PATIENT_NAME' | 'PATIENT_DOB' | 'PATIENT_IHI' | 'PATIENT_MEDICARE' | 'TGA_CATEGORY' | 'DOSAGE_FORM' | 'VALID_FROM' | 'VALID_TO' | 'PRESCRIBER_NAME' | 'PRESCRIBER_HPI_I';
+    /**
+     * Value
+     */
+    value: string | null;
+    /**
+     * Confidence
+     */
+    confidence: string | null;
+    /**
+     * Method
+     */
+    method: string | null;
+    /**
+     * Page Number
+     */
+    page_number: number | null;
+    /**
+     * Below Floor
+     */
+    below_floor: boolean;
+    /**
+     * Mandatory
+     */
+    mandatory: boolean;
+};
+
+/**
  * HTTPValidationError
  */
 export type HTTPValidationError = {
@@ -1117,6 +1243,259 @@ export type IdentifierUpdate = {
      * Step Up Token
      */
     step_up_token: string;
+};
+
+/**
+ * InboundAttachmentIn
+ */
+export type InboundAttachmentIn = {
+    /**
+     * Filename
+     */
+    filename: string;
+    /**
+     * Content Type
+     */
+    content_type: string;
+    /**
+     * Content Base64
+     */
+    content_base64: Blob | File;
+};
+
+/**
+ * InboundMessageIn
+ *
+ * What the mailbox adapter delivers: the parsed envelope and the authentication results the
+ * receiving server recorded (FEAT-09 R2).
+ */
+export type InboundMessageIn = {
+    /**
+     * Provider Message Id
+     */
+    provider_message_id: string;
+    /**
+     * From Address
+     */
+    from_address: string;
+    /**
+     * To Address
+     */
+    to_address: string;
+    /**
+     * Subject
+     */
+    subject?: string;
+    /**
+     * Received At
+     */
+    received_at: string;
+    /**
+     * Spf Result
+     */
+    spf_result?: 'PASS' | 'FAIL' | 'SOFTFAIL' | 'NEUTRAL' | 'NONE' | 'TEMPERROR' | 'PERMERROR' | null;
+    /**
+     * Dkim Result
+     */
+    dkim_result?: 'PASS' | 'FAIL' | 'SOFTFAIL' | 'NEUTRAL' | 'NONE' | 'TEMPERROR' | 'PERMERROR' | null;
+    /**
+     * Dmarc Result
+     */
+    dmarc_result?: 'PASS' | 'FAIL' | 'SOFTFAIL' | 'NEUTRAL' | 'NONE' | 'TEMPERROR' | 'PERMERROR' | null;
+    /**
+     * Attachments
+     */
+    attachments?: Array<InboundAttachmentIn>;
+};
+
+/**
+ * InboxAddress
+ */
+export type InboxAddress = {
+    /**
+     * Address
+     */
+    address: string;
+};
+
+/**
+ * InboxMessageDetail
+ */
+export type InboxMessageDetail = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Received At
+     */
+    received_at: string;
+    /**
+     * From Address
+     */
+    from_address: string;
+    /**
+     * Subject
+     */
+    subject: string | null;
+    /**
+     * Processing State
+     */
+    processing_state: string;
+    /**
+     * State Reason
+     */
+    state_reason: string | null;
+    /**
+     * Attachment Count
+     */
+    attachment_count: number;
+    /**
+     * Clean Attachment Count
+     */
+    clean_attachment_count: number;
+    /**
+     * Composite Score
+     */
+    composite_score: string | null;
+    /**
+     * Claimed By
+     */
+    claimed_by: string | null;
+    /**
+     * Lease Expires At
+     */
+    lease_expires_at: string | null;
+    /**
+     * Spf Result
+     */
+    spf_result: string | null;
+    /**
+     * Dkim Result
+     */
+    dkim_result: string | null;
+    /**
+     * Dmarc Result
+     */
+    dmarc_result: string | null;
+    /**
+     * Decided By
+     */
+    decided_by: string | null;
+    /**
+     * Decided At
+     */
+    decided_at: string | null;
+    /**
+     * Decision Reason
+     */
+    decision_reason: string | null;
+    /**
+     * Patient Id
+     */
+    patient_id: string | null;
+    /**
+     * Approval Id
+     */
+    approval_id: string | null;
+    /**
+     * Extractor Version
+     */
+    extractor_version: string | null;
+    /**
+     * Attachments
+     */
+    attachments: Array<AttachmentRead>;
+    /**
+     * Fields
+     */
+    fields: Array<ExtractedFieldRead>;
+    /**
+     * Candidates
+     */
+    candidates: Array<MatchCandidateRead>;
+};
+
+/**
+ * InboxMessageSummary
+ */
+export type InboxMessageSummary = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Received At
+     */
+    received_at: string;
+    /**
+     * From Address
+     */
+    from_address: string;
+    /**
+     * Subject
+     */
+    subject: string | null;
+    /**
+     * Processing State
+     */
+    processing_state: string;
+    /**
+     * State Reason
+     */
+    state_reason: string | null;
+    /**
+     * Attachment Count
+     */
+    attachment_count: number;
+    /**
+     * Clean Attachment Count
+     */
+    clean_attachment_count: number;
+    /**
+     * Composite Score
+     */
+    composite_score: string | null;
+    /**
+     * Claimed By
+     */
+    claimed_by: string | null;
+    /**
+     * Lease Expires At
+     */
+    lease_expires_at: string | null;
+};
+
+/**
+ * InboxQueue
+ */
+export type InboxQueue = {
+    /**
+     * Data
+     */
+    data: Array<InboxMessageSummary>;
+    /**
+     * Count
+     */
+    count: number;
+};
+
+/**
+ * IngestResult
+ */
+export type IngestResult = {
+    /**
+     * Message Id
+     */
+    message_id: string;
+    /**
+     * Processing State
+     */
+    processing_state: string;
+    /**
+     * Duplicate
+     */
+    duplicate: boolean;
 };
 
 /**
@@ -1323,6 +1702,28 @@ export type InvitationAccepted = {
      * Email
      */
     email: string;
+};
+
+/**
+ * MatchCandidateRead
+ */
+export type MatchCandidateRead = {
+    /**
+     * Patient Id
+     */
+    patient_id: string;
+    /**
+     * Display Name
+     */
+    display_name: string;
+    /**
+     * Date Of Birth
+     */
+    date_of_birth: string;
+    /**
+     * Agreed
+     */
+    agreed: Array<string>;
 };
 
 /**
@@ -2648,6 +3049,16 @@ export type RejectBody = {
      * Note
      */
     note?: string | null;
+};
+
+/**
+ * RejectRequest
+ */
+export type RejectRequest = {
+    /**
+     * Reason Code
+     */
+    reason_code: string;
 };
 
 /**
@@ -5921,6 +6332,275 @@ export type tgaApprovalsListPatientTgaApprovalsResponses = {
 };
 
 export type tgaApprovalsListPatientTgaApprovalsResponse = tgaApprovalsListPatientTgaApprovalsResponses[keyof tgaApprovalsListPatientTgaApprovalsResponses];
+
+export type tgaInboxListMessagesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * State
+         */
+        state?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/tga-inbox/messages';
+};
+
+export type tgaInboxListMessagesErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type tgaInboxListMessagesError = tgaInboxListMessagesErrors[keyof tgaInboxListMessagesErrors];
+
+export type tgaInboxListMessagesResponses = {
+    /**
+     * Successful Response
+     */
+    200: InboxQueue;
+};
+
+export type tgaInboxListMessagesResponse = tgaInboxListMessagesResponses[keyof tgaInboxListMessagesResponses];
+
+export type tgaInboxIngestMessageData = {
+    body: InboundMessageIn;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/tga-inbox/messages';
+};
+
+export type tgaInboxIngestMessageErrors = {
+    /**
+     * Wrong or missing token
+     */
+    401: unknown;
+    /**
+     * Ingestion is off, or the address is no clinic's inbox
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type tgaInboxIngestMessageError = tgaInboxIngestMessageErrors[keyof tgaInboxIngestMessageErrors];
+
+export type tgaInboxIngestMessageResponses = {
+    /**
+     * Successful Response
+     */
+    201: IngestResult;
+};
+
+export type tgaInboxIngestMessageResponse = tgaInboxIngestMessageResponses[keyof tgaInboxIngestMessageResponses];
+
+export type tgaInboxInboxAddressData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/tga-inbox/address';
+};
+
+export type tgaInboxInboxAddressResponses = {
+    /**
+     * Successful Response
+     */
+    200: InboxAddress;
+};
+
+export type tgaInboxInboxAddressResponse = tgaInboxInboxAddressResponses[keyof tgaInboxInboxAddressResponses];
+
+export type tgaInboxReadMessageData = {
+    body?: never;
+    path: {
+        /**
+         * Message Id
+         */
+        message_id: string;
+    };
+    query?: never;
+    url: '/api/v1/tga-inbox/messages/{message_id}';
+};
+
+export type tgaInboxReadMessageErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type tgaInboxReadMessageError = tgaInboxReadMessageErrors[keyof tgaInboxReadMessageErrors];
+
+export type tgaInboxReadMessageResponses = {
+    /**
+     * Successful Response
+     */
+    200: InboxMessageDetail;
+};
+
+export type tgaInboxReadMessageResponse = tgaInboxReadMessageResponses[keyof tgaInboxReadMessageResponses];
+
+export type tgaInboxAttachmentContentData = {
+    body?: never;
+    path: {
+        /**
+         * Attachment Id
+         */
+        attachment_id: string;
+    };
+    query?: never;
+    url: '/api/v1/tga-inbox/attachments/{attachment_id}/content';
+};
+
+export type tgaInboxAttachmentContentErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type tgaInboxAttachmentContentError = tgaInboxAttachmentContentErrors[keyof tgaInboxAttachmentContentErrors];
+
+export type tgaInboxAttachmentContentResponses = {
+    /**
+     * Successful Response
+     */
+    200: Blob | File;
+};
+
+export type tgaInboxAttachmentContentResponse = tgaInboxAttachmentContentResponses[keyof tgaInboxAttachmentContentResponses];
+
+export type tgaInboxClaimMessageData = {
+    body?: never;
+    path: {
+        /**
+         * Message Id
+         */
+        message_id: string;
+    };
+    query?: never;
+    url: '/api/v1/tga-inbox/messages/{message_id}/claim';
+};
+
+export type tgaInboxClaimMessageErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type tgaInboxClaimMessageError = tgaInboxClaimMessageErrors[keyof tgaInboxClaimMessageErrors];
+
+export type tgaInboxClaimMessageResponses = {
+    /**
+     * Successful Response
+     */
+    200: InboxMessageDetail;
+};
+
+export type tgaInboxClaimMessageResponse = tgaInboxClaimMessageResponses[keyof tgaInboxClaimMessageResponses];
+
+export type tgaInboxAcceptMessageData = {
+    body: AcceptRequest;
+    path: {
+        /**
+         * Message Id
+         */
+        message_id: string;
+    };
+    query?: never;
+    url: '/api/v1/tga-inbox/messages/{message_id}/accept';
+};
+
+export type tgaInboxAcceptMessageErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type tgaInboxAcceptMessageError = tgaInboxAcceptMessageErrors[keyof tgaInboxAcceptMessageErrors];
+
+export type tgaInboxAcceptMessageResponses = {
+    /**
+     * Successful Response
+     */
+    200: DecisionResult;
+};
+
+export type tgaInboxAcceptMessageResponse = tgaInboxAcceptMessageResponses[keyof tgaInboxAcceptMessageResponses];
+
+export type tgaInboxRejectMessageData = {
+    body: RejectRequest;
+    path: {
+        /**
+         * Message Id
+         */
+        message_id: string;
+    };
+    query?: never;
+    url: '/api/v1/tga-inbox/messages/{message_id}/reject';
+};
+
+export type tgaInboxRejectMessageErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type tgaInboxRejectMessageError = tgaInboxRejectMessageErrors[keyof tgaInboxRejectMessageErrors];
+
+export type tgaInboxRejectMessageResponses = {
+    /**
+     * Successful Response
+     */
+    200: DecisionResult;
+};
+
+export type tgaInboxRejectMessageResponse = tgaInboxRejectMessageResponses[keyof tgaInboxRejectMessageResponses];
+
+export type tgaInboxDeferMessageData = {
+    body?: never;
+    path: {
+        /**
+         * Message Id
+         */
+        message_id: string;
+    };
+    query?: never;
+    url: '/api/v1/tga-inbox/messages/{message_id}/defer';
+};
+
+export type tgaInboxDeferMessageErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type tgaInboxDeferMessageError = tgaInboxDeferMessageErrors[keyof tgaInboxDeferMessageErrors];
+
+export type tgaInboxDeferMessageResponses = {
+    /**
+     * Successful Response
+     */
+    200: DecisionResult;
+};
+
+export type tgaInboxDeferMessageResponse = tgaInboxDeferMessageResponses[keyof tgaInboxDeferMessageResponses];
 
 export type appointmentsListPractitionersData = {
     body?: never;

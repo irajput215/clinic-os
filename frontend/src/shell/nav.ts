@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   type LucideIcon,
   Mail,
+  MailCheck,
   Pill,
   RefreshCcw,
   Settings,
@@ -35,6 +36,7 @@ export interface NavItem {
     | "/admin"
     | "/settings"
     | "/sops"
+    | "/tga-inbox"
   /**
    * The clinic's public booking page, opened outside the app shell at `/book/<slug>`. Shown only
    * once the signed-in clinic's slug is known.
@@ -43,6 +45,8 @@ export interface NavItem {
   count?: CountKey
   /** Shown only to someone who may administer (see `useCanAdminister`); the server still decides. */
   requiresAdmin?: boolean
+  /** Shown only to someone whose known permission set holds this code; the server still decides. */
+  requiresPermission?: string
 }
 
 export const NAV: Array<{ group: string; items: NavItem[] }> = [
@@ -70,6 +74,12 @@ export const NAV: Array<{ group: string; items: NavItem[] }> = [
         icon: ClipboardCheck,
         to: "/approvals",
         count: "approvals",
+      },
+      {
+        label: "TGA inbox",
+        icon: MailCheck,
+        to: "/tga-inbox",
+        requiresPermission: "tga_inbox:process",
       },
       { label: "Pharmacy network", icon: Store },
     ],

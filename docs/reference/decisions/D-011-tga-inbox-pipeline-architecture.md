@@ -102,8 +102,8 @@ Steps 1–5 run end to end in CI and staging with no third-party data flow.
 
 **Progress (2026-11-17):** the backend for steps 1–4 is built in `backend/app/modules/tga_inbox/`, with
 stand-ins for every vendor (`adapters.py`) and a standard-library text-layer reader (`pdf_text.py`),
-tested in `backend/tests/tga_inbox/`. Not yet built: the review screen (frontend half of step 4), the
-draft note (step 5), a separate extractor database role, a platform-level quarantine for mail to an
+tested in `backend/tests/tga_inbox/`. The review screen (2026-11-21) is `frontend/src/features/inbox/` at
+`/tga-inbox`. Not yet built: the draft note (step 5), a separate extractor database role, a platform-level quarantine for mail to an
 unknown address, and the real vendors (step 6). Choices made in the build, each recorded in the module
 docstrings:
 
