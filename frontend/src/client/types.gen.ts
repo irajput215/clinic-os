@@ -33,6 +33,30 @@ export type AcceptRequest = {
 };
 
 /**
+ * AcknowledgeActionRead
+ */
+export type AcknowledgeActionRead = {
+    /**
+     * Code
+     */
+    code: string;
+    /**
+     * Label
+     */
+    label: string;
+};
+
+/**
+ * AcknowledgeRequest
+ */
+export type AcknowledgeRequest = {
+    /**
+     * Action Code
+     */
+    action_code: string;
+};
+
+/**
  * AcknowledgementMatrix
  *
  * Staff x SOP x acknowledged version (R8).
@@ -534,6 +558,28 @@ export type AuditEventsPublic = {
      * Next Cursor
      */
     next_cursor?: string | null;
+};
+
+/**
+ * BandRead
+ */
+export type BandRead = {
+    /**
+     * Code
+     */
+    code: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Low
+     */
+    low: number;
+    /**
+     * High
+     */
+    high: number;
 };
 
 /**
@@ -1185,6 +1231,96 @@ export type ExtractedFieldRead = {
 };
 
 /**
+ * FormResponseCreate
+ *
+ * No `tenant_id`, `patient_id` (it is the path), score, band or author: all the server's.
+ */
+export type FormResponseCreate = {
+    /**
+     * Instrument
+     */
+    instrument: 'PHQ9' | 'GAD7' | 'K10';
+    /**
+     * Instrument Version
+     */
+    instrument_version: string;
+    /**
+     * Answers
+     */
+    answers: Array<number>;
+    /**
+     * Difficulty
+     */
+    difficulty?: number | null;
+    /**
+     * Corrects Id
+     */
+    corrects_id?: string | null;
+};
+
+/**
+ * FormResponseRead
+ */
+export type FormResponseRead = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Patient Id
+     */
+    patient_id: string;
+    /**
+     * Instrument
+     */
+    instrument: 'PHQ9' | 'GAD7' | 'K10';
+    /**
+     * Instrument Version
+     */
+    instrument_version: string;
+    /**
+     * Answers
+     */
+    answers: Array<number>;
+    /**
+     * Difficulty
+     */
+    difficulty: number | null;
+    /**
+     * Total Score
+     */
+    total_score: number;
+    /**
+     * Band
+     */
+    band: string;
+    /**
+     * Band Label
+     */
+    band_label: string;
+    /**
+     * Entered By
+     */
+    entered_by: string;
+    /**
+     * Corrects Id
+     */
+    corrects_id: string | null;
+    /**
+     * Corrected By Id
+     */
+    corrected_by_id?: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Flags
+     */
+    flags: Array<SafetyFlagRead>;
+};
+
+/**
  * HTTPValidationError
  */
 export type HTTPValidationError = {
@@ -1521,6 +1657,70 @@ export type IngestResult = {
      * Duplicate
      */
     duplicate: boolean;
+};
+
+/**
+ * InstrumentCatalogue
+ */
+export type InstrumentCatalogue = {
+    /**
+     * Instruments
+     */
+    instruments: Array<InstrumentRead>;
+    /**
+     * Acknowledge Actions
+     */
+    acknowledge_actions: Array<AcknowledgeActionRead>;
+};
+
+/**
+ * InstrumentRead
+ */
+export type InstrumentRead = {
+    /**
+     * Code
+     */
+    code: 'PHQ9' | 'GAD7' | 'K10';
+    /**
+     * Version
+     */
+    version: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Stem
+     */
+    stem: string;
+    /**
+     * Items
+     */
+    items: Array<string>;
+    /**
+     * Options
+     */
+    options: Array<OptionRead>;
+    /**
+     * Bands
+     */
+    bands: Array<BandRead>;
+    /**
+     * Difficulty Question
+     */
+    difficulty_question: string | null;
+    /**
+     * Difficulty Options
+     */
+    difficulty_options: Array<string>;
+    /**
+     * Min Score
+     */
+    min_score: number;
+    /**
+     * Max Score
+     */
+    max_score: number;
 };
 
 /**
@@ -1891,6 +2091,20 @@ export type OnboardingPackRead = {
 };
 
 /**
+ * OptionRead
+ */
+export type OptionRead = {
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Value
+     */
+    value: number;
+};
+
+/**
  * OrganisationSignup
  *
  * The body of `POST /api/v1/users/signup` (D-008). Strict: any other key is `422`.
@@ -2079,6 +2293,20 @@ export type PatientCreate = {
      * Timezone
      */
     timezone?: string | null;
+};
+
+/**
+ * PatientForms
+ */
+export type PatientForms = {
+    /**
+     * Responses
+     */
+    responses: Array<FormResponseRead>;
+    /**
+     * Open Flags
+     */
+    open_flags: Array<SafetyFlagRead>;
 };
 
 /**
@@ -3198,6 +3426,48 @@ export type SafetyAnswers = {
      * Substance Dependence
      */
     substance_dependence: boolean;
+};
+
+/**
+ * SafetyFlagRead
+ */
+export type SafetyFlagRead = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Response Id
+     */
+    response_id: string;
+    /**
+     * Rule Code
+     */
+    rule_code: string;
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Status
+     */
+    status: 'OPEN' | 'ACKNOWLEDGED';
+    /**
+     * Raised At
+     */
+    raised_at: string;
+    /**
+     * Acknowledged By
+     */
+    acknowledged_by: string | null;
+    /**
+     * Acknowledged At
+     */
+    acknowledged_at: string | null;
+    /**
+     * Action Code
+     */
+    action_code: string | null;
 };
 
 /**
@@ -7685,6 +7955,112 @@ export type intakeRejectApplicationResponses = {
 };
 
 export type intakeRejectApplicationResponse = intakeRejectApplicationResponses[keyof intakeRejectApplicationResponses];
+
+export type formsInstrumentsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/forms/instruments';
+};
+
+export type formsInstrumentsResponses = {
+    /**
+     * Successful Response
+     */
+    200: InstrumentCatalogue;
+};
+
+export type formsInstrumentsResponse = formsInstrumentsResponses[keyof formsInstrumentsResponses];
+
+export type formsPatientFormResponsesData = {
+    body?: never;
+    path: {
+        /**
+         * Patient Id
+         */
+        patient_id: string;
+    };
+    query?: never;
+    url: '/api/v1/patients/{patient_id}/form-responses';
+};
+
+export type formsPatientFormResponsesErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type formsPatientFormResponsesError = formsPatientFormResponsesErrors[keyof formsPatientFormResponsesErrors];
+
+export type formsPatientFormResponsesResponses = {
+    /**
+     * Successful Response
+     */
+    200: PatientForms;
+};
+
+export type formsPatientFormResponsesResponse = formsPatientFormResponsesResponses[keyof formsPatientFormResponsesResponses];
+
+export type formsRecordFormResponseData = {
+    body: FormResponseCreate;
+    path: {
+        /**
+         * Patient Id
+         */
+        patient_id: string;
+    };
+    query?: never;
+    url: '/api/v1/patients/{patient_id}/form-responses';
+};
+
+export type formsRecordFormResponseErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type formsRecordFormResponseError = formsRecordFormResponseErrors[keyof formsRecordFormResponseErrors];
+
+export type formsRecordFormResponseResponses = {
+    /**
+     * Successful Response
+     */
+    201: FormResponseRead;
+};
+
+export type formsRecordFormResponseResponse = formsRecordFormResponseResponses[keyof formsRecordFormResponseResponses];
+
+export type formsAcknowledgeSafetyFlagData = {
+    body: AcknowledgeRequest;
+    path: {
+        /**
+         * Flag Id
+         */
+        flag_id: string;
+    };
+    query?: never;
+    url: '/api/v1/safety-flags/{flag_id}/acknowledge';
+};
+
+export type formsAcknowledgeSafetyFlagErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type formsAcknowledgeSafetyFlagError = formsAcknowledgeSafetyFlagErrors[keyof formsAcknowledgeSafetyFlagErrors];
+
+export type formsAcknowledgeSafetyFlagResponses = {
+    /**
+     * Successful Response
+     */
+    200: SafetyFlagRead;
+};
+
+export type formsAcknowledgeSafetyFlagResponse = formsAcknowledgeSafetyFlagResponses[keyof formsAcknowledgeSafetyFlagResponses];
 
 export type intakeReadIntakeBriefingData = {
     body?: never;

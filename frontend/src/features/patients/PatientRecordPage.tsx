@@ -42,6 +42,7 @@ import {
   patientRef,
 } from "@/lib/format"
 import { CareTeamCard } from "./CareTeamCard"
+import { FormsTab } from "./FormsTab"
 import { ConsentsCard, IntakeBriefingCard, PharmacyCard } from "./IntakeParts"
 import { NotesTab } from "./NotesTab"
 import { PatientFormDialog } from "./PatientFormDialog"
@@ -147,6 +148,7 @@ export function PatientRecordPage({
 
       {tab === "overview" ? <OverviewTab patientId={patientId} /> : null}
       {tab === "notes" ? <NotesTab patientId={patientId} /> : null}
+      {tab === "forms" ? <FormsTab patientId={patientId} /> : null}
       {tab === "approvals" ? <ApprovalsTab patientId={patientId} /> : null}
       {tab === "scripts" ? <ScriptsTab patientId={patientId} /> : null}
       {tab === "appointments" ? (
