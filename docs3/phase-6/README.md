@@ -1,7 +1,7 @@
 # Phase 6: patient communications and forms
 
-**Status: IN PROGRESS.** Feature 05's screening questionnaires are built (2026-11-22, see
-"Progress"); everything else is proposed. The owner ruled that
+**Status: IN PROGRESS.** Feature 05's screening questionnaires and feature 06, the consent library,
+are built (2026-11-22, see "Progress"); everything else is proposed. The owner ruled that
 [`docs3/roadmap.md`](../roadmap.md) governs the order of work (reconciliation C1, 2026-11-21); this
 folder plans its Phase 6. Every new table, vendor and clinical rule waits for the decisions listed in
 [`../decisions-needed.md`](../decisions-needed.md) §"Phase 6" (D17–D25).
@@ -63,5 +63,26 @@ at the top of the tab until a clinician acknowledges it with an action. Backend
 `form_definition_versions` tables. The tables are only needed for clinic-authored forms (R6), which
 are not built yet.
 
-Not built yet: clinic forms (R6), remote completion (05b), the consent library (06), the guardrail
-(07), SMS (08).
+**2026-11-22: consent library (feature 06, R1–R4).** Settings → **Consents** shows each consent's
+current text (the platform default, or the clinic's own) and how many patients agreed to an older
+text; a practice owner publishes a new version there. On the patient record, each consent shows
+Current, Re-consent needed, Withdrawn or Not given; staff record a consent given in clinic (showing the
+current text first) or a withdrawal (in person, by phone or in writing). The public application offers
+the clinic's current versions. Backend `backend/app/modules/consents/` (the `patient_consents` model
+moved here from intake; same table), migration `74d947d74c4d`, tests `backend/tests/consents/`;
+frontend `frontend/src/features/settings/ConsentsTab.tsx`, `frontend/src/features/patients/ConsentsCard.tsx`.
+
+| Decision | State |
+|---|---|
+| D22 consent rules | Approved by the owner as proposed: platform defaults until a clinic publishes; a new version means re-consent, never assumed; withdrawal is append-only and effective at once |
+| D24 schema | Approved for this slice: `consent_versions`, `consent_withdrawals` |
+| D25 audit actions | Registered: `consent.publish` (kind and version), `consent.record` and `consent.withdraw` (patient id only) |
+
+What a withdrawal stops is **shown** to staff on the record; nothing enforces it yet (bookings and
+prescribing do not check consent). Enforcing it is a later decision. Checking consent text against the
+blocked-terms list (R5) waits for the guardrail (07).
+
+`GET /patients/{id}/consents` changed shape: it returns each kind's status and the history, not only a
+list of signatures. Its one consumer, the patient record's Consents card, changed with it.
+
+Not built yet: clinic forms (05 R6), remote completion (05b), the guardrail (07), SMS (08).

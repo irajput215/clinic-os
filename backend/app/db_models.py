@@ -25,9 +25,14 @@ from app.modules.clinical_records.models import (
     ClinicalRecordVersion,
 )
 from app.modules.clinics.models import Clinic
+from app.modules.consents.models import (
+    ConsentVersion,
+    ConsentWithdrawal,
+    PatientConsent,
+)
 from app.modules.forms.models import FormResponse, SafetyFlag
 from app.modules.identity_tenancy.models import StepUpGrant, Tenant
-from app.modules.intake.models import IntakeApplication, PatientConsent, Pharmacy
+from app.modules.intake.models import IntakeApplication, Pharmacy
 from app.modules.patients.models import (
     Patient,
     PatientAlert,
@@ -71,6 +76,8 @@ __all__ = [
     "CareRelationship",
     "DispatchAttempt",
     "Clinic",
+    "ConsentVersion",
+    "ConsentWithdrawal",
     "ClinicalRecord",
     "ClinicalRecordVersion",
     "FormResponse",

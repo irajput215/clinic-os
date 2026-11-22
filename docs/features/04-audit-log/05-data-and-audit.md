@@ -69,13 +69,13 @@ This list is closed:
 | Resource type | Actions |
 | --- | --- |
 | `SESSION` | `auth.login`, `auth.logout`, `auth.login_failed`, `auth.step_up`, `auth.step_up_failed` |
-| `PATIENT` | `patient.read`, `patient.create`, `patient.update`, `patient.export`, `care_relationship.create`, `care_relationship.end` |
+| `PATIENT` | `patient.read`, `patient.create`, `patient.update`, `patient.export`, `care_relationship.create`, `care_relationship.end`, `consent.record`, `consent.withdraw` |
 | `CLINICAL_RECORD` | `clinical_record.read`, `clinical_record.write`, `form_response.create`, `form_response.read`, `safety_flag.raise`, `safety_flag.acknowledge` |
 | `PRESCRIPTION` | `prescription.create`, `prescription.read`, `prescription.modify`, `prescription.sign`, `prescription.dispatch`, `prescription.dispatch_blocked`, `prescription.reject`, `prescription.dispatch_failed` |
 | `TGA_APPROVAL` | `tga_approval.create`, `tga_approval.modify`, `tga_approval.state_change`, `tga_approval.match`, `tga_approval.verify`, `tga_approval.read` |
 | `TGA_DOCUMENT` | `tga_document.ingest`, `tga_document.extract` |
 | `USER` | `user.permission_change`, `user.create`, `user.deactivate` |
-| `TENANT` | `tenant.security_config_change`, `tenant.config_changed` |
+| `TENANT` | `tenant.security_config_change`, `tenant.config_changed`, `consent.publish` |
 | `INTEGRATION` | `integration.request` |
 | `AUDIT` | `audit.read` |
 | `APPOINTMENT` | `appointment.create`, `appointment.state_change`, `appointment.read` |
@@ -96,6 +96,11 @@ coverage test asserts the list.
 module (`docs2/sdlc/04-calendar-and-booking/api.md`): `appointment.create` carries `patient_id` and
 `source` (`STAFF` or `PUBLIC_BOOKING`), `appointment.state_change` carries `from_state` and
 `to_state` (status codes). No time, name or contact detail is ever in either payload.
+
+Three actions were registered on 2026-11-22 with the consent library (docs3 Phase 6 feature 06,
+owner-approved): `consent.publish` under `TENANT` (a clinic's own version of a consent; carries `kind`
+and the version label, never the text), and `consent.record` and `consent.withdraw` under `PATIENT`
+(a consent given in clinic, a withdrawal; each carries `patient_id` only).
 
 Four actions were registered on 2026-11-22 under `CLINICAL_RECORD` with docs3 Phase 6 feature 05
 (screening questionnaires, owner-approved): `form_response.create`, `form_response.read`,

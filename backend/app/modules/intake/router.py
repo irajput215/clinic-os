@@ -16,7 +16,6 @@ from app.modules.intake import service
 from app.modules.intake.schemas import (
     ApplicationCard,
     ApplicationDetail,
-    ConsentRecord,
     IntakeBriefing,
     PharmacyCreate,
     PharmacyRead,
@@ -132,22 +131,6 @@ def read_intake_briefing(
     """
     authorize(actor, "clinical_record:read")
     result = service.briefing(actor=actor, patient_id=patient_id)
-    if isinstance(result, service.Refused):
-        _raise_patient(result)
-    return result
-
-
-@patient_router.get(
-    "/{patient_id}/consents",
-    response_model=list[ConsentRecord],
-    dependencies=[Depends(read_rate_limit)],
-)
-def list_patient_consents(
-    *, actor: ActorDep, patient_id: uuid.UUID
-) -> list[ConsentRecord]:
-    """Which version of each consent the patient agreed to, when, and whether it is current."""
-    authorize(actor, _READ)
-    result = service.consents(actor=actor, patient_id=patient_id)
     if isinstance(result, service.Refused):
         _raise_patient(result)
     return result

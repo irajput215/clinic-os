@@ -11,7 +11,7 @@ import pytest
 from sqlalchemy import text
 
 from app.core.db import engine
-from app.modules.intake.consents import CURRENT_CONSENTS
+from app.modules.consents.documents import PLATFORM_CONSENTS as CURRENT_CONSENTS
 from tests.appointments.conftest import API, AppointmentsApi, Clinic, code
 from tests.observability.log_sinks import capture_logs
 
@@ -257,11 +257,13 @@ def test_accepting_files_consents_pharmacy_and_details(
     consents = api.client.get(
         f"{API}/patients/{card['patient_id']}/consents", headers=clinic.owner.headers
     ).json()
-    assert {(c["kind"], c["current"]) for c in consents} == {
-        ("PRIVACY", True),
-        ("TELEHEALTH", True),
-        ("TREATMENT", True),
+    # The consent library's status per kind (docs3 Phase 6 feature 06): all three current.
+    assert {(c["kind"], c["status"]) for c in consents["kinds"]} == {
+        ("PRIVACY", "CURRENT"),
+        ("TELEHEALTH", "CURRENT"),
+        ("TREATMENT", "CURRENT"),
     }
+    assert {e["method"] for e in consents["history"]} == {"ONLINE_APPLICATION"}
     assert _queue(api, clinic) == []
     assert [c["id"] for c in _queue(api, clinic, "ACCEPTED")] == [card["id"]]
 

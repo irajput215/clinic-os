@@ -985,7 +985,9 @@ def public_book(
             # Refused before anything is written, so a bad application leaves nothing behind.
             try:
                 intake.check_application(
+                    session,
                     body.application,
+                    tenant_id=tenant_id,
                     given_name=body.given_name,
                     family_name=body.family_name,
                 )

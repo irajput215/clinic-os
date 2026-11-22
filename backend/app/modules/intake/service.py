@@ -20,12 +20,11 @@ from sqlmodel import Session, col, select
 
 from app.core.db import tenant_transaction
 from app.modules.audit import service as audit
-from app.modules.intake.consents import CONSENT_DOCUMENTS, CURRENT_CONSENTS
-from app.modules.intake.models import IntakeApplication, PatientConsent, Pharmacy
+from app.modules.consents import service as consents
+from app.modules.intake.models import IntakeApplication, Pharmacy
 from app.modules.intake.schemas import (
     ApplicationCard,
     ApplicationDetail,
-    ConsentRecord,
     IntakeApplicationIn,
     IntakeBriefing,
     IntakeForm,
@@ -85,7 +84,7 @@ def intake_form(session: Session, *, tenant_id: uuid.UUID) -> IntakeForm:
     return IntakeForm(
         consents=[
             PublicConsent(kind=d.kind, version=d.version, title=d.title, body=d.body)
-            for d in CONSENT_DOCUMENTS
+            for d in consents.current_documents(session, tenant_id=tenant_id).values()
         ],
         partner_pharmacies=[
             PublicPharmacy(id=p.id, name=p.name, suburb=p.suburb) for p in partners
@@ -94,7 +93,12 @@ def intake_form(session: Session, *, tenant_id: uuid.UUID) -> IntakeForm:
 
 
 def check_application(
-    application: IntakeApplicationIn, *, given_name: str, family_name: str
+    session: Session,
+    application: IntakeApplicationIn,
+    *,
+    tenant_id: uuid.UUID,
+    given_name: str,
+    family_name: str,
 ) -> None:
     """Refuse an application before anything is written (manual §5.1 steps 4 and 6).
 
@@ -109,7 +113,10 @@ def check_application(
             "Type your full name exactly as you entered it on the first step.",
         )
     given = {c.kind: c.version for c in application.consents}
-    current = {kind: d.version for kind, d in CURRENT_CONSENTS.items()}
+    current = {
+        kind: d.version
+        for kind, d in consents.current_documents(session, tenant_id=tenant_id).items()
+    }
     if given != current:
         raise IntakeRefused(
             422,
@@ -388,22 +395,14 @@ def accept(*, actor: Actor, application_id: uuid.UUID) -> uuid.UUID:
                     action=PHARMACY_CREATE, result="SUCCESS", resource_id=pharmacy.id
                 ),
             )
-        for given in row.consents:
-            document = CURRENT_CONSENTS.get(given["kind"])
-            session.add(
-                PatientConsent(
-                    tenant_id=actor.tenant_id,
-                    patient_id=row.patient_id,
-                    kind=given["kind"],
-                    version=given["version"],
-                    text_sha256=document.sha256
-                    if document and document.version == given["version"]
-                    else "",
-                    method="ONLINE_APPLICATION",
-                    signed_at=row.declared_at,
-                    application_id=row.id,
-                )
-            )
+        consents.file_application_consents(
+            session,
+            tenant_id=actor.tenant_id,
+            patient_id=row.patient_id,
+            given=row.consents,
+            signed_at=row.declared_at,
+            application_id=row.id,
+        )
         answers = row.answers
         patients.accept_applicant(
             session,
@@ -525,36 +524,6 @@ def briefing(*, actor: Actor, patient_id: uuid.UUID) -> IntakeBriefing | Refused
             declaration_name=row.declaration_name,
             declared_at=row.declared_at,
         )
-
-
-def consents(*, actor: Actor, patient_id: uuid.UUID) -> list[ConsentRecord] | Refused:
-    """Which version of each consent the patient signed, and whether it is still current."""
-    refused = _patient_reachable(actor, patient_id, "patient:read")
-    if refused is not None:
-        return refused
-    with _transaction(actor) as session:
-        rows = session.exec(
-            select(PatientConsent)
-            .where(
-                col(PatientConsent.tenant_id) == actor.tenant_id,
-                col(PatientConsent.patient_id) == patient_id,
-            )
-            .order_by(col(PatientConsent.signed_at).desc())
-        ).all()
-        return [
-            ConsentRecord(
-                kind=r.kind,
-                version=r.version,
-                title=CURRENT_CONSENTS[r.kind].title
-                if r.kind in CURRENT_CONSENTS
-                else r.kind,
-                method=r.method,
-                signed_at=r.signed_at,
-                current=r.kind in CURRENT_CONSENTS
-                and CURRENT_CONSENTS[r.kind].version == r.version,
-            )
-            for r in rows
-        ]
 
 
 # -- the pharmacy directory ------------------------------------------------------------------------

@@ -3,7 +3,6 @@ import { IntakeService, PublicBookingService } from "@/client"
 import type {
   ApplicationCard,
   ApplicationDetail,
-  ConsentRecord,
   IntakeBriefing,
   IntakeForm,
   PharmacyCreate,
@@ -16,7 +15,7 @@ import type {
  *   GET  /public/{slug}/intake-form            consents (current versions) and partner pharmacies
  *   POST /public/{slug}/bookings + application  the six-step application, held with its booking
  *   GET  /intake-applications?status=          the clinic's queue · GET /{id} · POST /{id}/accept|reject
- *   GET  /patients/{id}/intake-briefing        the doctor's briefing · GET /patients/{id}/consents
+ *   GET  /patients/{id}/intake-briefing        the doctor's briefing
  *   GET|POST /pharmacies                       the directory · POST /patients/{id}/pharmacy
  */
 
@@ -121,18 +120,6 @@ export const briefingQuery = (patientId: string) =>
       })
       return data && "safety_flags" in data ? data : null
     },
-    staleTime: 60_000,
-  })
-
-export const consentsQuery = (patientId: string) =>
-  queryOptions({
-    queryKey: ["patients", "detail", patientId, "consents"],
-    queryFn: async (): Promise<ConsentRecord[]> =>
-      (
-        await IntakeService.listPatientConsents({
-          path: { patient_id: patientId },
-        })
-      ).data,
     staleTime: 60_000,
   })
 

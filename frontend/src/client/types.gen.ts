@@ -884,6 +884,70 @@ export type ClinicalRecordsPublic = {
 };
 
 /**
+ * ConsentDocumentRead
+ */
+export type ConsentDocumentRead = {
+    /**
+     * Kind
+     */
+    kind: 'PRIVACY' | 'TELEHEALTH' | 'TREATMENT';
+    /**
+     * Version
+     */
+    version: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * Source
+     */
+    source: 'PLATFORM' | 'CLINIC';
+    /**
+     * Published At
+     */
+    published_at: string | null;
+};
+
+/**
+ * ConsentEvent
+ */
+export type ConsentEvent = {
+    /**
+     * Kind
+     */
+    kind: 'PRIVACY' | 'TELEHEALTH' | 'TREATMENT';
+    /**
+     * Event
+     */
+    event: 'CONSENTED' | 'WITHDRAWN';
+    /**
+     * Version
+     */
+    version: string | null;
+    /**
+     * Title
+     */
+    title: string | null;
+    /**
+     * Method
+     */
+    method: string;
+    /**
+     * At
+     */
+    at: string;
+    /**
+     * Recorded By
+     */
+    recorded_by: string | null;
+};
+
+/**
  * ConsentGiven
  */
 export type ConsentGiven = {
@@ -898,33 +962,32 @@ export type ConsentGiven = {
 };
 
 /**
- * ConsentRecord
+ * ConsentKindLibrary
  */
-export type ConsentRecord = {
+export type ConsentKindLibrary = {
     /**
      * Kind
      */
-    kind: string;
+    kind: 'PRIVACY' | 'TELEHEALTH' | 'TREATMENT';
+    current: ConsentDocumentRead;
     /**
-     * Version
+     * Clinic Versions
      */
-    version: string;
+    clinic_versions: Array<ConsentDocumentRead>;
     /**
-     * Title
+     * Patients Needing Reconsent
      */
-    title: string;
+    patients_needing_reconsent: number;
+};
+
+/**
+ * ConsentLibrary
+ */
+export type ConsentLibrary = {
     /**
-     * Method
+     * Kinds
      */
-    method: string;
-    /**
-     * Signed At
-     */
-    signed_at: string;
-    /**
-     * Current
-     */
-    current: boolean;
+    kinds: Array<ConsentKindLibrary>;
 };
 
 /**
@@ -1930,6 +1993,48 @@ export type InvitationAccepted = {
 };
 
 /**
+ * KindStatus
+ */
+export type KindStatus = {
+    /**
+     * Kind
+     */
+    kind: 'PRIVACY' | 'TELEHEALTH' | 'TREATMENT';
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Status
+     */
+    status: 'CURRENT' | 'NEEDS_RECONSENT' | 'WITHDRAWN' | 'NOT_GIVEN';
+    /**
+     * Current Version
+     */
+    current_version: string;
+    /**
+     * Current Body
+     */
+    current_body: string;
+    /**
+     * Signed Version
+     */
+    signed_version: string | null;
+    /**
+     * Signed At
+     */
+    signed_at: string | null;
+    /**
+     * Withdrawn At
+     */
+    withdrawn_at: string | null;
+    /**
+     * Stops
+     */
+    stops: string;
+};
+
+/**
  * MatchCandidateRead
  */
 export type MatchCandidateRead = {
@@ -2209,6 +2314,20 @@ export type PackSopRead = {
      * Acknowledged Version
      */
     acknowledged_version: number | null;
+};
+
+/**
+ * PatientConsentStatus
+ */
+export type PatientConsentStatus = {
+    /**
+     * Kinds
+     */
+    kinds: Array<KindStatus>;
+    /**
+     * History
+     */
+    history: Array<ConsentEvent>;
 };
 
 /**
@@ -3317,6 +3436,36 @@ export type PublicSlot = {
      * Ends At
      */
     ends_at: string;
+};
+
+/**
+ * PublishConsent
+ */
+export type PublishConsent = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Body
+     */
+    body: string;
+};
+
+/**
+ * RecordConsent
+ *
+ * A consent given in clinic. The version must be the one currently offered.
+ */
+export type RecordConsent = {
+    /**
+     * Kind
+     */
+    kind: 'PRIVACY' | 'TELEHEALTH' | 'TREATMENT';
+    /**
+     * Version
+     */
+    version: string;
 };
 
 /**
@@ -4819,6 +4968,16 @@ export type ValidityInterval = {
      * Bounds
      */
     bounds?: '[)';
+};
+
+/**
+ * WithdrawConsent
+ */
+export type WithdrawConsent = {
+    /**
+     * Method
+     */
+    method: 'IN_PERSON' | 'PHONE' | 'WRITTEN';
 };
 
 export type healthReadinessData = {
@@ -8062,6 +8221,146 @@ export type formsAcknowledgeSafetyFlagResponses = {
 
 export type formsAcknowledgeSafetyFlagResponse = formsAcknowledgeSafetyFlagResponses[keyof formsAcknowledgeSafetyFlagResponses];
 
+export type consentsConsentLibraryData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/consents';
+};
+
+export type consentsConsentLibraryResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConsentLibrary;
+};
+
+export type consentsConsentLibraryResponse = consentsConsentLibraryResponses[keyof consentsConsentLibraryResponses];
+
+export type consentsPublishConsentData = {
+    body: PublishConsent;
+    path: {
+        /**
+         * Kind
+         */
+        kind: 'PRIVACY' | 'TELEHEALTH' | 'TREATMENT';
+    };
+    query?: never;
+    url: '/api/v1/consents/{kind}/versions';
+};
+
+export type consentsPublishConsentErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type consentsPublishConsentError = consentsPublishConsentErrors[keyof consentsPublishConsentErrors];
+
+export type consentsPublishConsentResponses = {
+    /**
+     * Successful Response
+     */
+    201: ConsentDocumentRead;
+};
+
+export type consentsPublishConsentResponse = consentsPublishConsentResponses[keyof consentsPublishConsentResponses];
+
+export type consentsPatientConsentsData = {
+    body?: never;
+    path: {
+        /**
+         * Patient Id
+         */
+        patient_id: string;
+    };
+    query?: never;
+    url: '/api/v1/patients/{patient_id}/consents';
+};
+
+export type consentsPatientConsentsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type consentsPatientConsentsError = consentsPatientConsentsErrors[keyof consentsPatientConsentsErrors];
+
+export type consentsPatientConsentsResponses = {
+    /**
+     * Successful Response
+     */
+    200: PatientConsentStatus;
+};
+
+export type consentsPatientConsentsResponse = consentsPatientConsentsResponses[keyof consentsPatientConsentsResponses];
+
+export type consentsRecordConsentData = {
+    body: RecordConsent;
+    path: {
+        /**
+         * Patient Id
+         */
+        patient_id: string;
+    };
+    query?: never;
+    url: '/api/v1/patients/{patient_id}/consents';
+};
+
+export type consentsRecordConsentErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type consentsRecordConsentError = consentsRecordConsentErrors[keyof consentsRecordConsentErrors];
+
+export type consentsRecordConsentResponses = {
+    /**
+     * Successful Response
+     */
+    200: PatientConsentStatus;
+};
+
+export type consentsRecordConsentResponse = consentsRecordConsentResponses[keyof consentsRecordConsentResponses];
+
+export type consentsWithdrawConsentData = {
+    body: WithdrawConsent;
+    path: {
+        /**
+         * Patient Id
+         */
+        patient_id: string;
+        /**
+         * Kind
+         */
+        kind: 'PRIVACY' | 'TELEHEALTH' | 'TREATMENT';
+    };
+    query?: never;
+    url: '/api/v1/patients/{patient_id}/consents/{kind}/withdraw';
+};
+
+export type consentsWithdrawConsentErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type consentsWithdrawConsentError = consentsWithdrawConsentErrors[keyof consentsWithdrawConsentErrors];
+
+export type consentsWithdrawConsentResponses = {
+    /**
+     * Successful Response
+     */
+    200: PatientConsentStatus;
+};
+
+export type consentsWithdrawConsentResponse = consentsWithdrawConsentResponses[keyof consentsWithdrawConsentResponses];
+
 export type intakeReadIntakeBriefingData = {
     body?: never;
     path: {
@@ -8093,38 +8392,6 @@ export type intakeReadIntakeBriefingResponses = {
 };
 
 export type intakeReadIntakeBriefingResponse = intakeReadIntakeBriefingResponses[keyof intakeReadIntakeBriefingResponses];
-
-export type intakeListPatientConsentsData = {
-    body?: never;
-    path: {
-        /**
-         * Patient Id
-         */
-        patient_id: string;
-    };
-    query?: never;
-    url: '/api/v1/patients/{patient_id}/consents';
-};
-
-export type intakeListPatientConsentsErrors = {
-    /**
-     * Validation Error
-     */
-    422: HTTPValidationError;
-};
-
-export type intakeListPatientConsentsError = intakeListPatientConsentsErrors[keyof intakeListPatientConsentsErrors];
-
-export type intakeListPatientConsentsResponses = {
-    /**
-     * Response Intake-List Patient Consents
-     *
-     * Successful Response
-     */
-    200: Array<ConsentRecord>;
-};
-
-export type intakeListPatientConsentsResponse = intakeListPatientConsentsResponses[keyof intakeListPatientConsentsResponses];
 
 export type intakeSetPatientPharmacyData = {
     body: PreferredPharmacy;

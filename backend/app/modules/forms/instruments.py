@@ -2,7 +2,7 @@
 
 PHQ-9 (depression), GAD-7 (anxiety) and K10 (psychological distress), with their published item text,
 response options, scoring and severity bands. They are platform definitions, versioned here like the
-consent documents (`app/modules/intake/consents.py`): a response records the instrument code and the
+consent documents (`app/modules/consents/documents.py`): a response records the instrument code and the
 version it was answered on, so a later wording change never re-reads old answers.
 
 ## Provenance and the open items

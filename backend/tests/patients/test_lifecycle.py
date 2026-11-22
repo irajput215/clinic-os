@@ -172,7 +172,9 @@ def test_the_five_declared_paths_are_served() -> None:
         # Patient intake (docs3 feature 03): the doctor's briefing, the consents signed, and the
         # pharmacy future scripts default to.
         f"{PATIENTS_URL}/{{patient_id}}/intake-briefing": {"get"},
-        f"{PATIENTS_URL}/{{patient_id}}/consents": {"get"},
+        # Docs3 Phase 6 feature 06 (consent library) adds recording in clinic and withdrawal.
+        f"{PATIENTS_URL}/{{patient_id}}/consents": {"get", "post"},
+        f"{PATIENTS_URL}/{{patient_id}}/consents/{{kind}}/withdraw": {"post"},
         f"{PATIENTS_URL}/{{patient_id}}/pharmacy": {"post"},
     }
 
