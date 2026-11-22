@@ -17,6 +17,9 @@ Ordered by what a live clinic needs next. Each phase starts with its own decisio
 
 ## Phase 6 — patient communications and forms
 
+Planned in [`phase-6/`](phase-6/README.md) (2026-11-22); waiting on decisions D17–D25 in
+[decisions-needed.md](decisions-needed.md).
+
 - SMS vendor (D7a) → "with the doctor" SMS, reminders by SMS, OTP patient portal (manual §5.3).
 - Forms & consent library: intake, follow-up, PHQ-9/GAD-7/K10 instruments with live safety flags (§12).
 - Comms guardrail: banned product/brand terms blocked on bulk sends (§11).
