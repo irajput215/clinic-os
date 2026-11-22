@@ -2,6 +2,7 @@
 export const PATIENT_TABS = {
   overview: "Overview",
   notes: "Consult notes",
+  forms: "Questionnaires",
   approvals: "TGA approvals",
   scripts: "Scripts",
   appointments: "Appointments",

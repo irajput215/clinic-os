@@ -70,7 +70,7 @@ This list is closed:
 | --- | --- |
 | `SESSION` | `auth.login`, `auth.logout`, `auth.login_failed`, `auth.step_up`, `auth.step_up_failed` |
 | `PATIENT` | `patient.read`, `patient.create`, `patient.update`, `patient.export`, `care_relationship.create`, `care_relationship.end` |
-| `CLINICAL_RECORD` | `clinical_record.read`, `clinical_record.write` |
+| `CLINICAL_RECORD` | `clinical_record.read`, `clinical_record.write`, `form_response.create`, `form_response.read`, `safety_flag.raise`, `safety_flag.acknowledge` |
 | `PRESCRIPTION` | `prescription.create`, `prescription.read`, `prescription.modify`, `prescription.sign`, `prescription.dispatch`, `prescription.dispatch_blocked`, `prescription.reject`, `prescription.dispatch_failed` |
 | `TGA_APPROVAL` | `tga_approval.create`, `tga_approval.modify`, `tga_approval.state_change`, `tga_approval.match`, `tga_approval.verify`, `tga_approval.read` |
 | `TGA_DOCUMENT` | `tga_document.ingest`, `tga_document.extract` |
@@ -96,6 +96,13 @@ coverage test asserts the list.
 module (`docs2/sdlc/04-calendar-and-booking/api.md`): `appointment.create` carries `patient_id` and
 `source` (`STAFF` or `PUBLIC_BOOKING`), `appointment.state_change` carries `from_state` and
 `to_state` (status codes). No time, name or contact detail is ever in either payload.
+
+Four actions were registered on 2026-11-22 under `CLINICAL_RECORD` with docs3 Phase 6 feature 05
+(screening questionnaires, owner-approved): `form_response.create`, `form_response.read`,
+`safety_flag.raise` and `safety_flag.acknowledge`. Each carries `patient_id`; a read adds
+`care_relationship_id`, `purpose` and `result_count`. **No instrument, score, band or flag rule is ever
+in a payload**: joined to a person, each is health information, the same reason `clinical_record.*`
+never carries `record_type`. The `resource_id` is the response or the flag.
 
 Four actions were registered on 2026-10-08 with task T1-34 (decision D-007), each listed under
 "Controls changed" in its PR: `prescription.read` (`11-prescribing/02-user-stories.md`: "`prescription.read`-class

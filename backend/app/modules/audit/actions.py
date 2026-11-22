@@ -95,7 +95,16 @@ ACTION_CATALOGUE: Final[tuple[tuple[str, tuple[str, ...]], ...]] = (
     ),
     (
         "CLINICAL_RECORD",
-        ("clinical_record.read", "clinical_record.write"),
+        (
+            "clinical_record.read",
+            "clinical_record.write",
+            # Registered 2026-11-22 with docs3 Phase 6 feature 05 (questionnaires): a response and a
+            # safety flag are clinical records of the patient.
+            "form_response.create",
+            "form_response.read",
+            "safety_flag.raise",
+            "safety_flag.acknowledge",
+        ),
     ),
     (
         "PRESCRIPTION",
@@ -285,6 +294,15 @@ PAYLOAD_ALLOW_LIST: Final[MappingProxyType[str, frozenset[str]]] = MappingProxyT
         "clinical_record.read": frozenset(
             {"patient_id", "care_relationship_id", "purpose", "result_count"}
         ),
+        # docs3 Phase 6 feature 05: the patient, and for a read the relationship, purpose and count.
+        # Never the instrument, the score, the band or the flag rule: joined to a person each of those
+        # is health information (the same reason `clinical_record.*` never carries `record_type`).
+        "form_response.create": frozenset({"patient_id"}),
+        "form_response.read": frozenset(
+            {"patient_id", "care_relationship_id", "purpose", "result_count"}
+        ),
+        "safety_flag.raise": frozenset({"patient_id"}),
+        "safety_flag.acknowledge": frozenset({"patient_id"}),
         # Doc 07 §1's `user.permission_change`, carrying what `03-users-and-roles/05-data-and-audit.md`
         # asks `ROLE_ASSIGNED`/`ROLE_REVOKED` to carry: the target, the role code, and the change.
         "user.permission_change": frozenset(

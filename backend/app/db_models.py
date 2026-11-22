@@ -25,6 +25,7 @@ from app.modules.clinical_records.models import (
     ClinicalRecordVersion,
 )
 from app.modules.clinics.models import Clinic
+from app.modules.forms.models import FormResponse, SafetyFlag
 from app.modules.identity_tenancy.models import StepUpGrant, Tenant
 from app.modules.intake.models import IntakeApplication, PatientConsent, Pharmacy
 from app.modules.patients.models import (
@@ -72,6 +73,7 @@ __all__ = [
     "Clinic",
     "ClinicalRecord",
     "ClinicalRecordVersion",
+    "FormResponse",
     "IntakeApplication",
     "Patient",
     "PatientConsent",
@@ -83,6 +85,7 @@ __all__ = [
     "PractitionerIdentifier",
     "Prescription",
     "PrescriptionEvent",
+    "SafetyFlag",
     "Role",
     "RolePermission",
     "SignupRequest",
