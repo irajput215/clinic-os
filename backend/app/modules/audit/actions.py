@@ -91,6 +91,11 @@ ACTION_CATALOGUE: Final[tuple[tuple[str, tuple[str, ...]], ...]] = (
             "intake.application_decide",
             # A pharmacy added to the clinic's directory (manual §8.1).
             "pharmacy.create",
+            # Registered 2026-11-22 with the consent library (docs3 Phase 6 feature 06): a consent
+            # recorded in clinic, and a withdrawal. The resource is the consent or withdrawal row;
+            # the payload names the patient.
+            "consent.record",
+            "consent.withdraw",
         ),
     ),
     (
@@ -160,6 +165,9 @@ ACTION_CATALOGUE: Final[tuple[tuple[str, tuple[str, ...]], ...]] = (
             # person's acknowledgement of one. The resource is the SOP.
             "sop.publish",
             "sop.acknowledge",
+            # Registered 2026-11-22 with the consent library (docs3 Phase 6 feature 06): a clinic
+            # publishes its own version of a consent. The resource is the version.
+            "consent.publish",
         ),
     ),
     ("INTEGRATION", ("integration.request",)),
@@ -279,6 +287,11 @@ PAYLOAD_ALLOW_LIST: Final[MappingProxyType[str, frozenset[str]]] = MappingProxyT
         "practitioner.agreement_record": frozenset({"target_user_id", "version"}),
         "practitioner.onboarding_read": frozenset({"target_user_id"}),
         "sop.publish": frozenset({"version"}),
+        # Consent library: the kind and the version label of a clinic's published consent (clinic
+        # configuration, no patient); a record or withdrawal names the patient only.
+        "consent.publish": frozenset({"kind", "version"}),
+        "consent.record": frozenset({"patient_id"}),
+        "consent.withdraw": frozenset({"patient_id"}),
         "sop.acknowledge": frozenset({"version"}),
         # `04-audit-log/05-data-and-audit.md`: `audit.read` carries `query_filters` and `result_count`.
         "audit.read": frozenset({"query_filters", "result_count"}),

@@ -42,8 +42,9 @@ import {
   patientRef,
 } from "@/lib/format"
 import { CareTeamCard } from "./CareTeamCard"
+import { ConsentsCard } from "./ConsentsCard"
 import { FormsTab } from "./FormsTab"
-import { ConsentsCard, IntakeBriefingCard, PharmacyCard } from "./IntakeParts"
+import { IntakeBriefingCard, PharmacyCard } from "./IntakeParts"
 import { NotesTab } from "./NotesTab"
 import { PatientFormDialog } from "./PatientFormDialog"
 import {

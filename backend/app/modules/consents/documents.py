@@ -1,8 +1,9 @@
-"""The consent documents a patient signs on the public application (manual §5.1 step 4, §12.3).
+"""The platform's default consent documents (manual §5.1 step 4, §12.3; docs3 Phase 6 feature 06).
 
+A clinic that has not published its own version of a consent offers these (`service.current_documents`).
 Platform defaults, versioned here. A patient's consent records the `version` and the SHA-256 of the
 exact text shown, so "which words did this patient agree to, and when" always has an answer. A clinic's
-own wording (published from Settings) is a later step; until then every clinic offers these.
+own wording is published from Settings into `consent_versions` and replaces the default for that clinic.
 
 No product or brand name appears in any of them (manual §5: a legal line on patient-facing pages).
 """
@@ -62,6 +63,6 @@ CONSENT_DOCUMENTS: Final[tuple[ConsentDocument, ...]] = (
     ),
 )
 
-CURRENT_CONSENTS: Final[dict[str, ConsentDocument]] = {
+PLATFORM_CONSENTS: Final[dict[str, ConsentDocument]] = {
     document.kind: document for document in CONSENT_DOCUMENTS
 }

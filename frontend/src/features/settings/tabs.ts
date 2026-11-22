@@ -7,6 +7,8 @@ export const SETTINGS_TABS = {
   clinic: "Clinic",
   // Practice workflow and record retention (docs3 feature 01); `tenant:configure` too.
   practice: "Practice",
+  // The consent library (docs3 Phase 6 feature 06); `tenant:configure` too.
+  consents: "Consents",
 } as const
 export type SettingsTab = keyof typeof SETTINGS_TABS
 export const SETTINGS_TAB_KEYS = Object.keys(SETTINGS_TABS) as SettingsTab[]

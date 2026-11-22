@@ -22,6 +22,7 @@ from app.modules.appointments.router import (
 from app.modules.audit.router import router as audit_router
 from app.modules.care_relationships.router import router as care_relationships_router
 from app.modules.clinical_records.router import router as clinical_records_router
+from app.modules.consents.router import router as consents_router  # noqa: E402
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.forms.router import router as forms_router  # noqa: E402
 from app.modules.identity_tenancy.router import auth_router
@@ -97,6 +98,7 @@ api_router.include_router(dashboard_router)
 api_router.include_router(care_relationships_router)
 api_router.include_router(intake_router)
 api_router.include_router(forms_router)
+api_router.include_router(consents_router)
 api_router.include_router(intake_patient_router)
 api_router.include_router(pharmacies_router)
 api_router.include_router(onboarding_router)

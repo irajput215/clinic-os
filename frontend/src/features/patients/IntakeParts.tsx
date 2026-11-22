@@ -9,7 +9,6 @@ import {
   CANNABIS_DURATIONS,
   CANNABIS_FORMS,
   CONDITIONS,
-  consentsQuery,
   createPharmacy,
   FLAG_LABELS,
   pharmaciesQuery,
@@ -23,7 +22,6 @@ import {
   FormAlert,
   Mono,
   Pill,
-  SkeletonRows,
 } from "@/design/primitives"
 import { formatDayMonthTime } from "@/lib/format"
 import { describeError, httpStatus } from "@/lib/http"
@@ -132,37 +130,6 @@ export function IntakeBriefingCard({ patientId }: { patientId: string }) {
           </span>,
         )}
       </dl>
-    </Card>
-  )
-}
-
-export function ConsentsCard({ patientId }: { patientId: string }) {
-  const consents = useQuery(consentsQuery(patientId))
-  return (
-    <Card title="Consents">
-      {consents.isPending ? (
-        <SkeletonRows rows={1} />
-      ) : consents.isError ? (
-        <ErrorState error={consents.error} onRetry={() => consents.refetch()} />
-      ) : consents.data.length === 0 ? (
-        <p className="text-sm text-stone">No signed consents on file.</p>
-      ) : (
-        <ul className="space-y-2 text-sm">
-          {consents.data.map((c) => (
-            <li
-              key={`${c.kind}-${c.signed_at}`}
-              className="flex flex-wrap items-baseline gap-2"
-            >
-              <span className="font-medium">{c.title}</span>
-              <Mono className="text-stone">v{c.version}</Mono>
-              <span className="text-stone">
-                {formatDayMonthTime(c.signed_at)}
-              </span>
-              {c.current ? null : <Pill tone="warn">Re-consent needed</Pill>}
-            </li>
-          ))}
-        </ul>
-      )}
     </Card>
   )
 }

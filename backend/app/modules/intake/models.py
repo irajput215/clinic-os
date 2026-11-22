@@ -1,13 +1,14 @@
 """Patient intake: the public application, its consents, and the pharmacy directory.
 
-docs3 feature 03 (Platform Manual §5.1, §5.4, §8.1, §12.3). Three tenant tables, each with the forced
+docs3 feature 03 (Platform Manual §5.1, §5.4, §8.1, §12.3). Two tenant tables, each with the forced
 permissive + restrictive RLS pair every tenant table carries (created by the migration):
 
 - `pharmacies` - the clinic's directory: partners offered on the public page, and patients' own.
 - `intake_applications` - one public application: the answers, the flags the server computed, the
   signed declaration, and the staff decision. The answers are HIGHLY_SENSITIVE: never logged, never
   audited, read only through the queue and the doctor's briefing.
-- `patient_consents` - which version of each consent a patient agreed to, when and how. Append-only.
+`patient_consents` (which version of each consent a patient agreed to) moved to the consents module
+(`app/modules/consents/models.py`) with the consent library, docs3 Phase 6 feature 06. Same table.
 """
 
 import uuid
@@ -19,7 +20,6 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 
 APPLICATION_STATUSES: Final[tuple[str, ...]] = ("SUBMITTED", "ACCEPTED", "REJECTED")
-CONSENT_KINDS: Final[tuple[str, ...]] = ("PRIVACY", "TELEHEALTH", "TREATMENT")
 REJECT_REASONS: Final[tuple[str, ...]] = (
     "NOT_ELIGIBLE",
     "NEEDS_IN_PERSON_REVIEW",
@@ -139,43 +139,4 @@ class IntakeApplication(SQLModel, table=True):
     decided_at: datetime | None = Field(default=None, sa_type=_TIMESTAMPTZ)
     decision_reason_code: str | None = None
     decision_note: str | None = Field(default=None, max_length=500)
-    created_at: datetime = Field(default_factory=_utcnow, sa_type=_TIMESTAMPTZ)
-
-
-class PatientConsent(SQLModel, table=True):
-    """A patient agreed to one version of one consent (manual §12.3). Append-only."""
-
-    __tablename__ = "patient_consents"
-    __table_args__ = (
-        sa.CheckConstraint(f"kind IN ({_in(CONSENT_KINDS)})", name="kind"),
-        sa.CheckConstraint(
-            "method IN ('ONLINE_APPLICATION', 'IN_CLINIC')", name="method"
-        ),
-        sa.ForeignKeyConstraint(
-            ["tenant_id", "patient_id"],
-            ["patients.tenant_id", "patients.id"],
-            name="fk_patient_consents_tenant_patient",
-            ondelete="RESTRICT",
-        ),
-        sa.Index("ix_patient_consents_tenant_patient", "tenant_id", "patient_id"),
-    )
-
-    id: uuid.UUID = Field(
-        default_factory=uuid.uuid4,
-        primary_key=True,
-        sa_column_kwargs={"server_default": sa.text("gen_random_uuid()")},
-    )
-    tenant_id: uuid.UUID = Field(
-        foreign_key="tenants.id", ondelete="RESTRICT", nullable=False
-    )
-    patient_id: uuid.UUID = Field(nullable=False)
-    kind: str
-    version: str = Field(max_length=32)
-    text_sha256: str = Field(max_length=64)
-    method: str
-    signed_at: datetime = Field(sa_type=_TIMESTAMPTZ)
-    application_id: uuid.UUID | None = Field(
-        default=None, foreign_key="intake_applications.id", ondelete="RESTRICT"
-    )
-    recorded_by: uuid.UUID | None = None
     created_at: datetime = Field(default_factory=_utcnow, sa_type=_TIMESTAMPTZ)

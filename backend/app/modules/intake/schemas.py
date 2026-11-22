@@ -192,15 +192,6 @@ class IntakeBriefing(BaseModel):
     declared_at: datetime
 
 
-class ConsentRecord(BaseModel):
-    kind: str
-    version: str
-    title: str
-    method: str
-    signed_at: datetime
-    current: bool
-
-
 # -- pharmacies ------------------------------------------------------------------------------------
 
 
