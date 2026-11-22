@@ -16,10 +16,14 @@ from typing import NoReturn
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.deps import ActorDep
-from app.core.rate_limit import read_rate_limit
+from app.core.rate_limit import admin_rate_limit, read_rate_limit
 from app.modules.forms import service
 from app.modules.forms.schemas import (
     AcknowledgeRequest,
+    ClinicFormRead,
+    ClinicFormResponseCreate,
+    ClinicFormResponseRead,
+    ClinicFormWrite,
     FormResponseCreate,
     FormResponseRead,
     InstrumentCatalogue,
@@ -94,6 +98,88 @@ def acknowledge_safety_flag(
     )
     if result is None:
         raise HTTPException(status_code=404, detail="Safety flag not found")
+    if isinstance(result, Refusal):
+        _raise(result)
+    return result
+
+
+# -- clinic-made forms (R6) ----------------------------------------------------------------------
+#
+# | Method and path | Permission | Audit |
+# | --- | --- | --- |
+# | `GET /api/v1/clinic-forms` | `clinical_record:read` (active); `tenant:configure` sees retired too | none |
+# | `POST /api/v1/clinic-forms` | `tenant:configure` | `form.publish` |
+# | `POST /api/v1/clinic-forms/{id}/versions` | `tenant:configure` | `form.publish` |
+# | `POST /api/v1/clinic-forms/{id}/retire` | `tenant:configure` | `form.retire` |
+# | `POST /api/v1/patients/{id}/clinic-form-responses` | `clinical_record:write` + care relationship | `form_response.create` |
+
+
+@router.get("/clinic-forms", response_model=list[ClinicFormRead])
+def clinic_forms(
+    *, actor: ActorDep, include_retired: bool = False
+) -> list[ClinicFormRead]:
+    _authorize(actor, service.READ_PERMISSION, None)
+    if include_retired:
+        _authorize(actor, service.CONFIGURE, None)
+    return service.list_clinic_forms(actor=actor, include_retired=include_retired)
+
+
+@router.post(
+    "/clinic-forms",
+    response_model=ClinicFormRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(admin_rate_limit)],
+)
+def create_clinic_form(*, actor: ActorDep, body: ClinicFormWrite) -> ClinicFormRead:
+    _authorize(actor, service.CONFIGURE, service.PUBLISH_FORM)
+    return service.create_clinic_form(actor=actor, body=body)
+
+
+@router.post(
+    "/clinic-forms/{form_id}/versions",
+    response_model=ClinicFormRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(admin_rate_limit)],
+)
+def publish_clinic_form_version(
+    *, actor: ActorDep, form_id: uuid.UUID, body: ClinicFormWrite
+) -> ClinicFormRead:
+    _authorize(actor, service.CONFIGURE, service.PUBLISH_FORM)
+    result = service.publish_clinic_form_version(
+        actor=actor, form_id=form_id, body=body
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Form not found")
+    if isinstance(result, Refusal):
+        _raise(result)
+    return result
+
+
+@router.post(
+    "/clinic-forms/{form_id}/retire",
+    response_model=ClinicFormRead,
+    dependencies=[Depends(admin_rate_limit)],
+)
+def retire_clinic_form(*, actor: ActorDep, form_id: uuid.UUID) -> ClinicFormRead:
+    _authorize(actor, service.CONFIGURE, service.RETIRE_FORM)
+    result = service.retire_clinic_form(actor=actor, form_id=form_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Form not found")
+    return result
+
+
+@router.post(
+    "/patients/{patient_id}/clinic-form-responses",
+    response_model=ClinicFormResponseRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def record_clinic_form_response(
+    *, actor: ActorDep, patient_id: uuid.UUID, body: ClinicFormResponseCreate
+) -> ClinicFormResponseRead:
+    _authorize(actor, service.WRITE, service.CREATE)
+    result = service.record_clinic_response(
+        actor=actor, patient_id=patient_id, body=body
+    )
     if isinstance(result, Refusal):
         _raise(result)
     return result

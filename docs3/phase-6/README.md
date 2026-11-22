@@ -1,7 +1,7 @@
 # Phase 6: patient communications and forms
 
-**Status: IN PROGRESS.** Feature 05's screening questionnaires and feature 06, the consent library,
-are built (2026-11-22, see "Progress"); everything else is proposed. The owner ruled that
+**Status: IN PROGRESS.** Feature 05 (screening questionnaires and clinic-made forms) and feature 06
+(the consent library) are built (2026-11-22, see "Progress"); everything else is proposed. The owner ruled that
 [`docs3/roadmap.md`](../roadmap.md) governs the order of work (reconciliation C1, 2026-11-21); this
 folder plans its Phase 6. Every new table, vendor and clinical rule waits for the decisions listed in
 [`../decisions-needed.md`](../decisions-needed.md) §"Phase 6" (D17–D25).
@@ -85,4 +85,21 @@ blocked-terms list (R5) waits for the guardrail (07).
 `GET /patients/{id}/consents` changed shape: it returns each kind's status and the history, not only a
 list of signatures. Its one consumer, the patient record's Consents card, changed with it.
 
-Not built yet: clinic forms (05 R6), remote completion (05b), the guardrail (07), SMS (08).
+**2026-11-22: clinic-made forms (feature 05, R6).** Settings → **Forms**: a practice owner builds a
+form from six field types (short text, long text, choice, 0–10 scale, date, yes/no), marks questions
+required, reorders them and publishes. Editing publishes the next version; a published version never
+changes, and old responses keep showing the version they were answered on. Retiring a form hides it
+and stops new responses; its responses stay. On the patient's Questionnaires tab the clinic's forms sit
+beside PHQ-9, GAD-7 and K10; answers are checked per field on the server (a refusal names the field)
+and shown in a "Clinic forms" history. Backend: `clinic_forms`, `clinic_form_versions`,
+`clinic_form_responses` (migration `f06c7a29ab0c`; versions and responses append-only, answers
+encrypted), routes in `backend/app/modules/forms/router.py`, tests
+`backend/tests/forms/test_clinic_forms.py`. Frontend `frontend/src/features/settings/FormsTab.tsx`.
+
+**Two deviations from the draft design, both recorded here:** clinic forms have their **own**
+response table rather than sharing `form_responses`, so that table keeps guaranteeing every row is a
+scored, banded instrument; and clinic forms are **not scored and raise no safety flags** (a flag rule
+is a Clinical Safety Officer decision, D20, not something a form author declares). Checking form text
+against the blocked-terms list waits for the guardrail (07).
+
+Not built yet: remote completion (05b, needs D21), the guardrail (07, needs D23), SMS (08, needs D7a).

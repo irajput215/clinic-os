@@ -75,7 +75,7 @@ This list is closed:
 | `TGA_APPROVAL` | `tga_approval.create`, `tga_approval.modify`, `tga_approval.state_change`, `tga_approval.match`, `tga_approval.verify`, `tga_approval.read` |
 | `TGA_DOCUMENT` | `tga_document.ingest`, `tga_document.extract` |
 | `USER` | `user.permission_change`, `user.create`, `user.deactivate` |
-| `TENANT` | `tenant.security_config_change`, `tenant.config_changed`, `consent.publish` |
+| `TENANT` | `tenant.security_config_change`, `tenant.config_changed`, `consent.publish`, `form.publish`, `form.retire` |
 | `INTEGRATION` | `integration.request` |
 | `AUDIT` | `audit.read` |
 | `APPOINTMENT` | `appointment.create`, `appointment.state_change`, `appointment.read` |
@@ -96,6 +96,11 @@ coverage test asserts the list.
 module (`docs2/sdlc/04-calendar-and-booking/api.md`): `appointment.create` carries `patient_id` and
 `source` (`STAFF` or `PUBLIC_BOOKING`), `appointment.state_change` carries `from_state` and
 `to_state` (status codes). No time, name or contact detail is ever in either payload.
+
+Two actions were registered on 2026-11-22 under `TENANT` with clinic-made forms (docs3 Phase 6
+feature 05, R6, owner-approved): `form.publish` (a form version; carries the version number, never a
+field label or answer) and `form.retire` (no payload). A response to a clinic form is audited as
+`form_response.create`, like an instrument, with the patient id only.
 
 Three actions were registered on 2026-11-22 with the consent library (docs3 Phase 6 feature 06,
 owner-approved): `consent.publish` under `TENANT` (a clinic's own version of a consent; carries `kind`

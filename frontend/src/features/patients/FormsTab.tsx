@@ -3,6 +3,8 @@ import { AlertTriangle, ClipboardList, Loader2 } from "lucide-react"
 import { useId, useState } from "react"
 import { toast } from "sonner"
 import type {
+  ClinicFormRead,
+  ClinicFormResponseRead,
   FormResponseRead,
   InstrumentRead,
   SafetyFlagRead,
@@ -17,7 +19,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import {
+  type AnswerValue,
   bandTone,
+  clinicFormsQuery,
+  clinicFormsRepo,
+  formatAnswer,
   formsRepo,
   INSTRUMENT_SHORT,
   instrumentsQuery,
@@ -46,7 +52,9 @@ import { cn } from "@/lib/utils"
 export function FormsTab({ patientId }: { patientId: string }) {
   const forms = useQuery(patientFormsQuery(patientId))
   const catalogue = useQuery(instrumentsQuery)
+  const clinicForms = useQuery({ ...clinicFormsQuery(false), retry: false })
   const [recording, setRecording] = useState<InstrumentRead | null>(null)
+  const [filling, setFilling] = useState<ClinicFormRead | null>(null)
 
   if (forms.isError && isForbidden(forms.error)) return <NotForYourRole />
 
@@ -71,10 +79,20 @@ export function FormsTab({ patientId }: { patientId: string }) {
               <ClipboardList /> {INSTRUMENT_SHORT[instrument.code]}
             </Button>
           ))}
+          {(clinicForms.data ?? []).map((form) => (
+            <Button
+              key={form.id}
+              variant="outline"
+              onClick={() => setFilling(form)}
+            >
+              <ClipboardList /> {form.title}
+            </Button>
+          ))}
         </div>
         <p className="mt-2.5 text-xs text-stone">
-          Entered by staff with the patient, in clinic or on a call. Scores use
-          each questionnaire's published rules.
+          Entered by staff with the patient, in clinic or on a call. PHQ-9,
+          GAD-7 and K10 are scored by their published rules; the clinic's own
+          forms are not scored.
         </p>
       </Card>
 
@@ -89,6 +107,20 @@ export function FormsTab({ patientId }: { patientId: string }) {
           <History responses={forms.data.responses} />
         )}
       </Card>
+
+      {forms.data?.clinic_responses?.length ? (
+        <Card title="Clinic forms">
+          <ClinicHistory responses={forms.data.clinic_responses} />
+        </Card>
+      ) : null}
+
+      {filling ? (
+        <ClinicFormDialog
+          patientId={patientId}
+          form={filling}
+          onClose={() => setFilling(null)}
+        />
+      ) : null}
 
       {recording ? (
         <RecordDialog
@@ -385,6 +417,191 @@ function RecordDialog({
               onClick={() => record.mutate()}
             >
               {record.isPending ? <Loader2 className="animate-spin" /> : null}
+              Save
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function ClinicHistory({ responses }: { responses: ClinicFormResponseRead[] }) {
+  return (
+    <ul className="grid gap-2">
+      {responses.map((r) => (
+        <li
+          key={r.id}
+          className={cn(
+            "rounded-inner border border-line",
+            r.corrected_by_id && "opacity-60",
+          )}
+        >
+          <details>
+            <summary className="flex cursor-pointer flex-wrap items-center gap-2 px-3.5 py-2.5 text-sm">
+              <span className="font-medium text-ink">{r.title}</span>
+              <Mono className="text-stone">v{r.version}</Mono>
+              <span className="text-stone">
+                {formatDayMonthTime(r.created_at)}
+              </span>
+              {r.corrected_by_id ? (
+                <span className="text-xs text-stone">corrected</span>
+              ) : null}
+            </summary>
+            <dl className="grid gap-x-4 gap-y-1.5 border-t border-line-faint px-3.5 py-3 text-sm sm:grid-cols-[220px_minmax(0,1fr)]">
+              {r.fields.map((f) => (
+                <div key={f.id} className="contents">
+                  <dt className="text-stone">{f.label}</dt>
+                  <dd className="whitespace-pre-wrap text-ink">
+                    {formatAnswer(r.answers[f.id])}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </details>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function ClinicFormDialog({
+  patientId,
+  form,
+  onClose,
+}: {
+  patientId: string
+  form: ClinicFormRead
+  onClose: () => void
+}) {
+  const queryClient = useQueryClient()
+  const id = useId()
+  const [answers, setAnswers] = useState<Record<string, AnswerValue>>({})
+  const set = (fieldId: string, value: AnswerValue) =>
+    setAnswers((a) => ({ ...a, [fieldId]: value }))
+  const missing = form.fields.filter(
+    (f) =>
+      f.required &&
+      (answers[f.id] === undefined ||
+        answers[f.id] === null ||
+        answers[f.id] === ""),
+  )
+  const save = useMutation({
+    mutationFn: () =>
+      clinicFormsRepo.respond(patientId, form.version_id, answers),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["forms", "patient", patientId],
+      })
+      toast.success(`Saved: ${form.title}`)
+      onClose()
+    },
+  })
+  return (
+    <Dialog open onOpenChange={(open) => (open ? null : onClose())}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[680px]">
+        <DialogHeader>
+          <DialogTitle>{form.title}</DialogTitle>
+          <DialogDescription>
+            {form.description ?? "Fill in with the patient."}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4">
+          {form.fields.map((f) => {
+            const fieldId = `${id}-${f.id}`
+            const label = f.required ? `${f.label} *` : f.label
+            const value = answers[f.id]
+            if (
+              f.type === "CHOICE" ||
+              f.type === "YES_NO" ||
+              f.type === "SCALE"
+            ) {
+              const options: { label: string; value: AnswerValue }[] =
+                f.type === "CHOICE"
+                  ? (f.options ?? []).map((o) => ({ label: o, value: o }))
+                  : f.type === "YES_NO"
+                    ? [
+                        { label: "Yes", value: true },
+                        { label: "No", value: false },
+                      ]
+                    : Array.from(
+                        {
+                          length: (f.scale_max ?? 10) - (f.scale_min ?? 0) + 1,
+                        },
+                        (_, i) => ({
+                          label: String((f.scale_min ?? 0) + i),
+                          value: (f.scale_min ?? 0) + i,
+                        }),
+                      )
+              return (
+                <fieldset key={f.id}>
+                  <legend className="field-label">{label}</legend>
+                  <div className="flex flex-wrap gap-1.5">
+                    {options.map((o) => (
+                      <label
+                        key={String(o.value)}
+                        className="cursor-pointer rounded-full border border-line px-3 py-1.5 text-[13px] has-[:checked]:border-clay has-[:checked]:bg-clay-tint has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-clay"
+                      >
+                        <input
+                          type="radio"
+                          className="sr-only"
+                          name={fieldId}
+                          checked={value === o.value}
+                          onChange={() => set(f.id, o.value)}
+                        />
+                        {o.label}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              )
+            }
+            return (
+              <Field key={f.id} label={label} htmlFor={fieldId}>
+                {f.type === "LONG_TEXT" ? (
+                  <textarea
+                    id={fieldId}
+                    className="field-input min-h-[96px] resize-y"
+                    maxLength={5000}
+                    value={(value as string) ?? ""}
+                    onChange={(e) => set(f.id, e.target.value)}
+                  />
+                ) : (
+                  <input
+                    id={fieldId}
+                    className={
+                      f.type === "DATE"
+                        ? "field-input font-mono"
+                        : "field-input"
+                    }
+                    type={f.type === "DATE" ? "date" : "text"}
+                    maxLength={500}
+                    value={(value as string) ?? ""}
+                    onChange={(e) => set(f.id, e.target.value)}
+                  />
+                )}
+              </Field>
+            )
+          })}
+        </div>
+        {save.isError ? (
+          <FormAlert>{describeError(save.error)}</FormAlert>
+        ) : null}
+        <DialogFooter className="items-center gap-3 sm:justify-between">
+          <p className="text-sm text-stone">
+            {missing.length > 0
+              ? `Still needed: ${missing.map((f) => f.label).join(", ")}`
+              : "Ready to save."}
+          </p>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              disabled={missing.length > 0 || save.isPending}
+              onClick={() => save.mutate()}
+            >
+              {save.isPending ? <Loader2 className="animate-spin" /> : null}
               Save
             </Button>
           </div>

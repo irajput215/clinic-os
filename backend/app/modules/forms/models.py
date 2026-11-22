@@ -24,6 +24,7 @@ from datetime import UTC, datetime
 from typing import Final
 
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 
 from app.modules.forms.instruments import ACKNOWLEDGE_ACTIONS, FLAG_RULES, INSTRUMENTS
@@ -168,3 +169,137 @@ class SafetyFlag(SQLModel, table=True):
     )
     acknowledged_at: datetime | None = Field(default=None, sa_type=_TIMESTAMPTZ)
     action_code: str | None = Field(default=None, max_length=64)
+
+
+# -- clinic-made forms (docs3 Phase 6 feature 05, R6) ---------------------------------------------------
+
+FIELD_TYPES: Final[tuple[str, ...]] = (
+    "TEXT",
+    "LONG_TEXT",
+    "CHOICE",
+    "SCALE",
+    "DATE",
+    "YES_NO",
+)
+FORM_STATES: Final[tuple[str, ...]] = ("ACTIVE", "RETIRED")
+
+
+class ClinicForm(SQLModel, table=True):
+    """A form a clinic built. Only `status` may change (retire); the content lives in versions.
+
+    Clinic forms are not scored and raise no safety flags: a flag rule is a Clinical Safety Officer
+    decision (D20), not something a form author can declare. Their responses are a separate table, so
+    `form_responses` keeps guaranteeing that every row is a scored, banded instrument.
+    """
+
+    __tablename__ = "clinic_forms"
+    __table_args__ = (
+        sa.CheckConstraint(f"status IN ({_sql_list(FORM_STATES)})", name="status"),
+        sa.UniqueConstraint("tenant_id", "id", name="uq_clinic_forms_tenant_id_id"),
+    )
+
+    id: uuid.UUID = Field(
+        default_factory=uuid.uuid4,
+        primary_key=True,
+        sa_column_kwargs={"server_default": sa.text("gen_random_uuid()")},
+    )
+    tenant_id: uuid.UUID = Field(
+        foreign_key="tenants.id", ondelete="RESTRICT", nullable=False
+    )
+    status: str = Field(default="ACTIVE", max_length=16)
+    created_by: uuid.UUID = Field(foreign_key="user.id", ondelete="RESTRICT")
+    created_at: datetime = Field(default_factory=_utcnow, sa_type=_TIMESTAMPTZ)
+
+
+class ClinicFormVersion(SQLModel, table=True):
+    """One published version of a clinic form. Immutable: editing publishes the next version."""
+
+    __tablename__ = "clinic_form_versions"
+    __table_args__ = (
+        sa.CheckConstraint("version >= 1", name="version"),
+        sa.CheckConstraint("jsonb_typeof(fields) = 'array'", name="fields"),
+        sa.UniqueConstraint(
+            "tenant_id", "id", name="uq_clinic_form_versions_tenant_id_id"
+        ),
+        sa.UniqueConstraint(
+            "tenant_id",
+            "form_id",
+            "version",
+            name="uq_clinic_form_versions_form_version",
+        ),
+        sa.ForeignKeyConstraint(
+            ["tenant_id", "form_id"],
+            ["clinic_forms.tenant_id", "clinic_forms.id"],
+            name="fk_clinic_form_versions_tenant_form",
+            ondelete="RESTRICT",
+        ),
+    )
+
+    id: uuid.UUID = Field(
+        default_factory=uuid.uuid4,
+        primary_key=True,
+        sa_column_kwargs={"server_default": sa.text("gen_random_uuid()")},
+    )
+    tenant_id: uuid.UUID = Field(
+        foreign_key="tenants.id", ondelete="RESTRICT", nullable=False
+    )
+    form_id: uuid.UUID = Field(nullable=False)
+    version: int
+    title: str = Field(max_length=120)
+    description: str | None = Field(default=None, max_length=500)
+    # The field list, validated by `schemas.ClinicFormField` before it is stored.
+    fields: list[dict[str, object]] = Field(sa_type=JSONB)
+    published_by: uuid.UUID = Field(foreign_key="user.id", ondelete="RESTRICT")
+    published_at: datetime = Field(default_factory=_utcnow, sa_type=_TIMESTAMPTZ)
+
+
+class ClinicFormResponse(SQLModel, table=True):
+    """One completed clinic form for one patient. Append-only; answers encrypted."""
+
+    __tablename__ = "clinic_form_responses"
+    __table_args__ = (
+        sa.CheckConstraint("corrects_id IS NULL OR corrects_id <> id", name="corrects"),
+        sa.UniqueConstraint(
+            "tenant_id", "id", name="uq_clinic_form_responses_tenant_id_id"
+        ),
+        sa.ForeignKeyConstraint(
+            ["tenant_id", "patient_id"],
+            ["patients.tenant_id", "patients.id"],
+            name="fk_clinic_form_responses_tenant_patient",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["tenant_id", "form_version_id"],
+            ["clinic_form_versions.tenant_id", "clinic_form_versions.id"],
+            name="fk_clinic_form_responses_tenant_version",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["tenant_id", "corrects_id"],
+            ["clinic_form_responses.tenant_id", "clinic_form_responses.id"],
+            name="fk_clinic_form_responses_tenant_corrects",
+            ondelete="RESTRICT",
+        ),
+        sa.Index(
+            "ix_clinic_form_responses_tenant_patient_created",
+            "tenant_id",
+            "patient_id",
+            "created_at",
+        ),
+    )
+
+    id: uuid.UUID = Field(
+        default_factory=uuid.uuid4,
+        primary_key=True,
+        sa_column_kwargs={"server_default": sa.text("gen_random_uuid()")},
+    )
+    tenant_id: uuid.UUID = Field(
+        foreign_key="tenants.id", ondelete="RESTRICT", nullable=False
+    )
+    patient_id: uuid.UUID = Field(nullable=False)
+    form_version_id: uuid.UUID = Field(nullable=False)
+    # Ciphertext of the JSON `{field_id: value}`.
+    answers: bytes
+    entered_by: uuid.UUID = Field(foreign_key="user.id", ondelete="RESTRICT")
+    corrects_id: uuid.UUID | None = None
+    created_at: datetime = Field(default_factory=_utcnow, sa_type=_TIMESTAMPTZ)

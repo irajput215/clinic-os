@@ -97,7 +97,13 @@ class FormsApi:
     def cleanup(self) -> None:
         if self.tenant_ids:
             with engine.begin() as conn:
-                for table in ("safety_flags", "form_responses"):
+                for table in (
+                    "clinic_form_responses",
+                    "clinic_form_versions",
+                    "clinic_forms",
+                    "safety_flags",
+                    "form_responses",
+                ):
                     conn.execute(
                         text(f"DELETE FROM {table} WHERE tenant_id = ANY(:ids)"),  # noqa: S608
                         {"ids": self.tenant_ids},

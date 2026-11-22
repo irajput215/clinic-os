@@ -155,6 +155,7 @@ def test_the_five_declared_paths_are_served() -> None:
         f"{PATIENTS_URL}/{{patient_id}}/tga-letters": {"get"},
         # docs3 Phase 6 feature 05: the patient's questionnaire responses.
         f"{PATIENTS_URL}/{{patient_id}}/form-responses": {"get", "post"},
+        f"{PATIENTS_URL}/{{patient_id}}/clinic-form-responses": {"post"},
         f"{PATIENTS_URL}/{{patient_id}}/appointments": {"get"},
         f"{PATIENTS_URL}/{{patient_id}}/care-relationships": {"get", "post"},
         f"{PATIENTS_URL}/{{patient_id}}/care-relationships/{{care_relationship_id}}/end": {

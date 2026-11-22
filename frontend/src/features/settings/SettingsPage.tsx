@@ -38,6 +38,7 @@ import { currentUserQuery, signOut } from "@/lib/session"
 import { z } from "@/lib/zod"
 import { ClinicTab } from "./ClinicTab"
 import { ConsentsTab } from "./ConsentsTab"
+import { FormsTab } from "./FormsTab"
 import { PracticeTab } from "./PracticeTab"
 import { SETTINGS_TAB_KEYS, SETTINGS_TABS, type SettingsTab } from "./tabs"
 
@@ -47,7 +48,7 @@ export function SettingsPage({ tab }: { tab: SettingsTab }) {
   const canConfigureClinic = useCanConfigureClinic()
   const keys = SETTINGS_TAB_KEYS.filter(
     (key) =>
-      (key !== "clinic" && key !== "practice" && key !== "consents") ||
+      !["clinic", "practice", "consents", "forms"].includes(key) ||
       canConfigureClinic,
   )
 
@@ -56,7 +57,7 @@ export function SettingsPage({ tab }: { tab: SettingsTab }) {
       <PageHeader
         title="Settings"
         subtitle={
-          tab === "clinic" || tab === "practice" || tab === "consents"
+          ["clinic", "practice", "consents", "forms"].includes(tab)
             ? "Your clinic: how it appears to your staff and your patients. Changes here apply to everyone in your clinic."
             : "Your own account: how you appear, how you sign in. Changes here apply only to you."
         }
@@ -81,6 +82,15 @@ export function SettingsPage({ tab }: { tab: SettingsTab }) {
             <SkeletonRows rows={2} />
           ) : canConfigureClinic ? (
             <ClinicTab />
+          ) : (
+            <NotForYourRole />
+          )
+        ) : null}
+        {tab === "forms" ? (
+          canConfigureClinic === undefined ? (
+            <SkeletonRows rows={2} />
+          ) : canConfigureClinic ? (
+            <FormsTab />
           ) : (
             <NotForYourRole />
           )

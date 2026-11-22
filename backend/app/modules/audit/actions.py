@@ -168,6 +168,10 @@ ACTION_CATALOGUE: Final[tuple[tuple[str, tuple[str, ...]], ...]] = (
             # Registered 2026-11-22 with the consent library (docs3 Phase 6 feature 06): a clinic
             # publishes its own version of a consent. The resource is the version.
             "consent.publish",
+            # Registered 2026-11-22 with clinic-made forms (docs3 Phase 6 feature 05, R6): a form
+            # version published, and a form retired. The resource is the version or the form.
+            "form.publish",
+            "form.retire",
         ),
     ),
     ("INTEGRATION", ("integration.request",)),
@@ -292,6 +296,8 @@ PAYLOAD_ALLOW_LIST: Final[MappingProxyType[str, frozenset[str]]] = MappingProxyT
         "consent.publish": frozenset({"kind", "version"}),
         "consent.record": frozenset({"patient_id"}),
         "consent.withdraw": frozenset({"patient_id"}),
+        # Clinic forms: the version number of a published form; a retirement carries nothing.
+        "form.publish": frozenset({"version"}),
         "sop.acknowledge": frozenset({"version"}),
         # `04-audit-log/05-data-and-audit.md`: `audit.read` carries `query_filters` and `result_count`.
         "audit.read": frozenset({"query_filters", "result_count"}),

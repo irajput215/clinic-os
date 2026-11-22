@@ -1,6 +1,9 @@
 import { queryOptions } from "@tanstack/react-query"
 import { FormsService } from "@/client"
 import type {
+  ClinicFormRead,
+  ClinicFormResponseRead,
+  ClinicFormWrite,
   FormResponseCreate,
   FormResponseRead,
   InstrumentCatalogue,
@@ -63,4 +66,61 @@ export const bandTone = (band: string): "ok" | "info" | "warn" | "danger" => {
   if (["MILD", "MODERATE"].includes(band)) return "info"
   if (["MODERATELY_SEVERE", "HIGH"].includes(band)) return "warn"
   return "danger"
+}
+
+/** Clinic-made forms (R6): active ones for staff; with retired ones for `tenant:configure`. */
+export const clinicFormsQuery = (includeRetired = false) =>
+  queryOptions({
+    queryKey: ["forms", "clinic", includeRetired],
+    queryFn: async () =>
+      (
+        await FormsService.clinicForms({
+          query: { include_retired: includeRetired },
+        })
+      ).data as ClinicFormRead[],
+    staleTime: 30_000,
+  })
+
+export type AnswerValue = string | number | boolean | null
+
+export const clinicFormsRepo = {
+  create: async (body: ClinicFormWrite) =>
+    (await FormsService.createClinicForm({ body })).data as ClinicFormRead,
+  publishVersion: async (formId: string, body: ClinicFormWrite) =>
+    (
+      await FormsService.publishClinicFormVersion({
+        path: { form_id: formId },
+        body,
+      })
+    ).data as ClinicFormRead,
+  retire: async (formId: string) =>
+    (await FormsService.retireClinicForm({ path: { form_id: formId } }))
+      .data as ClinicFormRead,
+  respond: async (
+    patientId: string,
+    formVersionId: string,
+    answers: Record<string, AnswerValue>,
+  ) =>
+    (
+      await FormsService.recordClinicFormResponse({
+        path: { patient_id: patientId },
+        body: { form_version_id: formVersionId, answers },
+      })
+    ).data as ClinicFormResponseRead,
+}
+
+export const FIELD_TYPE_LABELS: Record<string, string> = {
+  TEXT: "Short text",
+  LONG_TEXT: "Long text",
+  CHOICE: "Choice",
+  SCALE: "Scale (0 to 10)",
+  DATE: "Date",
+  YES_NO: "Yes / no",
+}
+
+/** A field's answer, for reading back in the history. */
+export const formatAnswer = (value: AnswerValue | undefined): string => {
+  if (value === undefined || value === null || value === "") return "—"
+  if (typeof value === "boolean") return value ? "Yes" : "No"
+  return String(value)
 }

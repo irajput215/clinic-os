@@ -668,6 +668,178 @@ export type CareTeamPublic = {
 };
 
 /**
+ * ClinicFormField
+ *
+ * One field of a clinic form. The vocabulary is deliberately small (R6).
+ */
+export type ClinicFormField = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Type
+     */
+    type: 'TEXT' | 'LONG_TEXT' | 'CHOICE' | 'SCALE' | 'DATE' | 'YES_NO';
+    /**
+     * Required
+     */
+    required?: boolean;
+    /**
+     * Help
+     */
+    help?: string | null;
+    /**
+     * Options
+     */
+    options?: Array<string>;
+    /**
+     * Scale Min
+     */
+    scale_min?: number | null;
+    /**
+     * Scale Max
+     */
+    scale_max?: number | null;
+};
+
+/**
+ * ClinicFormRead
+ */
+export type ClinicFormRead = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Status
+     */
+    status: 'ACTIVE' | 'RETIRED';
+    /**
+     * Version Id
+     */
+    version_id: string;
+    /**
+     * Version
+     */
+    version: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Description
+     */
+    description: string | null;
+    /**
+     * Fields
+     */
+    fields: Array<ClinicFormField>;
+    /**
+     * Published At
+     */
+    published_at: string;
+};
+
+/**
+ * ClinicFormResponseCreate
+ */
+export type ClinicFormResponseCreate = {
+    /**
+     * Form Version Id
+     */
+    form_version_id: string;
+    /**
+     * Answers
+     */
+    answers: {
+        [key: string]: string | number | boolean | null;
+    };
+    /**
+     * Corrects Id
+     */
+    corrects_id?: string | null;
+};
+
+/**
+ * ClinicFormResponseRead
+ */
+export type ClinicFormResponseRead = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Patient Id
+     */
+    patient_id: string;
+    /**
+     * Form Id
+     */
+    form_id: string;
+    /**
+     * Form Version Id
+     */
+    form_version_id: string;
+    /**
+     * Version
+     */
+    version: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Fields
+     */
+    fields: Array<ClinicFormField>;
+    /**
+     * Answers
+     */
+    answers: {
+        [key: string]: string | number | boolean | null;
+    };
+    /**
+     * Entered By
+     */
+    entered_by: string;
+    /**
+     * Corrects Id
+     */
+    corrects_id: string | null;
+    /**
+     * Corrected By Id
+     */
+    corrected_by_id?: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+};
+
+/**
+ * ClinicFormWrite
+ */
+export type ClinicFormWrite = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
+     * Fields
+     */
+    fields: Array<ClinicFormField>;
+};
+
+/**
  * ClinicalRecordAppend
  *
  * The body of `PATCH /api/v1/clinical-records/{id}` and of `POST .../amendments`.
@@ -2426,6 +2598,10 @@ export type PatientForms = {
      * Open Flags
      */
     open_flags: Array<SafetyFlagRead>;
+    /**
+     * Clinic Responses
+     */
+    clinic_responses?: Array<ClinicFormResponseRead>;
 };
 
 /**
@@ -8220,6 +8396,153 @@ export type formsAcknowledgeSafetyFlagResponses = {
 };
 
 export type formsAcknowledgeSafetyFlagResponse = formsAcknowledgeSafetyFlagResponses[keyof formsAcknowledgeSafetyFlagResponses];
+
+export type formsClinicFormsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Include Retired
+         */
+        include_retired?: boolean;
+    };
+    url: '/api/v1/clinic-forms';
+};
+
+export type formsClinicFormsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type formsClinicFormsError = formsClinicFormsErrors[keyof formsClinicFormsErrors];
+
+export type formsClinicFormsResponses = {
+    /**
+     * Response Forms-Clinic Forms
+     *
+     * Successful Response
+     */
+    200: Array<ClinicFormRead>;
+};
+
+export type formsClinicFormsResponse = formsClinicFormsResponses[keyof formsClinicFormsResponses];
+
+export type formsCreateClinicFormData = {
+    body: ClinicFormWrite;
+    path?: never;
+    query?: never;
+    url: '/api/v1/clinic-forms';
+};
+
+export type formsCreateClinicFormErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type formsCreateClinicFormError = formsCreateClinicFormErrors[keyof formsCreateClinicFormErrors];
+
+export type formsCreateClinicFormResponses = {
+    /**
+     * Successful Response
+     */
+    201: ClinicFormRead;
+};
+
+export type formsCreateClinicFormResponse = formsCreateClinicFormResponses[keyof formsCreateClinicFormResponses];
+
+export type formsPublishClinicFormVersionData = {
+    body: ClinicFormWrite;
+    path: {
+        /**
+         * Form Id
+         */
+        form_id: string;
+    };
+    query?: never;
+    url: '/api/v1/clinic-forms/{form_id}/versions';
+};
+
+export type formsPublishClinicFormVersionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type formsPublishClinicFormVersionError = formsPublishClinicFormVersionErrors[keyof formsPublishClinicFormVersionErrors];
+
+export type formsPublishClinicFormVersionResponses = {
+    /**
+     * Successful Response
+     */
+    201: ClinicFormRead;
+};
+
+export type formsPublishClinicFormVersionResponse = formsPublishClinicFormVersionResponses[keyof formsPublishClinicFormVersionResponses];
+
+export type formsRetireClinicFormData = {
+    body?: never;
+    path: {
+        /**
+         * Form Id
+         */
+        form_id: string;
+    };
+    query?: never;
+    url: '/api/v1/clinic-forms/{form_id}/retire';
+};
+
+export type formsRetireClinicFormErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type formsRetireClinicFormError = formsRetireClinicFormErrors[keyof formsRetireClinicFormErrors];
+
+export type formsRetireClinicFormResponses = {
+    /**
+     * Successful Response
+     */
+    200: ClinicFormRead;
+};
+
+export type formsRetireClinicFormResponse = formsRetireClinicFormResponses[keyof formsRetireClinicFormResponses];
+
+export type formsRecordClinicFormResponseData = {
+    body: ClinicFormResponseCreate;
+    path: {
+        /**
+         * Patient Id
+         */
+        patient_id: string;
+    };
+    query?: never;
+    url: '/api/v1/patients/{patient_id}/clinic-form-responses';
+};
+
+export type formsRecordClinicFormResponseErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type formsRecordClinicFormResponseError = formsRecordClinicFormResponseErrors[keyof formsRecordClinicFormResponseErrors];
+
+export type formsRecordClinicFormResponseResponses = {
+    /**
+     * Successful Response
+     */
+    201: ClinicFormResponseRead;
+};
+
+export type formsRecordClinicFormResponseResponse = formsRecordClinicFormResponseResponses[keyof formsRecordClinicFormResponseResponses];
 
 export type consentsConsentLibraryData = {
     body?: never;

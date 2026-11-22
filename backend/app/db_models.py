@@ -30,7 +30,13 @@ from app.modules.consents.models import (
     ConsentWithdrawal,
     PatientConsent,
 )
-from app.modules.forms.models import FormResponse, SafetyFlag
+from app.modules.forms.models import (
+    ClinicForm,
+    ClinicFormResponse,
+    ClinicFormVersion,
+    FormResponse,
+    SafetyFlag,
+)
 from app.modules.identity_tenancy.models import StepUpGrant, Tenant
 from app.modules.intake.models import IntakeApplication, Pharmacy
 from app.modules.patients.models import (
@@ -76,6 +82,9 @@ __all__ = [
     "CareRelationship",
     "DispatchAttempt",
     "Clinic",
+    "ClinicForm",
+    "ClinicFormResponse",
+    "ClinicFormVersion",
     "ConsentVersion",
     "ConsentWithdrawal",
     "ClinicalRecord",
