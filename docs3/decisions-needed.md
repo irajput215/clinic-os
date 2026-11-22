@@ -60,3 +60,19 @@ All tenant-scoped with forced RLS, `tenant_id` resolved never supplied, no `DELE
 | `tenant_settings` (or columns on `tenants`) | 01 | Practice workflow model, retention years |
 
 Clinic setup progress is **derived, not stored** (01 `design.md`), so it adds no table.
+
+## Phase 6: patient communications and forms (added 2026-11-22)
+
+Plan: [`phase-6/README.md`](phase-6/README.md). Nothing in Phase 6 is built until its row is answered.
+
+| # | Topic | Proposed | Owner |
+|---|---|---|---|
+| D17 | **Source text.** The roadmap cites Platform Manual v2.5 §11 and §12, which are not in this repository | Add the two sections (or the manual) to `docs3/` so requirements cite them, not a summary | Head of Product |
+| D18 | Which forms first | The three instruments (PHQ-9, GAD-7, K10) first; clinic-authored forms second | Head of Product + Clinical Safety Officer |
+| D19 | Instrument licensing | PHQ-9 and GAD-7 are published for free use; K10 is widely used in Australian practice. Confirm each before shipping the item text | Compliance Lead — REQUIRES LEGAL/REGULATORY VALIDATION |
+| D20 | **Safety-flag rules** | Start with **PHQ-9 item 9 above 0**; confirm any K10 or total-score flags. Decide who is notified (the patient's care team? the practice owner?), the expected response time, out-of-hours handling, and the acknowledge action codes. A flag never diagnoses and never blocks care | Clinical Safety Officer |
+| D21 | Remote completion | An emailed single-use link that expires (48 h proposed), no log-in, opening only that one form; uses the approved email flow, no new vendor. Alternative: in clinic only until a portal exists | CTO + Privacy Officer |
+| D22 | Consent library rules | Platform defaults until a clinic publishes its own; a new version marks patients "needs re-consent", never assumes; withdrawal is an append-only record effective immediately, and what it stops is listed per consent kind | Practice Owner + Privacy Officer |
+| D23 | Blocked-terms list | A platform list owned by Compliance plus per-clinic additions; checked on every patient-facing template; no override in the product. Whether a message is advertising stays a legal question | Compliance Lead — REQUIRES LEGAL/REGULATORY VALIDATION |
+| D24 | Schema (ask first) | `form_definitions`, `form_definition_versions`, `form_responses`, `safety_flags`, `consent_documents`, `consent_document_versions`, `blocked_terms`; all tenant tables with forced RLS, no `DELETE` for `clinos_app`; platform instrument rows read-only | CTO |
+| D25 | New audit actions | Register `form_response.create`, `form_response.read`, `safety_flag.raise`, `safety_flag.acknowledge`, `form.publish`, `consent.publish`, `consent.withdraw` in the catalogue before use | CTO + Compliance Lead |

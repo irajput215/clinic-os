@@ -146,5 +146,5 @@ again with `ALTER ROLE clinos_app NOLOGIN;`. No data changes in either direction
 * Record the date in `docs/progress.md` (P5) and in `docs3/roadmap.md` (go-live blockers).
 * Rotate the `clinos_app` password with step 1's `ALTER ROLE`, then steps 3.2, 4 and 5. Record who owns
   the credential and how often it rotates (`docs/reference/control-matrix.md`, secrets management).
-* Proposed, needs approval because it changes CI: run `pytest --as-app-role` in the backend test job
-  on `testing` and `prod`, so a query the app role cannot run fails CI rather than production.
+* CI runs `pytest --as-app-role` in the backend test job on `testing` and `prod` (owner-approved
+  2026-11-22), so a query the app role cannot run fails CI rather than production.

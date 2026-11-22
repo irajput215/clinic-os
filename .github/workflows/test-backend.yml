@@ -20,7 +20,7 @@ permissions:
 jobs:
   test-backend:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -56,6 +56,15 @@ jobs:
       - name: Run tests
         run: uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
         working-directory: backend
+      - name: Run tests as the application role
+        # Every API request served as `clinos_app`, the least-privilege role production must connect
+        # as (docs/reference/runbook-run-as-clinos-app.md). A query the role may not run fails here,
+        # not in production. Statement-counting tests are skipped under the option. Owner-approved
+        # 2026-11-22.
+        run: uv run pytest --as-app-role -q -p no:cacheprovider
+        working-directory: backend
+        env:
+          FASTAPI_ENV: development
       - run: docker compose down -v --remove-orphans
       - name: Store coverage files
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
